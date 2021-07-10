@@ -1,15 +1,16 @@
 use crate::core::{*};
+use std::borrow::Borrow;
 
-pub fn bind<T, I: Iterator<Item=T>, S, R, R2, P>(parser: impl Parser<T, I, S, R> + Copy, f: impl Fn(R) -> P + Copy) -> impl Parser<T, I, S, R2> + Copy
-    where P: Parser<T, I, S, R2> {
+pub fn bind<T, X: Borrow<T>, I: Iterator<Item=X>, S, R, R2, P>(parser: impl Parser<T, X, I, S, R> + Copy, f: impl Fn(R) -> P + Copy) -> impl Parser<T, X, I, S, R2> + Copy
+    where P: Parser<T, X, I, S, R2> {
     create_parser!(s, f(parser(s)?)(s))
 }
 
-pub fn right<T, I: Iterator<Item=T>, S, R, R2>(p1: impl Parser<T, I, S, R> + Copy, p2: impl Parser<T, I, S, R2> + Copy) -> impl Parser<T, I, S, R2> + Copy {
+pub fn right<T, X: Borrow<T>, I: Iterator<Item=X>, S, R, R2>(p1: impl Parser<T, X, I, S, R> + Copy, p2: impl Parser<T, X, I, S, R2> + Copy) -> impl Parser<T, X, I, S, R2> + Copy {
     create_parser!(s, {p1(s)?; p2(s)})
 }
 
-pub fn left<T, I: Iterator<Item=T> + Clone, S, R, R2>(p1: impl Parser<T, I, S, R> + Copy, p2: impl Parser<T, I, S, R2> + Copy) -> impl Parser<T, I, S, R> + Copy {
+pub fn left<T, X: Borrow<T>, I: Iterator<Item=X> + Clone, S, R, R2>(p1: impl Parser<T, X, I, S, R> + Copy, p2: impl Parser<T, X, I, S, R2> + Copy) -> impl Parser<T, X, I, S, R> + Copy {
     create_parser!(s, {
         if let a@Some(_) = p1(s) {
             p2(s)?;
@@ -20,7 +21,7 @@ pub fn left<T, I: Iterator<Item=T> + Clone, S, R, R2>(p1: impl Parser<T, I, S, R
     })
 }
 
-pub fn or_diff<T, I: Iterator<Item=T> + Clone, S, R, R2>(p1: impl Parser<T, I, S, R> + Copy, p2: impl Parser<T, I, S, R2> + Copy) -> impl Parser<T, I, S, ()> + Copy {
+pub fn or_diff<T, X: Borrow<T>, I: Iterator<Item=X> + Clone, S, R, R2>(p1: impl Parser<T, X, I, S, R> + Copy, p2: impl Parser<T, X, I, S, R2> + Copy) -> impl Parser<T, X, I, S, ()> + Copy {
     create_parser!(s, {
         let pos = s.iterator.clone();
         return if let Some(_) = p1(s) {
@@ -32,14 +33,14 @@ pub fn or_diff<T, I: Iterator<Item=T> + Clone, S, R, R2>(p1: impl Parser<T, I, S
     })
 }
 
-pub fn or<T, I: Iterator<Item=T> + Clone, S, R>(p1: impl Parser<T, I, S, R> + Copy, p2: impl Parser<T, I, S, R> + Copy) -> impl Parser<T, I, S, R> + Copy {
+pub fn or<T, X: Borrow<T>, I: Iterator<Item=X> + Clone, S, R>(p1: impl Parser<T, X, I, S, R> + Copy, p2: impl Parser<T, X, I, S, R> + Copy) -> impl Parser<T, X, I, S, R> + Copy {
     create_parser!(s, {
         let pos = s.iterator.clone();
         p1(s).or_else(|| { s.iterator = pos; p2(s)})
     })
 }
 //
-pub fn try_parse<T, I: Iterator<Item=T> + Clone, S, R>(p1: impl Parser<T, I, S, R>) -> impl Parser<T, I, S, R> {
+pub fn try_parse<T, X: Borrow<T>, I: Iterator<Item=X> + Clone, S, R>(p1: impl Parser<T, X, I, S, R>) -> impl Parser<T, X, I, S, R> {
     create_parser!(s, {
         let pos = s.iterator.clone();
         match p1(s) {
@@ -74,7 +75,7 @@ pub fn try_parse<T, I: Iterator<Item=T> + Clone, S, R>(p1: impl Parser<T, I, S, 
 //     // };
 // }
 
-pub fn not_empty<T, I: Iterator<Item=T>, S, R, I2: Iterator<Item=R> + Clone>(p: impl Parser<T, I, S, I2> + Copy) -> impl Parser<T, I, S, I2> + Copy {
+pub fn not_empty<T, X: Borrow<T>, I: Iterator<Item=X>, S, R, I2: Iterator<Item=R> + Clone>(p: impl Parser<T, X, I, S, I2> + Copy) -> impl Parser<T, X, I, S, I2> + Copy {
     create_parser!(s, {
         let res = p(s)?;
         res.clone().next()?;
@@ -82,7 +83,7 @@ pub fn not_empty<T, I: Iterator<Item=T>, S, R, I2: Iterator<Item=R> + Clone>(p: 
     })
 }
 
-pub fn lift_to_state<T, I: Iterator<Item=T>, S, R, R2>(f: impl FnOnce(&mut S, R) -> R2 + Copy, p: impl Parser<T, I, S, R> + Copy) -> impl Parser<T, I, S, R2> + Copy {
+pub fn lift_to_state<T, X: Borrow<T>, I: Iterator<Item=X>, S, R, R2>(f: impl FnOnce(&mut S, R) -> R2 + Copy, p: impl Parser<T, X, I, S, R> + Copy) -> impl Parser<T, X, I, S, R2> + Copy {
     create_parser!(s, {
         let res = p(s)?;
         let new_res = f(&mut s.user_state, res);

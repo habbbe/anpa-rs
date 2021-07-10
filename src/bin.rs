@@ -4,6 +4,7 @@ use std::io::{self, BufRead};
 use std::time::{Instant};
 use std::string::FromUtf8Error;
 use anpa::{*};
+use std::borrow::Borrow;
 
 #[derive(Debug)]
 enum Item {
@@ -14,15 +15,15 @@ enum Item {
     SyntaxError { description: String }
 }
 
-fn action<I: Iterator<Item=u8>, I2: Iterator<Item=u8>>(name: I, com: I2) -> Item {
+fn action<I: Iterator<Item=impl Borrow<u8>>, I2: Iterator<Item=impl Borrow<u8>>>(name: I, com: I2) -> Item {
     Action {name: name.into_utf8_unchecked(), com: com.into_utf8_unchecked()}
 }
 
-fn info<I: Iterator<Item=u8>, I2: Iterator<Item=u8>>(name: I, com: I2) -> Item {
+fn info<I: Iterator<Item=impl Borrow<u8>>, I2: Iterator<Item=impl Borrow<u8>>>(name: I, com: I2) -> Item {
     Info {name: name.into_utf8_unchecked(), com: com.into_utf8_unchecked()}
 }
 
-fn syntax_error<I: Iterator<Item=u8>>(description: I) -> Item {
+fn syntax_error<I: Iterator<Item=impl Borrow<u8>>>(description: I) -> Item {
     SyntaxError {description: description.into_utf8_unchecked()}
 }
 
@@ -31,13 +32,15 @@ trait ToUtf8String {
     fn into_utf8_unchecked(self) -> String;
 }
 
-impl<I: Iterator<Item=u8>> ToUtf8String for I {
+impl<I: Iterator<Item=impl Borrow<u8>>> ToUtf8String for I {
     fn into_utf8_string(self) -> Result<String, FromUtf8Error> {
-        String::from_utf8(self.collect())
+        String::from_utf8(self.map(|x|*x.borrow()).collect())
     }
 
     fn into_utf8_unchecked(self) -> String {
-        unsafe { String::from_utf8_unchecked(self.collect()) }
+        unsafe {
+            String::from_utf8_unchecked(self.map(|x|*x.borrow()).collect())
+        }
     }
 }
 
@@ -94,6 +97,23 @@ fn main() {
 
         println!("N: {}, in {}ms", vec.len(), now.elapsed().as_millis());
     }
+
+    let v = vec![1,2,3];
+    let v2 = vec![1,2,3];
+    let it = v2.iter();
+
+    println!("Are equal: {}", test(v, it));
+}
+
+fn test<T: PartialEq, X: Borrow<T>, I: Iterator<Item=X>>(v: Vec<T>, mut it: I) -> bool {
+    for t in v.iter() {
+        if let Some(n) = it.next() {
+            if *n.borrow() != *t { return false }
+        } else {
+            return false;
+        }
+    }
+    true
 }
 
 fn parse_handrolled(input: &str) -> Option<Item> {
