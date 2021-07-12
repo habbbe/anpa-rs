@@ -61,8 +61,8 @@ fn main() {
         let parse_space = lift!(|_| Item::Space, seq(b"Space"));
         let parse_error = lift!(syntax_error, rest());
         let item_parser = or!(parse_action, parse_info, parse_separator, parse_space, parse_error);
-        let ignore = or_diff(item(b'#'), empty());
-        let state_parser = or_diff(ignore, lift_to_state(|s: &mut Vec<_>, i| s.push(i), item_parser));
+        let ignore = or_diff!(item(b'#'), empty());
+        let state_parser = or_diff!(ignore, lift_to_state(|s: &mut Vec<_>, i| s.push(i), item_parser));
 
         let mut vec: Vec<Item> = Vec::with_capacity(100000);
         let now = Instant::now();
@@ -97,23 +97,6 @@ fn main() {
 
         println!("N: {}, in {}ms", vec.len(), now.elapsed().as_millis());
     }
-
-    let v = vec![1,2,3];
-    let v2 = vec![1,2,3];
-    let it = v2.iter();
-
-    println!("Are equal: {}", test(v, it));
-}
-
-fn test<T: PartialEq, X: Borrow<T>, I: Iterator<Item=X>>(v: Vec<T>, mut it: I) -> bool {
-    for t in v.iter() {
-        if let Some(n) = it.next() {
-            if *n.borrow() != *t { return false }
-        } else {
-            return false;
-        }
-    }
-    true
 }
 
 fn parse_handrolled(input: &str) -> Option<Item> {

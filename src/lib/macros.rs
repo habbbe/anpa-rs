@@ -6,15 +6,43 @@ macro_rules! lift {
 }
 
 #[macro_export]
-macro_rules! or {
-    ($e:expr) => {
+macro_rules! variadic {
+    ($f:ident, $e:expr) => {
         $e
     };
-    ($e:expr, $e2:expr) => {
-        or($e, $e2)
+    ($f:ident, $e:expr, $e2:expr) => {
+        $f($e, $e2)
     };
-    ($e:expr, $($e2:expr),*) => {
-        or($e, or!($($e2),*))
+    ($f:ident, $e:expr, $($e2:expr),*) => {
+        $f($e, variadic!($f, $($e2),*))
+    };
+}
+
+#[macro_export]
+macro_rules! or {
+    ($($e:expr),*) => {
+        variadic!(or, $($e),*)
+    };
+}
+
+#[macro_export]
+macro_rules! or_diff {
+    ($($e:expr),*) => {
+        variadic!(or_diff, $($e),*)
+    };
+}
+
+#[macro_export]
+macro_rules! left {
+    ($($e:expr),*) => {
+        variadic!(left, $($e),*)
+    };
+}
+
+#[macro_export]
+macro_rules! right {
+    ($($e:expr),*) => {
+        variadic!(right, $($e),*)
     };
 }
 

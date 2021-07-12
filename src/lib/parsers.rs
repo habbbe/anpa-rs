@@ -2,20 +2,20 @@ use std::iter::{Take};
 use crate::core::{*};
 use std::borrow::Borrow;
 
-pub fn item<T: PartialEq + Copy, X: Borrow<T>, I: Iterator<Item=X> + Clone, S>(item: T) -> impl Parser<T, X, I, S, X> + Copy {
+pub fn item<T: PartialEq, X: Borrow<T>, Y: Borrow<T> + Copy, I: Iterator<Item=X> + Clone, S>(item: Y) -> impl Parser<T, X, I, S, X> + Copy {
     create_parser!(s, {
         let pos = s.iterator.clone();
         match s.iterator.next() {
-            Some(x) if *x.borrow() == item => Some(x),
+            Some(x) if x.borrow() == item.borrow() => Some(x),
             _                    => { s.iterator = pos; None }
         }
     })
 }
 
-pub fn until_item<T: PartialEq + Copy, X: Borrow<T>, I: Iterator<Item=X> + Clone, S>(item: T) -> impl Parser<T, X, I, S, Take<I>> + Copy {
+pub fn until_item<T: PartialEq, X: Borrow<T>, Y: Borrow<T> + Copy, I: Iterator<Item=X> + Clone, S>(item: Y) -> impl Parser<T, X, I, S, Take<I>> + Copy {
     create_parser!(s, {
         let res = s.iterator.clone();
-        let len = s.iterator.position(|i| *i.borrow() == item)?;
+        let len = s.iterator.position(|i| i.borrow() == item.borrow())?;
         Some(res.take(len))
     })
 }
