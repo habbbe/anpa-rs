@@ -6,6 +6,13 @@ macro_rules! lift {
 }
 
 #[macro_export]
+macro_rules! lift2 {
+    ($f:expr, $($e:expr),*) => {
+        |s: &mut Yo<_, _>| Some($f($($e(s)?),*))
+    };
+}
+
+#[macro_export]
 macro_rules! variadic {
     ($f:ident, $e:expr) => {
         $e
