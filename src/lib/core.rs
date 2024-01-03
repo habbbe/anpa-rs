@@ -1,6 +1,8 @@
 use std::borrow::Borrow;
 use std::marker::PhantomData;
 
+pub struct Nothing;
+
 pub struct State<'a, T, X: Borrow<T>, I: Iterator<Item=X>, S> {
     pub iterator: I,
     pub user_state: &'a mut S,
