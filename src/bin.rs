@@ -34,6 +34,7 @@ trait ToUtf8String {
     fn into_utf8_unchecked(self) -> String;
 }
 
+
 impl<I: Iterator<Item=impl Borrow<u8>>> ToUtf8String for I {
     fn into_utf8_string(self) -> Result<String, FromUtf8Error> {
         String::from_utf8(self.map(|x|*x.borrow()).collect())
@@ -116,9 +117,10 @@ fn main() {
         let mut vec: Vec<Item> = Vec::with_capacity(1000000);
         let now = Instant::now();
         for l in &lines {
-            struct Nothing;
-            let r = parse(item_parser, &l, Nothing);
+            // let r = parse_handrolled(l);
+            // match r {
 
+            let r = parse(item_parser, &l, ());
             match r.1 {
                 None => {
                     println!("No parse");
@@ -134,11 +136,11 @@ fn main() {
 
         fn in_parens<'a, B>(thing: &'a str) -> impl Parser<&str, &str, B> {
             move |s| {
-                or(item(thing), right(item("("), left(in_parens::<B>(thing), item(")"))))(s)
+                or(item(thing), right(item("("), left(in_parens(thing), item(")"))))(s)
             }
         }
 
-        let p = in_parens("");
+        let p = in_parens("hej");
 
         let x = "(((((((((hej)))))))))";
         let num = parse(p, x, Nothing);
@@ -164,16 +166,14 @@ pub trait Parser<I, O, S>: FnOnce(&mut ParserState<I, S>) -> Option<O> + Copy {}
 impl<I, O, S, F: FnOnce(&mut ParserState<I, S>) -> Option<O> + Copy> Parser<I, O, S> for F {}
 
 pub trait SliceLike: Sized + Copy {
-    fn slice_find(self, item: Self::Pattern) -> Option<usize>;
+    fn slice_find(self, item: Self) -> Option<usize>;
     fn slice_starts_with(self, item: Self) -> bool;
     fn slice_len(self) -> usize;
     fn slice_from(self, from: usize) -> Self;
     fn slice_to(self, to: usize) -> Self;
     fn slice_from_to(self, from: usize, to: usize) -> Self;
     fn slice_split_at(self, at: usize) -> (Self, Self);
-    fn is_empty(&self) -> bool {
-        self.slice_len() == 0
-    }
+    fn slice_is_empty(&self) -> bool;
 }
 
 impl<A: PartialEq> SliceLike for &[A] {
@@ -203,6 +203,10 @@ impl<A: PartialEq> SliceLike for &[A] {
 
     fn slice_split_at(self, at: usize) -> (Self, Self) {
         self.split_at(at)
+    }
+
+    fn slice_is_empty(&self) -> bool {
+        self.is_empty()
     }
 }
 
@@ -234,6 +238,10 @@ impl SliceLike for &str {
     fn slice_split_at(self, at: usize) -> (Self, Self) {
         self.split_at(at)
     }
+
+    fn slice_is_empty(&self) -> bool {
+        self.is_empty()
+    }
 }
 
 pub struct ParserState<T, B> {
@@ -245,7 +253,7 @@ fn item<I: SliceLike, S>(item: I) -> impl Parser<I, I, S> {
     move |s| {
         if s.input.slice_starts_with(item) {
             let res;
-            (res, s.input) = s.input.slice_split_at(1);
+            (res, s.input) = s.input.slice_split_at(item.slice_len());
             Some(res)
         } else {
             None
@@ -264,27 +272,27 @@ fn until_item<I: SliceLike, S>(item: I) -> impl Parser<I, I, S> {
 
 fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
     move |s| {
-        let (all, rest) = s.input.slice_split_at(s.input.slice_len());
-        s.input = rest;
+        let all;
+        (all, s.input) = s.input.slice_split_at(s.input.slice_len());
         Some(all)
     }
 }
 //
-fn not_empty<I: SliceLike, S>(p: impl Parser<I, I, S>)
-                              -> impl Parser<I, I, S> {
+fn not_empty<I: SliceLike, O: SliceLike, S>(p: impl Parser<I, O, S>)
+                               -> impl Parser<I, O, S> {
     move |s| {
-        p(s).filter(|x| !x.is_empty())
+        p(s).filter(|x| !x.slice_is_empty())
     }
 }
 //
 fn empty<I: SliceLike, S>() -> impl Parser<I, (), S> {
     move |s| {
-        if s.input.is_empty() { Some(()) } else { None }
+        if s.input.slice_is_empty() { Some(()) } else { None }
     }
 }
 
 fn success<I: SliceLike, S>() -> impl Parser<I, (), S> {
-    move |s| {
+    move |_| {
         Some(())
     }
 }
@@ -292,7 +300,7 @@ fn success<I: SliceLike, S>() -> impl Parser<I, (), S> {
 fn  right<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
                                    p2: impl Parser<I, O2, S>)
                                    ->  impl Parser<I, O2, S> {
-    move |s: &mut _| {
+    move |s| {
         p1(s)?;
         p2(s)
     }
@@ -300,7 +308,7 @@ fn  right<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
 fn  left<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
                                   p2: impl Parser<I, O2, S>)
                                    -> impl Parser<I, O1, S> {
-    move |s: &mut _| {
+    move |s| {
         if let a@Some(_) = p1(s) {
             p2(s)?;
             a
@@ -309,31 +317,12 @@ fn  left<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
         }
     }
 }
-// fn right<'a, S, R1, R2>(p1: impl FnOnce(&mut Yo<'a, S>) -> Option<R1> + Copy, p2: impl FnOnce(&mut Yo<'a, S>) -> Option<R2> + Copy) -> impl FnOnce(&mut Yo<'a, S>) -> Option<R2> + Copy {
-//     move |s| {
-//         p1(s)?;
-//         p2(s)
-//     }
-// }
-// fn right<'a, S, R1, R2>(p1: impl FnOnce(&mut Yo<'a, S>) -> Option<R1> + Copy, p2: impl FnOnce(&mut Yo<'a, S>) -> Option<R2> + Copy) -> impl FnOnce(&mut Yo<'a, S>) -> Option<R2> + Copy {
-//     move |s| {
-//         p1(s)?;
-//         p2(s)
-//     }
-// }
-
-// fn right<S, R1, R2>(p1: impl for<'a>FnOnce(&mut Yo<'a, S>) -> Option<R1> + Copy, p2: impl for<'a>FnOnce(&mut Yo<'a, S>) -> Option<R2> + Copy) -> impl for<'a>FnOnce(&mut Yo<'a, S>) -> Option<R2> + Copy {
-//     move |s| {
-//         p1(s)?;
-//         p2(s)
-//     }
-// }
 
 fn or<I: SliceLike, O, S>(p1: impl Parser<I, O, S>,
                           p2: impl Parser<I, O, S>)
                            -> impl Parser<I, O, S> {
     move |s| {
-        let pos = s.input.clone();
+        let pos = s.input;
         if let a@Some(_) = p1(s) {
             a
         } else {
@@ -347,8 +336,8 @@ fn or_diff<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
                                     p2: impl Parser<I, O2, S>)
                                      -> impl Parser<I, (), S> {
     move |s| {
-        let pos = s.input.clone();
-        if let Some(_) = p1(s) {
+        let pos = s.input;
+        if p1(s).is_some() {
             Some(())
         } else {
             s.input = pos;
@@ -375,31 +364,33 @@ pub fn parse<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
     (parser_state, result)
 }
 
-// fn parse_handrolled(input: &str) -> Option<Item> {
-//     fn parse_command_tuple(input: &str) -> Option<(&str, &str)> {
-//         let equal_pos = input.find('=')?;
-//         if equal_pos == input.len() - 1 { return None }
-//         Some((&input[..equal_pos], &input[equal_pos..]))
-//     }
+fn parse_handrolled(input: &str) -> Option<Item> {
+    fn parse_command_tuple(input: &str) -> Option<(&str, &str)> {
+        let equal_pos = input.find("=")?;
+        if equal_pos == input.len() - 1 { return None }
+        Some((&input[..equal_pos], &input[(equal_pos + 1)..]))
+    }
 
-//     fn parse_and_get_rest<'a>(source: &'a str, sought: &str) -> Option<&'a str> {
-//         if source.starts_with(sought) {
-//             Some(&source[sought.len()..])
-//         } else {
-//             None
-//         }
-//     }
-//     if let Some(rest) = parse_and_get_rest(input, "Com:") {
-//         let (name, com) = parse_command_tuple(rest)?;
-//         Some(Action {name: name.to_string(), com: com.to_string()})
-//     } else if let Some(rest) = parse_and_get_rest(input, "Info:") {
-//         let (name, com) = parse_command_tuple(rest)?;
-//         Some(Info {name: name.to_string(), com: com.to_string()})
-//     } else if let Some(_) = parse_and_get_rest(input, "Separator") {
-//         Some(Separator)
-//     } else if let Some(_) = parse_and_get_rest(input, "Space") {
-//         Some(Item::Space)
-//     } else {
-//         Some(SyntaxError {description: input.to_string()})
-//     }
-// }
+    fn parse_and_get_rest<'a>(source: &'a str, sought: &str) -> Option<&'a str> {
+        if source.starts_with(sought) {
+            Some(&source[sought.len()..])
+        } else {
+            None
+        }
+    }
+    if let Some(rest) = parse_and_get_rest(input, "Com:") {
+        let (name, com) = parse_command_tuple(rest)?;
+        Some(Action {name, com})
+    } else if let Some(rest) = parse_and_get_rest(input, "Info:") {
+        let (name, com) = parse_command_tuple(rest)?;
+        Some(Info {name, com})
+    } else if parse_and_get_rest(input, "Separator").is_some() {
+        Some(Separator)
+    } else if parse_and_get_rest(input, "Space").is_some() {
+        Some(Item::Space)
+    } else if parse_and_get_rest(input, "#").is_some() || input.is_empty() {
+        Some(Item::Ignore)
+    } else {
+        Some(SyntaxError {description: input})
+    }
+}
