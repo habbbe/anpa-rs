@@ -1,52 +1,65 @@
-use std::iter::{Take};
-use crate::core::{*};
-use std::borrow::Borrow;
+use crate::{slicelike::SliceLike, core::{Parser, AnpaState}};
+use core::borrow::Borrow;
 
-pub fn item<T: PartialEq, X: Borrow<T>, Y: Borrow<T> + Copy, I: Iterator<Item=X> + Clone, S>(item: Y) -> impl Parser<T, X, I, S, X> + Copy {
-    create_parser!(s, {
-        let pos = s.iterator.clone();
-        match s.iterator.next() {
-            Some(x) if x.borrow() == item.borrow() => Some(x),
-            _                    => { s.iterator = pos; None }
-        }
-    })
+pub fn success<I: SliceLike, S>() -> impl Parser<I, (), S> {
+    create_parser!(s, Some(()))
 }
 
-pub fn until_item<T: PartialEq, X: Borrow<T>, Y: Borrow<T> + Copy, I: Iterator<Item=X> + Clone, S>(item: Y) -> impl Parser<T, X, I, S, Take<I>> + Copy {
-    create_parser!(s, {
-        let res = s.iterator.clone();
-        let len = s.iterator.position(|i| i.borrow() == item.borrow())?;
-        Some(res.take(len))
-    })
+pub fn failure<I: SliceLike, S>() -> impl Parser<I, (), S> {
+    create_parser!(s, None)
 }
 
-pub fn rest<T, X: Borrow<T>, I: Iterator<Item=X> + Clone, S>() -> impl Parser<T, X, I, S, I> + Copy {
-    create_parser!(s, {
-        let res = s.iterator.clone();
-        s.iterator.by_ref().last();
-        Some(res)
-    })
-}
-
-pub fn seq<T: PartialEq, X: Borrow<T>, I: Iterator<Item=X> + Clone, S>(items: &[T]) -> impl Parser<T, X, I, S, &[T]> + Copy {
-    create_parser!(s, {
-        let orig = s.iterator.clone();
-        for i in items {
-            match s.iterator.next() {
-                Some(x) if *x.borrow() == *i => {},
-                _ => { s.iterator = orig; return None }
+macro_rules! starts_with {
+    ($start:expr, $len:expr, $f:expr) => {
+        create_parser!(s, {
+            if $f(s.input, $start) {
+                let res;
+                (res, s.input) = s.input.slice_split_at($len);
+                Some(res)
+            } else {
+                None
             }
-        }
-        Some(items)
+        })
+    }
+}
+
+pub fn item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I, S> {
+    starts_with!(item, 1, SliceLike::slice_starts_with)
+}
+
+pub fn seq<I: SliceLike, B: Borrow<I> + Copy, S>(item: B) -> impl Parser<I, I, S> {
+    starts_with!(*item.borrow(), item.borrow().slice_len(), SliceLike::slice_starts_with_seq)
+}
+
+macro_rules! until_internal {
+    ($item:expr, $len:expr, $f:expr) => {
+        create_parser!(s, {
+            let index = $f(s.input, $item)?;
+            let res = s.input.slice_to(index);
+            s.input = s.input.slice_from(index + $len);
+            Some(res)
+        })
+    }
+}
+
+pub fn until_item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I, S> {
+    until_internal!(item.borrow(), 1, SliceLike::slice_find)
+}
+
+pub fn until_seq<I: SliceLike, B: Borrow<I> + Copy, S>(seq: B) -> impl Parser<I, I, S> {
+    until_internal!(*seq.borrow(), seq.borrow().slice_len(), SliceLike::slice_find_seq)
+}
+
+pub fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
+    create_parser!(s, {
+        let all;
+        (all, s.input) = s.input.slice_split_at(s.input.slice_len());
+        Some(all)
     })
 }
 
-pub fn empty<T, X: Borrow<T>, I: Iterator<Item=X> + Clone, S>() -> impl Parser<T, X, I, S, ()> + Copy {
+pub fn empty<I: SliceLike, S>() -> impl Parser<I, (), S> {
     create_parser!(s, {
-        if s.iterator.clone().next().is_none() {
-            Some(())
-        } else {
-            None
-        }
+        if s.input.slice_is_empty() { Some(()) } else { None }
     })
 }

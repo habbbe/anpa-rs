@@ -1,14 +1,14 @@
 #[macro_export]
-macro_rules! lift {
-    ($f:expr, $($e:expr),*) => {
-        |s: &mut State<_,_,_,_>| Some($f($($e(s)?),*))
-    };
+macro_rules! create_parser {
+    ($state:ident, $f:expr) => {
+        move |$state: &mut AnpaState<_, _>| $f
+    }
 }
 
 #[macro_export]
-macro_rules! lift2 {
+macro_rules! lift {
     ($f:expr, $($e:expr),*) => {
-        |s: &mut ParserState<_, _>| Some($f($($e(s)?),*))
+        create_parser!(s, Some($f($($e(s)?),*)))
     };
 }
 
@@ -51,11 +51,4 @@ macro_rules! right {
     ($($e:expr),*) => {
         variadic!(right, $($e),*)
     };
-}
-
-#[macro_export]
-macro_rules! create_parser {
-    ($state:ident, $f:expr) => {
-        move |$state: &mut State<_, _, I, _>| $f
-    }
 }

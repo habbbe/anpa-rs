@@ -1,28 +1,17 @@
-use std::borrow::Borrow;
-use std::marker::PhantomData;
+use crate::slicelike::SliceLike;
 
-pub struct Nothing;
-
-pub struct State<'a, T, X: Borrow<T>, I: Iterator<Item=X>, S> {
-    pub iterator: I,
+pub struct AnpaState<'a, T, S> {
+    pub input: T,
     pub user_state: &'a mut S,
-    phantom: PhantomData<T>,
 }
 
-pub struct StateVal<T, I: Iterator<Item=T>, S> {
-    pub iterator: I,
-    pub user_state: S
-}
+pub trait Parser<I, O, S>: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy {}
+impl<I, O, S, F: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy> Parser<I, O, S> for F {}
 
-pub trait Parser<T, X: Borrow<T>, I: Iterator<Item=X>, S, R>: FnOnce(&mut State<T, X, I, S>) -> Option<R> {}
-impl<T, X: Borrow<T>, I: Iterator<Item=X>, S, R, F> Parser<T, X, I, S, R> for F
-    where F: FnOnce(&mut State<T, X, I, S>) -> Option<R> {}
-
-pub fn parse<T, X: Borrow<T>, I: Iterator<Item=X>, S, R>(p: impl Parser<T, X, I, S, R>,
-                                                         i: I, state: &mut S)
-    -> (State<T, X, I, S>, Option<R>) {
-    let mut parser_state = State {iterator: i, user_state: state, phantom: PhantomData};
+pub fn parse<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
+                                         input: I,
+                                         user_state: &mut S) -> (AnpaState<I, S>, Option<O>) {
+    let mut parser_state = AnpaState { input, user_state };
     let result = p(&mut parser_state);
     (parser_state, result)
 }
-
