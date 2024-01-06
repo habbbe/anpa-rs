@@ -63,3 +63,26 @@ pub fn empty<I: SliceLike, S>() -> impl Parser<I, (), S> {
         s.input.slice_is_empty().then_some(())
     })
 }
+
+pub fn integer<'a, S>() -> impl Parser<&'a str, u32, S> {
+    create_parser!(s, {
+        let mut idx = 0;
+        let mut acc = 0;
+        for c in s.input.chars() {
+            let Some(digit) = c.to_digit(10) else {
+                break;
+            };
+
+            acc = (acc * 10) + digit;
+            idx += 1;
+        }
+
+
+        if idx == 0 {
+            None
+        } else {
+            s.input = s.input.slice_from(idx);
+            Some(acc)
+        }
+    })
+}

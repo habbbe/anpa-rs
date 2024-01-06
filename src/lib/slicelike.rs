@@ -1,6 +1,5 @@
 use core::borrow::Borrow;
 
-
 pub trait SliceLike: Sized + Copy {
     type Item: PartialEq;
     fn slice_find<I: Borrow<Self::Item> + Copy>(self, item: I) -> Option<usize>;

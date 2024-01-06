@@ -71,10 +71,18 @@ fn main() {
         let mut vec: Vec<Item> = Vec::with_capacity(1000000);
         let now = Instant::now();
         for l in &lines {
-            // let r = parse_handrolled(l);
-            // match r {
 
-            let r = parse(state_parser, l, &mut vec);
+            // let r = parse_handrolled(&l);
+            // match r {
+            //     None => {
+            //         println!("No parse");
+            //         break
+            //     }
+            //     Some(Item::Ignore) => {}
+            //     Some(res) => vec.push(res)
+            // }
+
+            let r = parse_state(state_parser, l.as_str(), &mut vec);
             if r.1.is_none() {
                     println!("No parse");
                     break
@@ -91,11 +99,10 @@ fn main() {
         }
 
         let p = in_parens("hej");
-        let mut yo = ();
         let x = "(((((((((hej)))))))))";
-        let num = parse(p, x, &mut yo);
+        let num = parse(p, x);
         if let Some(res) = num.1 {
-            println!("Got the number!")
+            println!("Got the thing!")
         }
     }
 }

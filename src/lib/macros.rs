@@ -13,6 +13,13 @@ macro_rules! lift {
 }
 
 #[macro_export]
+macro_rules! pure {
+    ($e:expr) => {
+        create_parser!(_s, Some($e))
+    };
+}
+
+#[macro_export]
 macro_rules! variadic {
     ($f:ident, $e:expr) => {
         $e
