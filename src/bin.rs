@@ -1,5 +1,4 @@
 use crate::Item::{Action, SyntaxError, Info, Separator};
-use anpa::core::AnpaState;
 use std::fs::File;
 use std::io::{self, BufRead};
 use std::time::Instant;
@@ -53,66 +52,17 @@ fn main() {
     let lines: Vec<String> = io::BufReader::new(file).lines().map(Result::unwrap).collect();
 
     {
-        // let mut vec: Vec<Item> = Vec::with_capacity(100000);
-        // let now = Instant::now();
-        // for _ in 0..rounds {
-        //     vec.clear();
-        //     for l in &lines {
-        //         if let Some(i) = parse_handrolled(l) {
-        //             vec.push(i)
-        //         } else {
-        //             println!("No parse");
-        //         }
-        //     }
-        // }
-        //
-        // println!("N: {}, in {}ms", vec.len(), now.elapsed().as_millis());
-    }
-    {
-        // use anpa::{*};
-        // use anpa::core::{parse, State};
-        // use anpa::parsers::{*};
-        // use anpa::combinators::{*};
-        // let parse_name = until_item(b'=');
-        // let parse_cmd = not_empty(rest());
-        // let parse_action = right(seq(b"Com:"), lift!(action, parse_name, parse_cmd));
-        // let parse_info = right(seq(b"Info:"), lift!(info, parse_name, parse_cmd));
-        // let parse_separator = lift!(|_| Item::Separator, seq(b"Separator"));
-        // let parse_space = lift!(|_| Item::Space, seq(b"Space"));
-        // let parse_error = lift!(syntax_error, rest());
-        // let item_parser = or!(parse_action, parse_info, parse_separator, parse_space, parse_error);
-        // let ignore = or_diff!(item(b'#'), empty());
-        // let state_parser = or_diff!(ignore, lift_to_state(|s: &mut Vec<_>, i| s.push(i), item_parser));
-        //
-        // let mut vec: Vec<Item> = Vec::with_capacity(100000);
-        // let now = Instant::now();
-        //
-        // for _ in 0..rounds {
-        //     vec.clear();
-        //     for l in &lines {
-        //         let (_, r) = parse(state_parser, l.bytes(), &mut vec);
-        //         if let None = r {
-        //             println!("No parse");
-        //             break
-        //         }
-        //     }
-        // }
-        //
-        // println!("N: {}, in {}ms", vec.len(), now.elapsed().as_millis());
-    }
-
-    {
         use anpa::core::{*};
         use anpa::{*};
         use anpa::{parsers::{*}, combinators::{*}};
 
         let parse_name = until_seq("=");
         let parse_cmd = not_empty(rest());
-        let parse_action = right(seq("Com:"), lift!(action2, parse_name, parse_cmd));
-        let parse_info = right(seq("Info:"), lift!(info2, parse_name, parse_cmd));
+        let parse_action = right(seq("Com:"), lift!(action, parse_name, parse_cmd));
+        let parse_info = right(seq("Info:"), lift!(info, parse_name, parse_cmd));
         let parse_separator = lift!(|_| Item::Separator, seq("Separator"));
         let parse_space = lift!(|_| Item::Space, seq("Space"));
-        let parse_error = lift!(syntax_error2, rest());
+        let parse_error = lift!(syntax_error, rest());
         let parse_item = or!(parse_action, parse_info, parse_separator, parse_space, parse_error);
         let item_to_state = lift_to_state(|x: &mut Vec<_>, y| x.push(y), parse_item);
         let ignore = or_diff!(empty(), seq("#"));
@@ -150,15 +100,15 @@ fn main() {
     }
 }
 
-fn action2<'a>(name: &'a str, com: &'a str) -> Item<'a> {
-    Action {name, com: com}
+fn action<'a>(name: &'a str, com: &'a str) -> Item<'a> {
+    Action {name, com}
 }
 
-fn info2<'a>(name: &'a str, com: &'a str) -> Item<'a> {
+fn info<'a>(name: &'a str, com: &'a str) -> Item<'a> {
     Info { name, com }
 }
 
-fn syntax_error2<'a>(description: &'a str) -> Item<'a> {
+fn syntax_error<'a>(description: &'a str) -> Item<'a> {
     SyntaxError {description}
 }
 fn parse_handrolled(input: &str) -> Option<Item> {
