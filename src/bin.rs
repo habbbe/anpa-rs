@@ -104,14 +104,14 @@ fn main() {
     {
         use anpa::{*};
 
-        let parse_name = until_item("=");
+        let parse_name = until_seq("=");
         let parse_cmd = not_empty(rest());
-        let parse_action = right(item("Com:"), lift2!(action2, parse_name, parse_cmd));
-        let parse_info = right(item("Info:"), lift2!(info2, parse_name, parse_cmd));
-        let parse_separator = lift2!(|_| Item::Separator, item("Separator"));
-        let parse_space = lift2!(|_| Item::Space, item("Space"));
+        let parse_action = right(seq("Com:"), lift2!(action2, parse_name, parse_cmd));
+        let parse_info = right(seq("Info:"), lift2!(info2, parse_name, parse_cmd));
+        let parse_separator = lift2!(|_| Item::Separator, seq("Separator"));
+        let parse_space = lift2!(|_| Item::Space, seq("Space"));
         let parse_error = lift2!(syntax_error2, rest());
-        let ignore = lift2!(|_| Item::Ignore, or_diff!(item("#"), empty()));
+        let ignore = lift2!(|_| Item::Ignore, or_diff!(seq("#"), empty()));
         let item_parser = or!(parse_action, parse_info, parse_separator, parse_space, ignore, parse_error);
 
         let mut vec: Vec<Item> = Vec::with_capacity(1000000);
@@ -136,7 +136,7 @@ fn main() {
 
         fn in_parens<'a, B>(thing: &'a str) -> impl Parser<&str, &str, B> {
             move |s| {
-                or(item(thing), right(item("("), left(in_parens(thing), item(")"))))(s)
+                or(seq(thing), right(seq("("), left(in_parens(thing), seq(")"))))(s)
             }
         }
 
@@ -166,8 +166,11 @@ pub trait Parser<I, O, S>: FnOnce(&mut ParserState<I, S>) -> Option<O> + Copy {}
 impl<I, O, S, F: FnOnce(&mut ParserState<I, S>) -> Option<O> + Copy> Parser<I, O, S> for F {}
 
 pub trait SliceLike: Sized + Copy {
-    fn slice_find(self, item: Self) -> Option<usize>;
-    fn slice_starts_with(self, item: Self) -> bool;
+    type Item: PartialEq;
+    fn slice_find<I: Borrow<Self::Item> + Copy>(self, item: I) -> Option<usize>;
+    fn slice_find_seq<S: Borrow<Self>>(self, item: S) -> Option<usize>;
+    fn slice_starts_with<I: Borrow<Self::Item>>(self, item: I) -> bool;
+    fn slice_starts_with_seq(self, item: Self) -> bool;
     fn slice_len(self) -> usize;
     fn slice_from(self, from: usize) -> Self;
     fn slice_to(self, to: usize) -> Self;
@@ -177,11 +180,21 @@ pub trait SliceLike: Sized + Copy {
 }
 
 impl<A: PartialEq> SliceLike for &[A] {
-    fn slice_find(self, item: Self) -> Option<usize> {
-        self.windows(item.len()).position(|w| w == item)
+    type Item = A;
+
+    fn slice_find<I: Borrow<Self::Item> + Copy>(self, item: I) -> Option<usize> {
+        self.iter().position(|x| x == item.borrow())
     }
 
-    fn slice_starts_with(self, item: Self) -> bool {
+    fn slice_find_seq<S: Borrow<Self>>(self, item: S) -> Option<usize> {
+        self.windows(item.borrow().len()).position(|w| &w == item.borrow())
+    }
+
+    fn slice_starts_with<I: Borrow<Self::Item>>(self, item: I) -> bool {
+        self.first().filter(|x| *x == item.borrow()).is_some()
+    }
+
+    fn slice_starts_with_seq(self, item: Self) -> bool {
         self.starts_with(item)
     }
 
@@ -211,11 +224,21 @@ impl<A: PartialEq> SliceLike for &[A] {
 }
 
 impl SliceLike for &str {
-    fn slice_find(self, item: Self) -> Option<usize> {
-        self.find(item)
+    type Item = char;
+
+    fn slice_find<I: Borrow<Self::Item> + Copy>(self, item: I) -> Option<usize> {
+        self.find(*item.borrow())
     }
 
-    fn slice_starts_with(self, item: Self) -> bool {
+    fn slice_find_seq<S: Borrow<Self>>(self, item: S) -> Option<usize> {
+        self.find(item.borrow())
+    }
+
+    fn slice_starts_with<I: Borrow<Self::Item>>(self, item: I) -> bool {
+        self.starts_with(*item.borrow())
+    }
+
+    fn slice_starts_with_seq(self, item: Self) -> bool {
         self.starts_with(item)
     }
 
@@ -249,25 +272,45 @@ pub struct ParserState<T, B> {
     pub user_state: B,
 }
 
-fn item<I: SliceLike, S>(item: I) -> impl Parser<I, I, S> {
-    move |s| {
-        if s.input.slice_starts_with(item) {
-            let res;
-            (res, s.input) = s.input.slice_split_at(item.slice_len());
-            Some(res)
-        } else {
-            None
+macro_rules! starts_with {
+    ($start:expr, $len:expr, $f:expr) => {
+        move |s| {
+            if $f(s.input, $start) {
+                let res;
+                (res, s.input) = s.input.slice_split_at($len);
+                Some(res)
+            } else {
+                None
+            }
         }
     }
 }
 
-fn until_item<I: SliceLike, S>(item: I) -> impl Parser<I, I, S> {
-    move |s| {
-        let index = s.input.slice_find(item)?;
-        let res = s.input.slice_to(index);
-        s.input = s.input.slice_from(index + item.slice_len());
-        Some(res)
+fn item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I, S> {
+    starts_with!(item, 1, SliceLike::slice_starts_with)
+}
+
+fn seq<I: SliceLike, B: Borrow<I> + Copy, S>(item: B) -> impl Parser<I, I, S> {
+    starts_with!(*item.borrow(), item.borrow().slice_len(), SliceLike::slice_starts_with_seq)
+}
+
+macro_rules! until_internal {
+    ($item:expr, $len:expr, $f:expr) => {
+        move |s| {
+            let index = $f(s.input, $item)?;
+            let res = s.input.slice_to(index);
+            s.input = s.input.slice_from(index + $len);
+            Some(res)
+        }
     }
+}
+
+fn until_item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I, S> {
+    until_internal!(item.borrow(), 1, SliceLike::slice_find)
+}
+
+fn until_seq<I: SliceLike, B: Borrow<I> + Copy, S>(seq: B) -> impl Parser<I, I, S> {
+    until_internal!(*seq.borrow(), seq.borrow().slice_len(), SliceLike::slice_find_seq)
 }
 
 fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
@@ -277,14 +320,14 @@ fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
         Some(all)
     }
 }
-//
+
 fn not_empty<I: SliceLike, O: SliceLike, S>(p: impl Parser<I, O, S>)
                                -> impl Parser<I, O, S> {
     move |s| {
         p(s).filter(|x| !x.slice_is_empty())
     }
 }
-//
+
 fn empty<I: SliceLike, S>() -> impl Parser<I, (), S> {
     move |s| {
         if s.input.slice_is_empty() { Some(()) } else { None }
@@ -305,6 +348,7 @@ fn  right<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
         p2(s)
     }
 }
+
 fn  left<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
                                   p2: impl Parser<I, O2, S>)
                                    -> impl Parser<I, O1, S> {
@@ -331,7 +375,7 @@ fn or<I: SliceLike, O, S>(p1: impl Parser<I, O, S>,
         }
     }
 }
-//
+
 fn or_diff<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
                                     p2: impl Parser<I, O2, S>)
                                      -> impl Parser<I, (), S> {
@@ -346,7 +390,7 @@ fn or_diff<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
         }
     }
 }
-//
+
 fn lift_to_state<I: SliceLike, S, O1, O2>(f: impl FnOnce(&mut S, O1) -> O2 + Copy,
                                           p: impl Parser<I, O1, S>)
                                           -> impl Parser<I, O2, S> {
