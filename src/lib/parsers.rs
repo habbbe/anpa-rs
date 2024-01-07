@@ -64,25 +64,29 @@ pub fn empty<I: SliceLike, S>() -> impl Parser<I, (), S> {
     })
 }
 
-pub fn integer<'a, S>() -> impl Parser<&'a str, u32, S> {
-    create_parser!(s, {
-        let mut idx = 0;
-        let mut acc = 0;
-        for c in s.input.chars() {
-            let Some(digit) = c.to_digit(10) else {
-                break;
-            };
+macro_rules! internal_integer {
+    ($type:ty, $id:ident) => {
+        pub fn $id<'a, S>(radix: u32) -> impl Parser<&'a str, $type, S> {
+            create_parser!(s, {
+                let mut idx = 0;
+                let mut acc: $type = 0;
+                for digit in s.input.chars().map_while(|c| c.to_digit(radix)) {
+                    acc = acc.checked_mul(radix as $type)?.checked_add(digit as $type)?;
+                    idx += 1;
+                }
 
-            acc = (acc * 10) + digit;
-            idx += 1;
+                if idx == 0 {
+                    None
+                } else {
+                    s.input = s.input.slice_from(idx);
+                    Some(acc)
+                }
+            })
         }
-
-
-        if idx == 0 {
-            None
-        } else {
-            s.input = s.input.slice_from(idx);
-            Some(acc)
-        }
-    })
+    }
 }
+
+internal_integer!(u8, integer_u8);
+internal_integer!(u16, integer_u16);
+internal_integer!(u32, integer_u32);
+internal_integer!(u64, integer_u64);

@@ -8,8 +8,8 @@ pub struct AnpaVersion {
 }
 
 pub fn version_parser<'a, S>() -> impl Parser<&'a str, AnpaVersion, S> {
-    let component = left!(integer(), item('.'));
-    let last_component = integer();
+    let component = left!(integer_u32(10), item('.'));
+    let last_component = integer_u32(10);
     let snapshot_valid = lift!(|s: &str| Some(s.to_string()), right(item('-'), rest()));
     let snapshot = or(snapshot_valid, lift!(|_| None, empty()));
     lift!(

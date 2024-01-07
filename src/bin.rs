@@ -58,8 +58,8 @@ fn main() {
 
         let parse_name = until_seq("=");
         let parse_cmd = not_empty(rest());
-        let parse_action = right(seq("Com:"), lift!(action, parse_name, parse_cmd));
-        let parse_info = right(seq("Info:"), lift!(info, parse_name, parse_cmd));
+        let parse_action = right!(seq("Com:"), lift!(action, parse_name, parse_cmd));
+        let parse_info = right!(seq("Info:"), lift!(info, parse_name, parse_cmd));
         let parse_separator = lift!(|_| Item::Separator, seq("Separator"));
         let parse_space = lift!(|_| Item::Space, seq("Space"));
         let parse_error = lift!(syntax_error, rest());
@@ -82,7 +82,7 @@ fn main() {
             //     Some(res) => vec.push(res)
             // }
 
-            let r = parse_state(state_parser, l.as_str(), &mut vec);
+            let r = parse_state(state_parser, &l, &mut vec);
             if r.1.is_none() {
                     println!("No parse");
                     break
@@ -134,10 +134,10 @@ fn parse_handrolled(input: &str) -> Option<Item> {
     }
     if let Some(rest) = parse_and_get_rest(input, "Com:") {
         let (name, com) = parse_command_tuple(rest)?;
-        Some(Action {name, com})
+        Some(action(name, com))
     } else if let Some(rest) = parse_and_get_rest(input, "Info:") {
         let (name, com) = parse_command_tuple(rest)?;
-        Some(Info {name, com})
+        Some(info(name, com))
     } else if parse_and_get_rest(input, "Separator").is_some() {
         Some(Separator)
     } else if parse_and_get_rest(input, "Space").is_some() {
@@ -145,6 +145,6 @@ fn parse_handrolled(input: &str) -> Option<Item> {
     } else if parse_and_get_rest(input, "#").is_some() || input.is_empty() {
         Some(Item::Ignore)
     } else {
-        Some(SyntaxError {description: input})
+        Some(syntax_error(input))
     }
 }
