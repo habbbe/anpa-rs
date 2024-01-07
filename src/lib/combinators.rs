@@ -8,6 +8,12 @@ pub fn bind<I: SliceLike, O1, O2, P, S>(p: impl Parser<I, O1, S>,
     create_parser!(s, f(p(s)?)(s))
 }
 
+pub fn succeed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, Option<O>, S> {
+    create_parser!(s, {
+        Some(p(s))
+    })
+}
+
 pub fn not_empty<I: SliceLike, O: SliceLike, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
     create_parser!(s, p(s).filter(|x| !x.slice_is_empty()))
 }

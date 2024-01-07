@@ -13,6 +13,13 @@ macro_rules! lift {
 }
 
 #[macro_export]
+macro_rules! lift_if {
+    ($f:expr, $($e:expr),*) => {
+        create_parser!(s, $f($($e(s)?),*))
+    };
+}
+
+#[macro_export]
 macro_rules! pure {
     ($e:expr) => {
         create_parser!(_s, Some($e))

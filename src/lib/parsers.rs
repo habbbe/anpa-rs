@@ -1,4 +1,4 @@
-use crate::{slicelike::SliceLike, core::{Parser, AnpaState}};
+use crate::{slicelike::SliceLike, core::{Parser, AnpaState}, combinators::{succeed, bind}};
 use core::borrow::Borrow;
 
 pub fn success<I: SliceLike, S>() -> impl Parser<I, (), S> {
@@ -65,13 +65,35 @@ pub fn empty<I: SliceLike, S>() -> impl Parser<I, (), S> {
 }
 
 macro_rules! internal_integer {
-    ($type:ty, $id:ident) => {
+    ($type:ty, $id:ident, $checked:expr, $neg:expr) => {
         pub fn $id<'a, S>(radix: u32) -> impl Parser<&'a str, $type, S> {
             create_parser!(s, {
                 let mut idx = 0;
                 let mut acc: $type = 0;
                 for digit in s.input.chars().map_while(|c| c.to_digit(radix)) {
-                    acc = acc.checked_mul(radix as $type)?.checked_add(digit as $type)?;
+
+                    let digit = digit as $type;
+                    let radix = radix as $type;
+
+                    if $checked {
+                        acc = acc.checked_mul(radix)?;
+                    } else {
+                        acc = acc * radix;
+                    }
+
+                    if $neg {
+                        if $checked {
+                            acc = acc.checked_sub(digit)?;
+                        } else {
+                            acc = acc - digit;
+                        }
+                    } else {
+                        if $checked {
+                            acc = acc.checked_add(digit)?;
+                        } else {
+                            acc = acc + digit;
+                        }
+                    }
                     idx += 1;
                 }
 
@@ -86,7 +108,41 @@ macro_rules! internal_integer {
     }
 }
 
-internal_integer!(u8, integer_u8);
-internal_integer!(u16, integer_u16);
-internal_integer!(u32, integer_u32);
-internal_integer!(u64, integer_u64);
+internal_integer!(u8, integer_u8_checked, true, false);
+internal_integer!(u16, integer_u16_checked, true, false);
+internal_integer!(u32, integer_u32_checked, true, false);
+internal_integer!(u64, integer_u64_checked, true, false);
+
+internal_integer!(u8, integer_u8, false, false);
+internal_integer!(u16, integer_u16, false, false);
+internal_integer!(u32, integer_u32, false, false);
+internal_integer!(u64, integer_u64, false, false);
+
+
+macro_rules! internal_signed_integer {
+    ($type:ty, $id:ident, $checked:expr) => {
+        pub fn $id<'a, S>(radix: u32) -> impl Parser<&'a str, $type, S> {
+            bind(succeed(item('-')), move |x| {
+                create_parser!(s, {
+                    if x.is_some() {
+                        internal_integer!($type, helper_fun_neg, $checked, true);
+                        helper_fun_neg(radix)(s)
+                    } else {
+                        internal_integer!($type, helper_fun_pos, $checked, false);
+                        helper_fun_pos(radix)(s)
+                    }
+                })
+            })
+        }
+    }
+}
+
+internal_signed_integer!(i8, integer_i8, false);
+internal_signed_integer!(i16, integer_i16, false);
+internal_signed_integer!(i32, integer_i32, false);
+internal_signed_integer!(i64, integer_i64, false);
+
+internal_signed_integer!(i8, integer_i8_checked, true);
+internal_signed_integer!(i16, integer_i16_checked, true);
+internal_signed_integer!(i32, integer_i32_checked, true);
+internal_signed_integer!(i64, integer_i64_checked, true);
