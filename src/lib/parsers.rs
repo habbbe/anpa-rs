@@ -146,3 +146,34 @@ internal_signed_integer!(i8, integer_i8_checked, true);
 internal_signed_integer!(i16, integer_i16_checked, true);
 internal_signed_integer!(i32, integer_i32_checked, true);
 internal_signed_integer!(i64, integer_i64_checked, true);
+
+#[cfg(test)]
+mod tests {
+    use crate::{core::parse, parsers::{integer_i8, integer_i8_checked, integer_u8, integer_u8_checked}};
+
+    #[test]
+    fn unsigned_integer() {
+        assert_eq!(parse(integer_u8(10), "0").1.unwrap(), 0);
+        assert_eq!(parse(integer_u8(10), "127").1.unwrap(), 127);
+        assert_eq!(parse(integer_u8(10), "255").1.unwrap(), 255);
+        assert!(parse(integer_u8(10), "-1").1.is_none());
+
+        assert!(parse(integer_u8_checked(10), "256").1.is_none());
+
+        assert_eq!(parse(integer_u8(16), "0").1.unwrap(), 0);
+        assert_eq!(parse(integer_u8(16), "F").1.unwrap(), 15);
+        assert_eq!(parse(integer_u8(16), "10").1.unwrap(), 16);
+        assert_eq!(parse(integer_u8(16), "FF").1.unwrap(), 255);
+    }
+
+    #[test]
+    fn signed_integer() {
+        assert_eq!(parse(integer_i8(10), "0").1.unwrap(), 0);
+        assert_eq!(parse(integer_i8(10), "127").1.unwrap(), 127);
+        assert_eq!(parse(integer_i8(10), "-1").1.unwrap(), -1);
+        assert_eq!(parse(integer_i8(10), "-128").1.unwrap(), -128);
+
+        assert!(parse(integer_i8_checked(10), "-129").1.is_none());
+        assert!(parse(integer_i8_checked(10), "128").1.is_none());
+    }
+}
