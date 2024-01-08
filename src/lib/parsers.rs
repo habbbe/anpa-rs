@@ -1,4 +1,4 @@
-use crate::{slicelike::SliceLike, core::{Parser, AnpaState}, combinators::{succeed, bind}};
+use crate::{slicelike::SliceLike, core::{Parser, AnpaState, ParserExt}, combinators::{succeed, bind}};
 use core::borrow::Borrow;
 
 pub fn success<I: SliceLike, S>() -> impl Parser<I, (), S> {
@@ -122,7 +122,7 @@ internal_integer!(u64, integer_u64, false, false);
 macro_rules! internal_signed_integer {
     ($type:ty, $id:ident, $checked:expr) => {
         pub fn $id<'a, S>(radix: u32) -> impl Parser<&'a str, $type, S> {
-            bind(succeed(item('-')), move |x| {
+            succeed(item('-')).bind(move |x| {
                 create_parser!(s, {
                     if x.is_some() {
                         internal_integer!($type, helper_fun_neg, $checked, true);

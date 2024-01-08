@@ -80,7 +80,7 @@ impl SliceLike for &str {
     fn slice_len(self) -> usize {
         self.len()
     }
-    
+
     fn slice_from(self, from: usize) -> Self {
         &self[from..]
     }

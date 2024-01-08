@@ -60,8 +60,8 @@ fn main() {
         let parse_cmd = not_empty(rest());
         let parse_action = right!(seq("Com:"), lift!(action, parse_name, parse_cmd));
         let parse_info = right!(seq("Info:"), lift!(info, parse_name, parse_cmd));
-        let parse_separator = lift!(|_| Item::Separator, seq("Separator"));
-        let parse_space = lift!(|_| Item::Space, seq("Space"));
+        let parse_separator = seq("Separator").map(|_| Item::Separator);
+        let parse_space = seq("Space").map(|_| Item::Space);
         let parse_error = lift!(syntax_error, rest());
         let parse_item = or!(parse_action, parse_info, parse_separator, parse_space, parse_error);
         let item_to_state = lift_to_state(|x: &mut Vec<_>, y| x.push(y), parse_item);
