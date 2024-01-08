@@ -5,3 +5,4 @@ pub mod core;
 pub mod combinators;
 pub mod slicelike;
 pub mod version;
+pub mod json;

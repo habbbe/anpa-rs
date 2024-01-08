@@ -6,9 +6,23 @@ macro_rules! create_parser {
 }
 
 #[macro_export]
+macro_rules! defer_parser {
+    ($p:expr) => {
+        move |s: &mut AnpaState<_, _>| $p(s)
+    }
+}
+
+#[macro_export]
 macro_rules! lift {
     ($f:expr, $($e:expr),*) => {
         create_parser!(s, Some($f($($e(s)?),*)))
+    };
+}
+
+#[macro_export]
+macro_rules! tuplify {
+    ($($e:expr),*) => {
+        create_parser!(s, Some(($($e(s)?),*)))
     };
 }
 

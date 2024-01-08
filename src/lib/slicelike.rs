@@ -2,8 +2,11 @@ use core::borrow::Borrow;
 
 pub trait SliceLike: Sized + Copy {
     type Item: PartialEq;
+    type RefItem: PartialEq + Copy;
+    fn slice_first(self) -> Option<Self::RefItem>;
     fn slice_find<I: Borrow<Self::Item> + Copy>(self, item: I) -> Option<usize>;
     fn slice_find_seq<S: Borrow<Self>>(self, item: S) -> Option<usize>;
+    fn slice_find_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> Option<usize>;
     fn slice_starts_with<I: Borrow<Self::Item>>(self, item: I) -> bool;
     fn slice_starts_with_seq(self, item: Self) -> bool;
     fn slice_len(self) -> usize;
@@ -12,10 +15,16 @@ pub trait SliceLike: Sized + Copy {
     fn slice_from_to(self, from: usize, to: usize) -> Self;
     fn slice_split_at(self, at: usize) -> (Self, Self);
     fn slice_is_empty(&self) -> bool;
+    fn slice_item_eq_ref_item(a: &Self::Item, b: Self::RefItem) -> bool;
 }
 
-impl<A: PartialEq> SliceLike for &[A] {
+impl<'a, A: PartialEq> SliceLike for &'a [A] {
     type Item = A;
+    type RefItem = &'a A;
+
+    fn slice_first(self) -> Option<Self::RefItem> {
+        self.first()
+    }
 
     fn slice_find<I: Borrow<Self::Item> + Copy>(self, item: I) -> Option<usize> {
         self.iter().position(|x| x == item.borrow())
@@ -23,6 +32,10 @@ impl<A: PartialEq> SliceLike for &[A] {
 
     fn slice_find_seq<S: Borrow<Self>>(self, item: S) -> Option<usize> {
         self.windows(item.borrow().len()).position(|w| &w == item.borrow())
+    }
+
+    fn slice_find_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> Option<usize> {
+        self.iter().position(pred)
     }
 
     fn slice_starts_with<I: Borrow<Self::Item>>(self, item: I) -> bool {
@@ -56,10 +69,19 @@ impl<A: PartialEq> SliceLike for &[A] {
     fn slice_is_empty(&self) -> bool {
         self.is_empty()
     }
+
+    fn slice_item_eq_ref_item(a: &Self::Item, b: Self::RefItem) -> bool {
+        a == b
+    }
 }
 
 impl SliceLike for &str {
     type Item = char;
+    type RefItem = char;
+
+    fn slice_first(self) -> Option<Self::RefItem> {
+        self.chars().next()
+    }
 
     fn slice_find<I: Borrow<Self::Item> + Copy>(self, item: I) -> Option<usize> {
         self.find(*item.borrow())
@@ -67,6 +89,10 @@ impl SliceLike for &str {
 
     fn slice_find_seq<S: Borrow<Self>>(self, item: S) -> Option<usize> {
         self.find(item.borrow())
+    }
+
+    fn slice_find_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> Option<usize> {
+        self.find(pred)
     }
 
     fn slice_starts_with<I: Borrow<Self::Item>>(self, item: I) -> bool {
@@ -99,5 +125,9 @@ impl SliceLike for &str {
 
     fn slice_is_empty(&self) -> bool {
         self.is_empty()
+    }
+
+    fn slice_item_eq_ref_item(a: &Self::Item, b: Self::RefItem) -> bool {
+        a == &b
     }
 }

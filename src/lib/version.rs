@@ -23,7 +23,7 @@ pub fn version_parser<'a, S>() -> impl Parser<&'a str, AnpaVersion, S> {
 #[cfg(test)]
 mod tests {
 
-    use crate::{version::version_parser, core::parse, parsers::{integer_i8, integer_i8_checked}};
+    use crate::{version::version_parser, core::parse};
 
     #[test]
     fn version_no_snapshot() {

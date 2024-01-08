@@ -1,4 +1,4 @@
-use crate::{slicelike::SliceLike, core::{Parser, AnpaState, ParserExt}, combinators::{succeed, bind}};
+use crate::{slicelike::SliceLike, core::{Parser, AnpaState, ParserExt}, combinators::{*}};
 use core::borrow::Borrow;
 
 pub fn success<I: SliceLike, S>() -> impl Parser<I, (), S> {
@@ -23,8 +23,36 @@ macro_rules! internal_starts_with {
     }
 }
 
-pub fn item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I, S> {
-    internal_starts_with!(item, 1, SliceLike::slice_starts_with)
+pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I::RefItem, S> {
+    create_parser!(s, {
+        let first = s.input.slice_first()?;
+        let res = if pred(first) {
+            s.input = s.input.slice_from(1);
+            Some(first)
+        } else {
+            None
+        };
+        res
+    })
+}
+
+pub fn item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I::RefItem, S> {
+    item_if(move |c| I::slice_item_eq_ref_item(item.borrow(), c))
+}
+
+pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I, S> {
+    create_parser!(s, {
+        let idx;
+        match s.input.slice_find_pred(|x| !pred(x)) {
+            None => idx = s.input.slice_len(),
+            Some(0) => return None,
+            Some(n) => idx = n
+        }
+
+        let res;
+        (res, s.input) = s.input.slice_split_at(idx);
+        Some(res)
+    })
 }
 
 pub fn seq<I: SliceLike, B: Borrow<I> + Copy, S>(item: B) -> impl Parser<I, I, S> {
@@ -69,7 +97,7 @@ macro_rules! internal_integer {
         pub fn $id<'a, S>(radix: u32) -> impl Parser<&'a str, $type, S> {
             create_parser!(s, {
                 let mut idx = 0;
-                let mut acc: $type = 0;
+                let mut acc = 0 as $type;
                 for digit in s.input.chars().map_while(|c| c.to_digit(radix)) {
 
                     let digit = digit as $type;
@@ -112,11 +140,15 @@ internal_integer!(u8, integer_u8_checked, true, false);
 internal_integer!(u16, integer_u16_checked, true, false);
 internal_integer!(u32, integer_u32_checked, true, false);
 internal_integer!(u64, integer_u64_checked, true, false);
+internal_integer!(u128, integer_u128_checked, true, false);
+internal_integer!(usize, integer_usize_checked, true, false);
 
 internal_integer!(u8, integer_u8, false, false);
 internal_integer!(u16, integer_u16, false, false);
 internal_integer!(u32, integer_u32, false, false);
 internal_integer!(u64, integer_u64, false, false);
+internal_integer!(u128, integer_u128, false, false);
+internal_integer!(usize, integer_usize, false, false);
 
 
 macro_rules! internal_signed_integer {
@@ -141,15 +173,49 @@ internal_signed_integer!(i8, integer_i8, false);
 internal_signed_integer!(i16, integer_i16, false);
 internal_signed_integer!(i32, integer_i32, false);
 internal_signed_integer!(i64, integer_i64, false);
+internal_signed_integer!(i128, integer_i128, false);
+internal_signed_integer!(isize, integer_isize, false);
 
 internal_signed_integer!(i8, integer_i8_checked, true);
 internal_signed_integer!(i16, integer_i16_checked, true);
 internal_signed_integer!(i32, integer_i32_checked, true);
 internal_signed_integer!(i64, integer_i64_checked, true);
+internal_signed_integer!(i128, integer_i128_checked, true);
+internal_signed_integer!(isize, integer_isize_checked, false);
+
+macro_rules! internal_float {
+    ($type:ty, $id:ident, $checked:expr) => {
+        pub fn $id<'a, S>() -> impl Parser<&'a str, $type, S> {
+            let floating_part = integer_isize(10).bind(|n| {
+                let dec_int = right(item('.'), count_consumed(integer_usize(10)));
+                let dec = dec_int
+                    .map(move |(count, dec)| (n as $type) + (if n.is_negative() {-1 as $type} else {1 as $type}) * (dec as $type) / (10 as $type).powi(count as i32));
+                or(dec, pure!(n as $type))
+            });
+            floating_part
+        }
+    }
+}
+
+internal_float!(f32, float_32, true);
+internal_float!(f64, float_64, true);
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::parse, parsers::{integer_i8, integer_i8_checked, integer_u8, integer_u8_checked}};
+    use crate::{core::parse, parsers::{integer_i8, integer_i8_checked, integer_u8, integer_u8_checked, float_32}};
+
+    use super::item_while;
+
+    #[test]
+    fn take_while_test() {
+        let p = item_while(|c| c == 'x');
+        let res = parse(p, "xxxxy");
+        assert_eq!(res.1.unwrap(), "xxxx");
+        assert_eq!(res.0, "y");
+
+        let p = item_while(|c: char| c.is_digit(10));
+        assert_eq!(parse(p, "1234abcd").1.unwrap(), "1234")
+    }
 
     #[test]
     fn unsigned_integer() {
@@ -175,5 +241,16 @@ mod tests {
 
         assert!(parse(integer_i8_checked(10), "-129").1.is_none());
         assert!(parse(integer_i8_checked(10), "128").1.is_none());
+    }
+
+    #[test]
+    fn float_test() {
+        assert_eq!(parse(float_32(), "0").1.unwrap(), 0f32);
+        assert_eq!(parse(float_32(), "100000000").1.unwrap(), 100000000f32);
+        assert_eq!(parse(float_32(), "-100000000").1.unwrap(), -100000000f32);
+        assert_eq!(parse(float_32(), "13.37").1.unwrap(), 13.37f32);
+        assert_eq!(parse(float_32(), "-13.37").1.unwrap(), -13.37f32);
+        assert_eq!(parse(float_32(), "13.07").1.unwrap(), 13.07f32);
+        assert_eq!(parse(float_32(), "-13.07").1.unwrap(), -13.07f32);
     }
 }
