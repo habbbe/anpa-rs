@@ -1,6 +1,6 @@
 use std::{collections::HashMap, hash::Hash};
 
-use crate::{slicelike::SliceLike, core::{Parser, AnpaState}};
+use crate::{slicelike::SliceLike, core::{Parser, AnpaState}, parsers::success};
 
 pub fn bind<I, O1, O2, P, S>(p: impl Parser<I, O1, S>,
                              f: impl FnOnce(O1) -> P + Copy
@@ -104,61 +104,87 @@ pub fn lift_to_state<I, S, O1, O2>(f: impl FnOnce(&mut S, O1) -> O2 + Copy,
     })
 }
 
-fn many_internal<I, O, S>(
+pub fn no_separator<I, S>() -> Option<(bool, impl Parser<I, (), S>)> {
+    Some((false, success())).filter(|_| false)
+}
+
+fn many_internal<I, O, O2, S>(
     s: &mut AnpaState<I, S>,
     p: impl Parser<I, O, S>,
     mut f: impl FnMut(O) -> (),
-    allow_empty: bool
+    allow_empty: bool,
+    separator: Option<(bool, impl Parser<I, O2, S>)>
 ) -> Option<()> {
-    let mut i = 0;
+    let mut successes = false;
     loop {
         let Some(res) = p(s) else {
+            if let Some((false, _)) = separator {
+                if successes {
+                    return None;
+                }
+            }
             break;
         };
-        i += 1;
+
         f(res);
+        successes = true;
+
+        if let Some((_, sep)) = separator {
+            if sep(s).is_none() {
+                break;
+            }
+        }
     }
-    (allow_empty || (i > 0)).then_some(())
+    (allow_empty || successes).then_some(())
 }
 
-pub fn many<I: SliceLike, O, S>(p: impl Parser<I, O, S>, allow_empty: bool) -> impl Parser<I, I, S> {
+pub fn many<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
+                                    allow_empty: bool,
+                                    separator: Option<(bool, impl Parser<I, (), S>)>,
+) -> impl Parser<I, I, S> {
     create_parser!(s, {
         let old_input = s.input;
-        many_internal(s, p, |_| {}, allow_empty)?;
+        many_internal(s, p, |_| {}, allow_empty, separator)?;
         let res = old_input.slice_to(old_input.slice_len() - s.input.slice_len());
         Some(res)
     })
 }
 
-pub fn many_to_vec<I, O, S>(p: impl Parser<I, O, S>, allow_empty: bool) -> impl Parser<I, Vec<O>, S> {
+pub fn many_to_vec<I, O, O2, S>(p: impl Parser<I, O, S>,
+                            allow_empty: bool,
+                            separator: Option<(bool, impl Parser<I, O2, S>)>,
+) -> impl Parser<I, Vec<O>, S> {
     create_parser!(s, {
         let mut vec = vec![];
-        many_internal(s, p, |x| vec.push(x), allow_empty).map(move |_| vec)
+        many_internal(s, p, |x| vec.push(x), allow_empty, separator).map(move |_| vec)
     })
 }
 
-pub fn many_to_map<I, K: Hash + Eq, V, S>(p: impl Parser<I, (K, V), S>, allow_empty: bool) -> impl Parser<I, HashMap<K, V>, S> {
+pub fn many_to_map<I, K: Hash + Eq, V, O2, S>(p: impl Parser<I, (K, V), S>,
+                                          allow_empty: bool,
+                                          separator: Option<(bool, impl Parser<I, O2, S>)>,
+) -> impl Parser<I, HashMap<K, V>, S> {
     create_parser!(s, {
         let mut map = HashMap::new();
-        many_internal(s, p, |(k, v)| {map.insert(k, v);}, allow_empty).map(move |_| map)
+        many_internal(s, p, |(k, v)| {map.insert(k, v);}, allow_empty, separator).map(move |_| map)
     })
 }
 
-pub fn fold<T: Copy, I, O, S>(acc: T,
-                              p: impl Parser<I, O, S>,
+pub fn fold<T: Copy, I, O, S, P: Parser<I, O, S>>(acc: T,
+                              p: P,
                               f: impl Fn(&mut T, O) -> () + Copy
 ) -> impl Parser<I, T, S> {
     create_parser!(s, {
         let mut acc = acc;
         many_internal(s, p, |x| {
             f(&mut acc, x)
-        }, true).map(move |_| acc)
+        }, true, no_separator()).map(move |_| acc)
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{parsers::{item, empty, integer_u32, item_while}, core::{*}, combinators::{times, middle, many_to_vec, many}};
+    use crate::{parsers::{item, empty, integer_u32, item_while}, core::{*}, combinators::{times, middle, many_to_vec, many, no_separator}};
 
     use super::{fold, or, left};
 
@@ -169,28 +195,28 @@ mod tests {
 
     #[test]
     fn many_nums_vec() {
-        let p = many_to_vec(num_parser(), true);
+        let p = many_to_vec(num_parser(), true, no_separator());
         let res = parse(p, "1,2,3,4").1.unwrap();
         assert_eq!(res, vec![1,2,3,4]);
 
         let res = parse(p, "").1.unwrap();
         assert_eq!(res, vec![]);
 
-        let p = many_to_vec(num_parser(), false);
+        let p = many_to_vec(num_parser(), false, no_separator());
         let res = parse(p, "").1;
         assert!(res.is_none());
     }
 
     #[test]
     fn many_nums() {
-        let p = many(num_parser(), true);
+        let p = many(num_parser(), true, no_separator());
         let res = parse(p, "1,2,3,4").1.unwrap();
         assert_eq!(res, "1,2,3,4");
 
         let res = parse(p, "").1.unwrap();
         assert_eq!(res, "");
 
-        let p = many(num_parser(), false);
+        let p = many(num_parser(), false, no_separator());
         let res = parse(p, "").1;
         assert!(res.is_none());
     }

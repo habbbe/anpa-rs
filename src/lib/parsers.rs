@@ -1,11 +1,11 @@
 use crate::{slicelike::SliceLike, core::{Parser, AnpaState, ParserExt}, combinators::{*}};
 use core::borrow::Borrow;
 
-pub fn success<I: SliceLike, S>() -> impl Parser<I, (), S> {
+pub fn success<I, S>() -> impl Parser<I, (), S> {
     create_parser!(_s, Some(()))
 }
 
-pub fn failure<I: SliceLike, S>() -> impl Parser<I, (), S> {
+pub fn failure<I, S>() -> impl Parser<I, (), S> {
     create_parser!(_s, None)
 }
 

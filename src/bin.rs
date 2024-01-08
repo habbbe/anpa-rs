@@ -1,4 +1,5 @@
 use anpa::core::{*};
+use anpa::json::JsonValue;
 use anpa::{*};
 use anpa::combinators::{*};
 use anpa::parsers::{*};
@@ -89,9 +90,9 @@ fn bench_json() {
     let now = Instant::now();
     let res = parse(p, &string);
     match res.1 {
-        Some(res) =>
-            println!("JSON: N: {}, in {}ms", res.len(), now.elapsed().as_micros() as f64 / 1000.0),
-        None => println!("No parse"),
+        Some(JsonValue::Dic(dic)) =>
+            println!("JSON: N: {}, in {}ms", dic.len(), now.elapsed().as_micros() as f64 / 1000.0),
+        _ => println!("No parse"),
     }
 }
 
