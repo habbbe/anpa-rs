@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use super::parsers::{*};
 use super::combinators::{*};
 use super::core::{*};
@@ -9,7 +9,7 @@ pub enum JsonValue {
     Bool(bool),
     Str(String),
     Num(f64),
-    Dic(HashMap<String, JsonValue>),
+    Dic(BTreeMap<String, JsonValue>),
     Arr(Vec<JsonValue>)
 }
 
@@ -53,7 +53,7 @@ pub fn object_parser<'a>() -> impl Parser<&'a str, JsonValue, ()> {
         value_parser());
     middle(
         item('{'),
-        many_to_map(pair_parser, true, Some((false, eat(item(','))))),
+        many_to_map_ordered(pair_parser, true, Some((false, eat(item(','))))),
         eat(item('}'))).map(JsonValue::Dic)
 }
 

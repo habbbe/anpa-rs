@@ -1,4 +1,4 @@
-use std::{collections::HashMap, hash::Hash};
+use std::{collections::{HashMap, BTreeMap}, hash::Hash};
 
 use crate::{slicelike::SliceLike, core::{Parser, AnpaState}, parsers::success};
 
@@ -24,6 +24,14 @@ pub fn count_consumed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parse
         let res = p(s)?;
         let count = old - s.input.slice_len();
         Some((count, res))
+    })
+}
+
+pub fn and_parsed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, (I, O), S> {
+    create_parser!(s, {
+        let old_input = s.input;
+        let res = p(s)?;
+        Some((old_input.slice_to(old_input.slice_len() - s.input.slice_len()), res))
     })
 }
 
@@ -166,6 +174,16 @@ pub fn many_to_map<I, K: Hash + Eq, V, O2, S>(p: impl Parser<I, (K, V), S>,
 ) -> impl Parser<I, HashMap<K, V>, S> {
     create_parser!(s, {
         let mut map = HashMap::new();
+        many_internal(s, p, |(k, v)| {map.insert(k, v);}, allow_empty, separator).map(move |_| map)
+    })
+}
+
+pub fn many_to_map_ordered<I, K: Ord, V, O2, S>(p: impl Parser<I, (K, V), S>,
+                                          allow_empty: bool,
+                                          separator: Option<(bool, impl Parser<I, O2, S>)>,
+) -> impl Parser<I, BTreeMap<K, V>, S> {
+    create_parser!(s, {
+        let mut map = BTreeMap::new();
         many_internal(s, p, |(k, v)| {map.insert(k, v);}, allow_empty, separator).map(move |_| map)
     })
 }
