@@ -20,7 +20,8 @@ fn eat<'a, O, S>(p: impl Parser<&'a str, O, S>) -> impl Parser<&'a str, O, S> {
 fn string_parser<'a>() -> impl Parser<&'a str, String, ()> {
     let unicode = right(item('u'), times(4, item_if(|c: char| c.is_digit(16))));
     let escaped = right(item('\\'), or_diff(unicode, item_if(|c: char| "\"\\/bfnrt".contains(c))));
-    let not_end = or_diff(escaped, item_if(|c: char| c != '"' && !c.is_control()));
+    let valid_char = item_if(|c: char| c != '"' && c != '\\' && !c.is_control());
+    let not_end = or_diff(valid_char, escaped);
     middle(item('"'), many(not_end, true, no_separator()), item('"')).map(str::to_string)
 }
 
