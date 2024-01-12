@@ -49,8 +49,7 @@ pub fn right<I, S, O1, O2>(p1: impl Parser<I, O1, S>,
                            p2: impl Parser<I, O2, S>
 ) ->  impl Parser<I, O2, S> {
     create_parser!(s, {
-        p1(s)?;
-        p2(s)
+        p1(s).and_then(move |_| p2(s))
     })
 }
 
@@ -58,12 +57,7 @@ pub fn left<I, S, O1, O2>(p1: impl Parser<I, O1, S>,
                           p2: impl Parser<I, O2, S>
 ) ->  impl Parser<I, O1, S> {
     create_parser!(s, {
-        if let a@Some(_) = p1(s) {
-            p2(s)?;
-            a
-        } else {
-            None
-        }
+        p1(s).and_then(move |res| p2(s).map(move |_| res))
     })
 }
 

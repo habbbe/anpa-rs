@@ -1,4 +1,4 @@
-use crate::{slicelike::SliceLike, combinators::bind};
+use crate::{slicelike::SliceLike, combinators::{bind, right, left}};
 
 pub struct AnpaState<'a, T, S> {
     pub input: T,
@@ -11,6 +11,8 @@ impl<I, O, S, F: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy> Parser<I, O, 
 pub trait ParserExt<I, O, S>: Parser<I, O, S> {
     fn map<O2>(self, f: impl FnOnce(O) -> O2 + Copy) -> impl Parser<I, O2, S>;
     fn bind<O2, P: Parser<I, O2, S>>(self, f: impl FnOnce(O) -> P + Copy) -> impl Parser<I, O2, S>;
+    fn right<O2, P: Parser<I, O2, S>>(self, p: P) -> impl Parser<I, O2, S>;
+    fn left<O2, P: Parser<I, O2, S>>(self, p: P) -> impl Parser<I, O, S>;
     fn debug(self, name: &'static str) -> impl Parser<I, O, S>;
 }
 
@@ -21,6 +23,14 @@ impl<I: SliceLike, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
 
     fn bind<O2, P2: Parser<I, O2, S>>(self, f: impl FnOnce(O) -> P2 + Copy) -> impl Parser<I, O2, S> {
         bind(self, f)
+    }
+
+    fn right<O2, P2: Parser<I, O2, S>>(self, p: P2) -> impl Parser<I, O2, S> {
+        right(self, p)
+    }
+
+    fn left<O2, P2: Parser<I, O2, S>>(self, p: P2) -> impl Parser<I, O, S> {
+        left(self, p)
     }
 
     fn debug(self, name: &'static str) -> impl Parser<I, O, S> {
