@@ -74,34 +74,55 @@ pub fn middle<I, S, O1, O2, O3>(p1: impl Parser<I, O1, S>,
     right(p1, left(p2, p3))
 }
 
-pub fn or<I: Copy, O, S>(p1: impl Parser<I, O, S>,
-                         p2: impl Parser<I, O, S>
-) -> impl Parser<I, O, S> {
-    create_parser!(s, {
-        let pos = s.input;
-        if let a@Some(_) = p1(s) {
-            a
-        } else {
-            s.input = pos;
-            p2(s)
+macro_rules! internal_or {
+    ($id:ident, $allow_partial:expr) => {
+        pub fn $id<I: SliceLike, O, S>(p1: impl Parser<I, O, S>,
+                                       p2: impl Parser<I, O, S>
+        ) -> impl Parser<I, O, S> {
+            create_parser!(s, {
+                let pos = s.input;
+                if let a@Some(_) = p1(s) {
+                    a
+                } else {
+                    if !$allow_partial && s.input.slice_len() != pos.slice_len() {
+                        None
+                    } else {
+                        s.input = pos;
+                        p2(s)
+                    }
+                }
+            })
         }
-    })
+    }
 }
 
-pub fn or_diff<I: Copy, S, O1, O2>(p1: impl Parser<I, O1, S>,
-                                   p2: impl Parser<I, O2, S>
-) -> impl Parser<I, (), S> {
-    create_parser!(s, {
-        let pos = s.input;
-        if p1(s).is_some() {
-            Some(())
-        } else {
-            s.input = pos;
-            p2(s)?;
-            Some(())
+internal_or!(or, true);
+internal_or!(or_no_partial, false);
+
+macro_rules! internal_or_diff {
+    ($id:ident, $allow_partial:expr) => {
+        pub fn $id<I: SliceLike, O1, O2, S>(p1: impl Parser<I, O1, S>,
+                                            p2: impl Parser<I, O2, S>
+        ) -> impl Parser<I, (), S> {
+            create_parser!(s, {
+                let pos = s.input;
+                if p1(s).is_some() {
+                    Some(())
+                } else {
+                    if (!$allow_partial && s.input.slice_len() != pos.slice_len()) {
+                        return None
+                    } else {
+                        s.input = pos;
+                        p2(s).map(|_| ())
+                    }
+                }
+            })
         }
-    })
+    }
 }
+
+internal_or_diff!(or_diff, true);
+internal_or_diff!(or_diff_no_partial, false);
 
 pub fn lift_to_state<I, S, O1, O2>(f: impl FnOnce(&mut S, O1) -> O2 + Copy,
                                    p: impl Parser<I, O1, S>

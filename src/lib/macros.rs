@@ -45,9 +45,6 @@ macro_rules! variadic {
     ($f:ident, $e:expr) => {
         $e
     };
-    ($f:ident, $e:expr, $e2:expr) => {
-        $f($e, $e2)
-    };
     ($f:ident, $e:expr, $($e2:expr),*) => {
         $f($e, variadic!($f, $($e2),*))
     };
