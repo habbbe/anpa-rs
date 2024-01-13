@@ -1,4 +1,4 @@
-use crate::{slicelike::SliceLike, core::{Parser, AnpaState, ParserExt}, combinators::{*}};
+use crate::{slicelike::{SliceLike, AsciiLike}, core::{Parser, AnpaState, ParserExt}, combinators::{*}};
 use core::borrow::Borrow;
 
 pub fn success<I, S>() -> impl Parser<I, (), S> {
@@ -94,19 +94,18 @@ pub fn empty<I: SliceLike, S>() -> impl Parser<I, (), S> {
 
 macro_rules! internal_integer {
     ($type:ty, $id:ident, $checked:expr, $neg:expr) => {
-        pub fn $id<'a, S>(radix: u32) -> impl Parser<&'a str, $type, S> {
+        pub fn $id<I: AsciiLike, S>() -> impl Parser<I, $type, S> {
             create_parser!(s, {
                 let mut idx = 0;
                 let mut acc = 0 as $type;
-                for digit in s.input.chars().map_while(|c| c.to_digit(radix)) {
+                for digit in s.input.slice_iter().map_while(I::to_digit) {
 
                     let digit = digit as $type;
-                    let radix = radix as $type;
 
                     if $checked {
-                        acc = acc.checked_mul(radix)?;
+                        acc = acc.checked_mul(10)?;
                     } else {
-                        acc = acc * radix;
+                        acc = acc * 10;
                     }
 
                     if $neg {
@@ -153,15 +152,15 @@ internal_integer!(usize, integer_usize, false, false);
 
 macro_rules! internal_signed_integer {
     ($type:ty, $id:ident, $checked:expr) => {
-        pub fn $id<'a, S>(radix: u32) -> impl Parser<&'a str, $type, S> {
-            succeed(item('-')).bind(move |x| {
+        pub fn $id<I: AsciiLike, S>() -> impl Parser<I, $type, S> {
+            succeed(I::minus_parser()).bind(move |x| {
                 create_parser!(s, {
                     if x.is_some() {
                         internal_integer!($type, helper_fun_neg, $checked, true);
-                        helper_fun_neg(radix)(s)
+                        helper_fun_neg()(s)
                     } else {
                         internal_integer!($type, helper_fun_pos, $checked, false);
-                        helper_fun_pos(radix)(s)
+                        helper_fun_pos()(s)
                     }
                 })
             })
@@ -185,9 +184,9 @@ internal_signed_integer!(isize, integer_isize_checked, false);
 
 macro_rules! internal_float {
     ($type:ty, $id:ident, $checked:expr) => {
-        pub fn $id<'a, S>() -> impl Parser<&'a str, $type, S> {
-            let floating_part = integer_isize(10).bind(|n| {
-                let dec_int = right(item('.'), count_consumed(integer_usize(10)));
+        pub fn $id<I: AsciiLike, S>() -> impl Parser<I, $type, S> {
+            let floating_part = integer_isize().bind(|n| {
+                let dec_int = right(I::period_parser(), count_consumed(integer_usize()));
                 let dec = dec_int
                     .map(move |(count, dec)| (n as $type) + (if n.is_negative() {-1 as $type} else {1 as $type}) * (dec as $type) / (10 as $type).powi(count as i32));
                 or(dec, pure!(n as $type))
@@ -219,28 +218,23 @@ mod tests {
 
     #[test]
     fn unsigned_integer() {
-        assert_eq!(parse(integer_u8(10), "0").1.unwrap(), 0);
-        assert_eq!(parse(integer_u8(10), "127").1.unwrap(), 127);
-        assert_eq!(parse(integer_u8(10), "255").1.unwrap(), 255);
-        assert!(parse(integer_u8(10), "-1").1.is_none());
+        assert_eq!(parse(integer_u8(), "0").1.unwrap(), 0);
+        assert_eq!(parse(integer_u8(), "127").1.unwrap(), 127);
+        assert_eq!(parse(integer_u8(), "255").1.unwrap(), 255);
+        assert!(parse(integer_u8(), "-1").1.is_none());
 
-        assert!(parse(integer_u8_checked(10), "256").1.is_none());
-
-        assert_eq!(parse(integer_u8(16), "0").1.unwrap(), 0);
-        assert_eq!(parse(integer_u8(16), "F").1.unwrap(), 15);
-        assert_eq!(parse(integer_u8(16), "10").1.unwrap(), 16);
-        assert_eq!(parse(integer_u8(16), "FF").1.unwrap(), 255);
+        assert!(parse(integer_u8_checked(), "256").1.is_none());
     }
 
     #[test]
     fn signed_integer() {
-        assert_eq!(parse(integer_i8(10), "0").1.unwrap(), 0);
-        assert_eq!(parse(integer_i8(10), "127").1.unwrap(), 127);
-        assert_eq!(parse(integer_i8(10), "-1").1.unwrap(), -1);
-        assert_eq!(parse(integer_i8(10), "-128").1.unwrap(), -128);
+        assert_eq!(parse(integer_i8(), "0").1.unwrap(), 0);
+        assert_eq!(parse(integer_i8(), "127").1.unwrap(), 127);
+        assert_eq!(parse(integer_i8(), "-1").1.unwrap(), -1);
+        assert_eq!(parse(integer_i8(), "-128").1.unwrap(), -128);
 
-        assert!(parse(integer_i8_checked(10), "-129").1.is_none());
-        assert!(parse(integer_i8_checked(10), "128").1.is_none());
+        assert!(parse(integer_i8_checked(), "-129").1.is_none());
+        assert!(parse(integer_i8_checked(), "128").1.is_none());
     }
 
     #[test]

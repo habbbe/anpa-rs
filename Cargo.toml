@@ -18,5 +18,3 @@ path = "src/lib/lib.rs"
 [[bin]]
 name = "anpa_test"
 path = "src/bin.rs"
-
-[dependencies]

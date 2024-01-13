@@ -1,8 +1,53 @@
 use core::borrow::Borrow;
+use std::{slice::Iter, str::Chars};
+
+use crate::{core::Parser, parsers::item};
+
+pub trait AsciiLike: SliceLike {
+    fn to_digit(item: Self::RefItem) -> Option<u32>;
+    fn minus_parser<S>() -> impl Parser<Self, Self::RefItem, S>;
+    fn period_parser<S>() -> impl Parser<Self, Self::RefItem, S>;
+}
+
+impl AsciiLike for &str {
+    #[inline]
+    fn to_digit(item: Self::RefItem) -> Option<u32> {
+        item.to_digit(10)
+    }
+
+    #[inline]
+    fn minus_parser<S>() -> impl Parser<Self, Self::RefItem, S> {
+        item('-')
+    }
+
+    #[inline]
+    fn period_parser<S>() -> impl Parser<Self, Self::RefItem, S> {
+        item('.')
+    }
+}
+
+impl AsciiLike for &[u8] {
+    #[inline]
+    fn to_digit(item: Self::RefItem) -> Option<u32> {
+        (*item >= b'0' && *item <= b'9').then_some((*item - b'0') as u32)
+    }
+
+    #[inline]
+    fn minus_parser<S>() -> impl Parser<Self, Self::RefItem, S> {
+        item(b'-')
+    }
+
+    #[inline]
+    fn period_parser<S>() -> impl Parser<Self, Self::RefItem, S> {
+        item(b'.')
+    }
+}
 
 pub trait SliceLike: Sized + Copy {
     type Item: PartialEq;
     type RefItem: PartialEq + Copy;
+    type Iter: Iterator<Item = Self::RefItem>;
+    fn slice_iter(self) -> Self::Iter;
     fn slice_first(self) -> Option<Self::RefItem>;
     fn slice_find<I: Borrow<Self::Item> + Copy>(self, item: I) -> Option<usize>;
     fn slice_find_seq<S: Borrow<Self>>(self, item: S) -> Option<usize>;
@@ -21,6 +66,11 @@ pub trait SliceLike: Sized + Copy {
 impl<'a, A: PartialEq> SliceLike for &'a [A] {
     type Item = A;
     type RefItem = &'a A;
+    type Iter = Iter<'a, A>;
+
+    fn slice_iter(self) -> Self::Iter {
+        self.iter()
+    }
 
     fn slice_first(self) -> Option<Self::RefItem> {
         self.first()
@@ -75,9 +125,14 @@ impl<'a, A: PartialEq> SliceLike for &'a [A] {
     }
 }
 
-impl SliceLike for &str {
+impl<'a> SliceLike for &'a str {
     type Item = char;
     type RefItem = char;
+    type Iter = Chars<'a>;
+
+    fn slice_iter(self) -> Self::Iter {
+        self.chars()
+    }
 
     fn slice_first(self) -> Option<Self::RefItem> {
         self.chars().next()
