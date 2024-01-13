@@ -4,5 +4,5 @@ pub mod parsers;
 pub mod core;
 pub mod combinators;
 pub mod slicelike;
-pub mod version;
+pub mod semver;
 pub mod json;

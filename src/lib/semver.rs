@@ -33,7 +33,7 @@ pub fn version_parser<'a, S>() -> impl Parser<&'a str, AnpaVersion, S> {
 #[cfg(test)]
 mod tests {
 
-    use crate::{version::version_parser, core::parse};
+    use crate::{semver::version_parser, core::parse};
 
     #[test]
     fn version_no_snapshot() {

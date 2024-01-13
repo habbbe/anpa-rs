@@ -10,6 +10,11 @@ pub fn bind<I, O1, O2, P, S>(p: impl Parser<I, O1, S>,
 }
 
 #[inline]
+pub fn into_type<I, O, T: From<O>, S>(p: impl Parser<I, O, S>) -> impl Parser<I, T, S> {
+    lift!(|x: O| x.into(), p)
+}
+
+#[inline]
 pub fn filter<I, O, S>(p: impl Parser<I, O, S>,
                        f: impl FnOnce(&O) -> bool + Copy
 ) -> impl Parser<I, O, S> {
