@@ -1,4 +1,4 @@
-use crate::{slicelike::SliceLike, combinators::{bind, right, left}};
+use crate::{slicelike::SliceLike, combinators::{bind, right, left, filter}};
 
 pub struct AnpaState<'a, T, S> {
     pub input: T,
@@ -10,6 +10,7 @@ impl<I, O, S, F: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy> Parser<I, O, 
 
 pub trait ParserExt<I, O, S>: Parser<I, O, S> {
     fn map<O2>(self, f: impl FnOnce(O) -> O2 + Copy) -> impl Parser<I, O2, S>;
+    fn filter(self, f: impl FnOnce(&O) -> bool + Copy) -> impl Parser<I, O, S>;
     fn bind<O2, P: Parser<I, O2, S>>(self, f: impl FnOnce(O) -> P + Copy) -> impl Parser<I, O2, S>;
     fn right<O2, P: Parser<I, O2, S>>(self, p: P) -> impl Parser<I, O2, S>;
     fn left<O2, P: Parser<I, O2, S>>(self, p: P) -> impl Parser<I, O, S>;
@@ -17,18 +18,27 @@ pub trait ParserExt<I, O, S>: Parser<I, O, S> {
 }
 
 impl<I: SliceLike, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
+    #[inline]
     fn map<O2>(self, f: impl FnOnce(O) -> O2 + Copy) -> impl Parser<I, O2, S> {
         lift!(f, self)
     }
 
+    #[inline]
+    fn filter(self, f: impl FnOnce(&O) -> bool + Copy) -> impl Parser<I, O, S> {
+        filter(self, f)
+    }
+
+    #[inline]
     fn bind<O2, P2: Parser<I, O2, S>>(self, f: impl FnOnce(O) -> P2 + Copy) -> impl Parser<I, O2, S> {
         bind(self, f)
     }
 
+    #[inline]
     fn right<O2, P2: Parser<I, O2, S>>(self, p: P2) -> impl Parser<I, O2, S> {
         right(self, p)
     }
 
+    #[inline]
     fn left<O2, P2: Parser<I, O2, S>>(self, p: P2) -> impl Parser<I, O, S> {
         left(self, p)
     }

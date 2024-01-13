@@ -1,10 +1,12 @@
 use crate::{slicelike::{SliceLike, AsciiLike}, core::{Parser, AnpaState, ParserExt}, combinators::{*}};
 use core::borrow::Borrow;
 
+#[inline]
 pub fn success<I, S>() -> impl Parser<I, (), S> {
     create_parser!(_s, Some(()))
 }
 
+#[inline]
 pub fn failure<I, S>() -> impl Parser<I, (), S> {
     create_parser!(_s, None)
 }
@@ -23,6 +25,7 @@ macro_rules! internal_starts_with {
     }
 }
 
+#[inline]
 pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I::RefItem, S> {
     create_parser!(s, {
         let first = s.input.slice_first()?;
@@ -36,10 +39,17 @@ pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) ->
     })
 }
 
+#[inline]
 pub fn item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I::RefItem, S> {
     item_if(move |c| I::slice_item_eq_ref_item(item.borrow(), c))
 }
 
+#[inline]
+pub fn not_item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I::RefItem, S> {
+    item_if(move |c| !I::slice_item_eq_ref_item(item.borrow(), c))
+}
+
+#[inline]
 pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I, S> {
     create_parser!(s, {
         let idx;
@@ -55,6 +65,7 @@ pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy)
     })
 }
 
+#[inline]
 pub fn seq<I: SliceLike, B: Borrow<I> + Copy, S>(item: B) -> impl Parser<I, I, S> {
     internal_starts_with!(*item.borrow(), item.borrow().slice_len(), SliceLike::slice_starts_with_seq)
 }
@@ -70,14 +81,17 @@ macro_rules! internal_until {
     }
 }
 
+#[inline]
 pub fn until_item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I, S> {
     internal_until!(item.borrow(), 1, SliceLike::slice_find)
 }
 
+#[inline]
 pub fn until_seq<I: SliceLike, B: Borrow<I> + Copy, S>(seq: B) -> impl Parser<I, I, S> {
     internal_until!(*seq.borrow(), seq.borrow().slice_len(), SliceLike::slice_find_seq)
 }
 
+#[inline]
 pub fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
     create_parser!(s, {
         let all;
@@ -86,14 +100,25 @@ pub fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
     })
 }
 
-pub fn empty<I: SliceLike, S>() -> impl Parser<I, (), S> {
+#[inline]
+pub fn empty<I: SliceLike, S>() -> impl Parser<I, I, S> {
     create_parser!(s, {
-        s.input.slice_is_empty().then_some(())
+        s.input.slice_is_empty().then_some(s.input)
     })
 }
 
+macro_rules! const_if {
+    (true, $true:expr, $false:expr) => {
+        $true
+    };
+    (false, $true:expr, $false:expr) => {
+        $false
+    }
+}
+
 macro_rules! internal_integer {
-    ($type:ty, $id:ident, $checked:expr, $neg:expr) => {
+    ($type:ty, $id:ident, $checked:tt, $neg:tt) => {
+        #[inline]
         pub fn $id<I: AsciiLike, S>() -> impl Parser<I, $type, S> {
             create_parser!(s, {
                 let mut idx = 0;
@@ -102,25 +127,25 @@ macro_rules! internal_integer {
 
                     let digit = digit as $type;
 
-                    if $checked {
-                        acc = acc.checked_mul(10)?;
-                    } else {
-                        acc = acc * 10;
-                    }
+                    const_if!($checked,
+                        acc = acc.checked_mul(10)?,
+                        acc = acc * 10
+                    );
 
-                    if $neg {
-                        if $checked {
-                            acc = acc.checked_sub(digit)?;
-                        } else {
-                            acc = acc - digit;
+                    const_if!($neg,
+                        {
+                            const_if!($checked,
+                                acc = acc.checked_sub(digit)?,
+                                acc = acc - digit
+                            );
+                        },
+                        {
+                            const_if!($checked,
+                                acc = acc.checked_add(digit)?,
+                                acc = acc + digit
+                            );
                         }
-                    } else {
-                        if $checked {
-                            acc = acc.checked_add(digit)?;
-                        } else {
-                            acc = acc + digit;
-                        }
-                    }
+                    );
                     idx += 1;
                 }
 
@@ -151,7 +176,8 @@ internal_integer!(usize, integer_usize, false, false);
 
 
 macro_rules! internal_signed_integer {
-    ($type:ty, $id:ident, $checked:expr) => {
+    ($type:ty, $id:ident, $checked:tt) => {
+        #[inline]
         pub fn $id<I: AsciiLike, S>() -> impl Parser<I, $type, S> {
             succeed(I::minus_parser()).bind(move |x| {
                 create_parser!(s, {
@@ -183,10 +209,12 @@ internal_signed_integer!(i128, integer_i128_checked, true);
 internal_signed_integer!(isize, integer_isize_checked, false);
 
 macro_rules! internal_float {
-    ($type:ty, $id:ident, $checked:expr) => {
+    ($type:ty, $id:ident, $checked:tt) => {
+        #[inline]
         pub fn $id<I: AsciiLike, S>() -> impl Parser<I, $type, S> {
-            let floating_part = integer_isize().bind(|n| {
-                let dec_int = right(I::period_parser(), count_consumed(integer_usize()));
+            let floating_part = const_if!($checked, integer_isize_checked, integer_isize)().bind(|n| {
+                let dec_int = right(I::period_parser(),
+                    count_consumed(const_if!($checked, integer_usize_checked, integer_usize)()));
                 let dec = dec_int
                     .map(move |(count, dec)| (n as $type) + (if n.is_negative() {-1 as $type} else {1 as $type}) * (dec as $type) / (10 as $type).powi(count as i32));
                 or(dec, pure!(n as $type))
@@ -196,8 +224,11 @@ macro_rules! internal_float {
     }
 }
 
-internal_float!(f32, float_32, true);
-internal_float!(f64, float_64, true);
+internal_float!(f32, float_32, false);
+internal_float!(f64, float_64, false);
+
+internal_float!(f32, float_32_checked, true);
+internal_float!(f64, float_64_checked, true);
 
 #[cfg(test)]
 mod tests {
