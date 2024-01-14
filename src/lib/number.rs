@@ -1,6 +1,6 @@
 use std::ops::{Add, Sub, Mul, Div};
 
-use crate::{slicelike::AsciiLike, core::{Parser, ParserExt, AnpaState}, combinators::{right, or}, parsers::item};
+use crate::{slicelike::SliceLike, core::{Parser, ParserExt, AnpaState}, combinators::{right, or}, parsers::item_if, asciilike::AsciiLike};
 
 pub trait NumLike:
 Add<Output = Self>
@@ -64,7 +64,8 @@ impl_FloatLike!(f32, f64);
 #[inline(always)]
 fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: bool,
                     O: NumLike,
-                    I: AsciiLike,
+                    A: AsciiLike,
+                    I: SliceLike<RefItem = A>,
                     S>() -> impl Parser<I, (O, usize), S> {
     create_parser!(s, {
         let mut idx = 0;
@@ -74,28 +75,28 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
         // The number 10 is guaranteed to fit into all our `NumLike` types
         let ten = O::cast_u8(10);
         let mut iter = s.input.slice_iter();
-        let mut consume = |digit: u8, is_negative: bool| -> bool {
+        let mut consume = |digit: u8, is_negative: bool, checked: bool| -> Option<()> {
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit);
 
-            if CHECKED {
+            if checked {
                 if acc > (O::MAX / ten) {
-                    return false
+                    return None
                 }
             }
             acc = acc * ten;
 
             if is_negative {
-                if CHECKED {
+                if checked {
                     if acc < O::MIN + digit {
-                        return false
+                        return None
                     }
                 }
                 acc = acc - digit;
             } else {
-                if CHECKED {
+                if checked {
                     if acc > O::MAX - digit {
-                        return false
+                        return None
                     }
                 }
                 acc = acc + digit;
@@ -105,25 +106,24 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
                 dec_divisor *= 10;
             }
 
-            true
+            Some(())
         };
 
         let is_negative = if NEG {
             let c = iter.next()?;
-            if I::slice_item_eq_ref_item(&I::MINUS, c) {
+            if c.equal(A::MINUS) {
                 true
             } else {
-                consume(I::to_digit(c)?, false);
+                // We don't care about checking the result here, since a single digit can never fail.
+                consume(c.as_digit()?, false, false);
                 false
             }
         } else {
             false
         };
 
-        for digit in iter.map_while(I::to_digit) {
-            if !consume(digit, is_negative) {
-                return None
-            }
+        for digit in iter.map_while(A::as_digit) {
+            consume(digit, is_negative, CHECKED)?;
         }
 
         if idx == 0 {
@@ -136,53 +136,70 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
 }
 
 #[inline]
-pub fn integer<O: NumLike, I: AsciiLike, S>() -> impl Parser<I, O, S> {
-    integer_internal::<false, false, false,_,_,_>().map(|(n, _)| n)
+pub fn integer<O: NumLike,
+               A: AsciiLike,
+               I: SliceLike<RefItem = A>,
+               S>() -> impl Parser<I, O, S> {
+    integer_internal::<false, false, false,_,_,_,_>().map(|(n, _)| n)
 }
 
 #[inline]
-pub fn integer_checked<O: NumLike, I: AsciiLike, S>() -> impl Parser<I, O, S> {
-    integer_internal::<true, false, false,_,_,_>().map(|(n, _)| n)
+pub fn integer_checked<O: NumLike,
+                       A: AsciiLike,
+                       I: SliceLike<RefItem = A>,
+                       S>() -> impl Parser<I, O, S> {
+    integer_internal::<true, false, false,_,_,_,_>().map(|(n, _)| n)
 }
 
 #[inline]
 pub fn integer_signed<O: NumLike,
-                      I: AsciiLike,
+                      A: AsciiLike,
+                      I: SliceLike<RefItem = A>,
                       S>() -> impl Parser<I, O, S> {
-    integer_internal::<false, true, false,_,_,_>().map(|(n, _)| n)
+    integer_internal::<false, true, false,_,_,_,_>().map(|(n, _)| n)
 }
 
 #[inline]
 pub fn integer_signed_checked<O: NumLike,
-                              I: AsciiLike,
+                              A: AsciiLike,
+                              I: SliceLike<RefItem = A>,
                               S>() -> impl Parser<I, O, S> {
-    integer_internal::<true, true, false,_,_,_>().map(|(n, _)| n)
+    integer_internal::<true, true, false,_,_,_,_>().map(|(n, _)| n)
 }
 
 #[inline(always)]
-fn float_internal<const CHECKED: bool, O: FloatLike, I: AsciiLike, S>() -> impl Parser<I, O, S> {
-    let floating_part = integer_internal::<CHECKED, true, true,_,_,_>().bind(|(n, div): (isize, _)| {
-        let dec = right(item(I::PERIOD), integer_internal::<CHECKED,false,false,_,_,_>())
+fn float_internal<const CHECKED: bool,
+                  O: FloatLike,
+                  A: AsciiLike,
+                  I: SliceLike<RefItem = A>,
+                  S>() -> impl Parser<I, O, S> {
+    // First parse a possibly negative signed integer
+    integer_internal::<CHECKED, true, true,_,_,_,_>().bind(|(n, div): (isize, _)| {
+        // Then parse a period followed by an unsigned integer.
+        let dec = right(item_if(|c: I::RefItem| c.equal(A::PERIOD)),
+                                              integer_internal::<CHECKED,false,false,_,_,_,_>())
             .map(move |(dec, _): (usize,_)|
                 O::cast_isize(n) + if n.is_negative() {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));
         or(dec, pure!(O::cast_isize(n)))
-    });
-    floating_part
+    })
 }
 
 #[inline]
-pub fn float<O: FloatLike, I: AsciiLike, S>() -> impl Parser<I, O, S> {
-    float_internal::<false,_,_,_>()
+pub fn float<O: FloatLike, A: AsciiLike, I: SliceLike<RefItem = A>, S>() -> impl Parser<I, O, S> {
+    float_internal::<false,_,_,_,_>()
 }
 
 #[inline]
-pub fn float_checked<O: FloatLike, I: AsciiLike, S>() -> impl Parser<I, O, S> {
-    float_internal::<true,_,_,_>()
+pub fn float_checked<O: FloatLike,
+                     A: AsciiLike,
+                     I: SliceLike<RefItem = A>,
+                     S>() -> impl Parser<I, O, S> {
+    float_internal::<true,_,_,_,_>()
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::parse, number::{integer, integer_checked, float, integer_signed, integer_signed_checked}};
+    use crate::{core::{parse}, number::{integer, integer_checked, float, integer_signed, integer_signed_checked}};
 
     #[test]
     fn unsigned_integer() {
@@ -190,8 +207,8 @@ mod tests {
         assert_eq!(127, parse(integer(), "127").1.unwrap());
         assert_eq!(255, parse(integer(), "255").1.unwrap());
 
-        assert!(parse(integer::<u8,_,_>(), "-1").1.is_none());
-        assert!(parse(integer_checked::<u8,_,_>(), "256").1.is_none());
+        assert!((parse(integer(), "-1").1 as Option<u8>).is_none());
+        assert!((parse(integer_checked(), "256").1 as Option<u8>).is_none());
     }
 
     #[test]

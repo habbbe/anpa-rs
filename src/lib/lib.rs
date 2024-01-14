@@ -4,6 +4,7 @@ pub mod parsers;
 pub mod number;
 pub mod core;
 pub mod combinators;
+pub mod asciilike;
 pub mod slicelike;
 pub mod semver;
 pub mod json;

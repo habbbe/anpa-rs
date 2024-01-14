@@ -1,34 +1,6 @@
 use core::borrow::Borrow;
 use std::{slice::Iter, str::Chars};
 
-pub trait AsciiLike: SliceLike<Item = Self::T> {
-    type T: Copy;
-    const MINUS: Self::Item;
-    const PERIOD: Self::Item;
-    fn to_digit(item: Self::RefItem) -> Option<u8>;
-}
-
-impl AsciiLike for &str {
-    type T = char;
-    const MINUS: Self::Item = '-';
-    const PERIOD: Self::Item = '.';
-
-    #[inline(always)]
-    fn to_digit(item: Self::RefItem) -> Option<u8> {
-        item.to_digit(10).map(|c| c as u8)
-    }
-}
-
-impl AsciiLike for &[u8] {
-    type T = u8;
-    const MINUS: Self::Item = b'-';
-    const PERIOD: Self::Item = b'.';
-    #[inline(always)]
-    fn to_digit(item: Self::RefItem) -> Option<u8> {
-        (*item >= b'0' && *item <= b'9').then_some(*item - b'0')
-    }
-}
-
 pub trait SliceLike: Sized + Copy {
     type Item: PartialEq;
     type RefItem: PartialEq + Copy;
