@@ -1,4 +1,6 @@
 use std::collections::BTreeMap;
+
+use crate::number::float;
 use super::parsers::{*};
 use super::combinators::{*};
 use super::core::{*};
@@ -30,7 +32,7 @@ fn json_string_parser<'a>() -> impl Parser<&'a str, JsonValue, ()> {
 }
 
 fn number_parser<'a>() -> impl Parser<&'a str, JsonValue, ()> {
-    float_64().map(JsonValue::Num)
+    float().map(JsonValue::Num)
 }
 
 fn bool_parser<'a>() -> impl Parser<&'a str, JsonValue, ()> {

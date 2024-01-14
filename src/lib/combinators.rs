@@ -269,12 +269,12 @@ pub fn fold<T: Copy, I, O, S, P: Parser<I, O, S>>(acc: T,
 
 #[cfg(test)]
 mod tests {
-    use crate::{parsers::{item, empty, integer_u32, item_while}, core::{*}, combinators::{times, middle, many_to_vec, many, no_separator}};
+    use crate::{parsers::{item, empty, item_while}, core::{*}, combinators::{times, middle, many_to_vec, many, no_separator}, number::integer};
 
     use super::{fold, or, left};
 
     fn num_parser() -> impl Parser<&'static str, u32, ()> {
-        let num = integer_u32();
+        let num = integer();
         or(left(num, item(',')), left(num, empty()))
     }
 

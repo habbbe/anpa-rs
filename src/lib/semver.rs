@@ -1,4 +1,4 @@
-use crate::{parsers::{*}, core::{Parser, AnpaState, ParserExt}, combinators::{*}};
+use crate::{parsers::{*}, core::{Parser, AnpaState, ParserExt}, combinators::{*}, number::integer};
 pub struct AnpaVersion {
     pub major: u64,
     pub minor: u64,
@@ -14,7 +14,7 @@ impl AnpaVersion {
 }
 
 pub fn version_parser<'a, S>() -> impl Parser<&'a str, AnpaVersion, S> {
-    let number = integer_u64();
+    let number = integer();
     let component = left!(number, item('.'));
     let pre_release = or!(
         empty(), // If there is no pre-release or build

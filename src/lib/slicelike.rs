@@ -1,45 +1,31 @@
 use core::borrow::Borrow;
 use std::{slice::Iter, str::Chars};
 
-use crate::{core::Parser, parsers::item};
-
-pub trait AsciiLike: SliceLike {
-    fn to_digit(item: Self::RefItem) -> Option<u32>;
-    fn minus_parser<S>() -> impl Parser<Self, Self::RefItem, S>;
-    fn period_parser<S>() -> impl Parser<Self, Self::RefItem, S>;
+pub trait AsciiLike: SliceLike<Item = Self::T> {
+    type T: Copy;
+    const MINUS: Self::Item;
+    const PERIOD: Self::Item;
+    fn to_digit(item: Self::RefItem) -> Option<u8>;
 }
 
 impl AsciiLike for &str {
-    #[inline]
-    fn to_digit(item: Self::RefItem) -> Option<u32> {
-        item.to_digit(10)
-    }
+    type T = char;
+    const MINUS: Self::Item = '-';
+    const PERIOD: Self::Item = '.';
 
-    #[inline]
-    fn minus_parser<S>() -> impl Parser<Self, Self::RefItem, S> {
-        item('-')
-    }
-
-    #[inline]
-    fn period_parser<S>() -> impl Parser<Self, Self::RefItem, S> {
-        item('.')
+    #[inline(always)]
+    fn to_digit(item: Self::RefItem) -> Option<u8> {
+        item.to_digit(10).map(|c| c as u8)
     }
 }
 
 impl AsciiLike for &[u8] {
-    #[inline]
-    fn to_digit(item: Self::RefItem) -> Option<u32> {
-        (*item >= b'0' && *item <= b'9').then_some((*item - b'0') as u32)
-    }
-
-    #[inline]
-    fn minus_parser<S>() -> impl Parser<Self, Self::RefItem, S> {
-        item(b'-')
-    }
-
-    #[inline]
-    fn period_parser<S>() -> impl Parser<Self, Self::RefItem, S> {
-        item(b'.')
+    type T = u8;
+    const MINUS: Self::Item = b'-';
+    const PERIOD: Self::Item = b'.';
+    #[inline(always)]
+    fn to_digit(item: Self::RefItem) -> Option<u8> {
+        (*item >= b'0' && *item <= b'9').then_some(*item - b'0')
     }
 }
 
