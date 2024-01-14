@@ -1,4 +1,4 @@
-use crate::{slicelike::SliceLike, combinators::{bind, right, left, filter, into_type}};
+use crate::combinators::{bind, right, left, filter, into_type};
 
 pub struct AnpaState<'a, T, S> {
     pub input: T,
@@ -18,7 +18,7 @@ pub trait ParserExt<I, O, S>: Parser<I, O, S> {
     fn debug(self, name: &'static str) -> impl Parser<I, O, S>;
 }
 
-impl<I: SliceLike, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
+impl<I, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
     #[inline]
     fn into_type<T: From<O>>(self) -> impl Parser<I, T, S> {
         into_type(self)
@@ -61,7 +61,7 @@ impl<I: SliceLike, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
     }
 }
 
-pub fn parse_state<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
+pub fn parse_state<I, O, S>(p: impl Parser<I, O, S>,
                                        input: I,
                                        user_state: &mut S) -> (AnpaState<I, S>, Option<O>) {
     let mut parser_state = AnpaState { input, user_state };
@@ -69,8 +69,8 @@ pub fn parse_state<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
     (parser_state, result)
 }
 
-pub fn parse<I: SliceLike, O>(p: impl Parser<I, O, ()>,
-                              input: I) -> (I, Option<O>) {
+pub fn parse<I, O>(p: impl Parser<I, O, ()>,
+                   input: I) -> (I, Option<O>) {
     let mut parser_state = AnpaState { input, user_state: &mut () };
     let result = p(&mut parser_state);
     (parser_state.input, result)

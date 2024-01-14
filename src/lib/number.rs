@@ -73,28 +73,14 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
 
         // The number 10 is guaranteed to fit into all our `NumLike` types
         let ten = O::cast_u8(10);
-
         let mut iter = s.input.slice_iter();
-        let is_negative = if NEG {
-            let c = iter.next()?;
-
-            if I::slice_item_eq_ref_item(&I::MINUS, c) {
-                true
-            } else {
-                iter = s.input.slice_iter();
-                false
-            }
-        } else {
-            false
-        };
-
-        for digit in iter.map_while(I::to_digit) {
+        let mut consume = |digit: u8, is_negative: bool| -> bool {
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit);
 
             if CHECKED {
                 if acc > (O::MAX / ten) {
-                    return None
+                    return false
                 }
             }
             acc = acc * ten;
@@ -102,22 +88,41 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
             if is_negative {
                 if CHECKED {
                     if acc < O::MIN + digit {
-                        return None
+                        return false
                     }
                 }
                 acc = acc - digit;
             } else {
                 if CHECKED {
                     if acc > O::MAX - digit {
-                        return None
+                        return false
                     }
                 }
                 acc = acc + digit;
             }
-
             idx += 1;
             if DEC_DIVISOR {
                 dec_divisor *= 10;
+            }
+
+            true
+        };
+
+        let is_negative = if NEG {
+            let c = iter.next()?;
+            if I::slice_item_eq_ref_item(&I::MINUS, c) {
+                true
+            } else {
+                consume(I::to_digit(c)?, false);
+                false
+            }
+        } else {
+            false
+        };
+
+        for digit in iter.map_while(I::to_digit) {
+            if !consume(digit, is_negative) {
+                return None
             }
         }
 
