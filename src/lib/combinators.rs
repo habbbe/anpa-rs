@@ -209,9 +209,8 @@ fn many_internal<I, O, O2, S>(
     let mut successes = false;
     loop {
         let Some(res) = p(s) else {
-            match (separator, successes)  {
-                (Some((false, _)), true) => return None,
-                _ => {},
+            if let (Some((false, _)), true) = (separator, successes) {
+                return None
             }
             break;
         };

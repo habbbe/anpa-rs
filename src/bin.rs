@@ -1,5 +1,6 @@
 use anpa::core::{*};
 use anpa::json::JsonValue;
+use anpa::semver::AnpaVersion;
 use anpa::{*};
 use anpa::combinators::{*};
 use anpa::parsers::{*};
@@ -13,6 +14,7 @@ fn main() {
     bench_json();
     bench_hubb();
     bench_hubb_handrolled();
+    bench_semver();
 }
 
 #[derive(Debug)]
@@ -94,6 +96,18 @@ fn bench_json() {
             println!("JSON: N: {}, in {}ms", dic.len(), now.elapsed().as_micros() as f64 / 1000.0),
         _ => println!("No parse"),
     }
+}
+
+fn bench_semver() {
+    let v = "123432134.43213421.5432344-SNAPSHOT+some.build.id";
+
+    let mut ver = AnpaVersion::<_>::new(0, 0, 0, "", "");
+    let now = Instant::now();
+    for _ in 0..200000 {
+        ver = semver::parse_inline(v).unwrap();
+    }
+
+    println!("Version: {:?}, in {}ms", ver, now.elapsed().as_micros() as f64 / 1000.0);
 }
 
 fn action<'a>(name: &'a str, com: &'a str) -> Item<'a> {
