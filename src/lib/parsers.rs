@@ -117,10 +117,10 @@ mod tests {
     fn take_while_test() {
         let p = item_while(|c| c == 'x');
         let res = parse(p, "xxxxy");
-        assert_eq!(res.1.unwrap(), "xxxx");
-        assert_eq!(res.0, "y");
+        assert_eq!(res.result.unwrap(), "xxxx");
+        assert_eq!(res.state, "y");
 
         let p = item_while(|c: char| c.is_digit(10));
-        assert_eq!(parse(p, "1234abcd").1.unwrap(), "1234")
+        assert_eq!(parse(p, "1234abcd").result.unwrap(), "1234")
     }
 }

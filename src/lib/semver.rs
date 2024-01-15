@@ -15,7 +15,7 @@ impl<T> AnpaVersion<T> {
 }
 
 pub fn parse_version_general<'a, O: From<&'a str>>(text: &'a str) -> Option<AnpaVersion<O>> {
-    parse(semver(), text.into()).1
+    parse(semver(), text.into()).result
 }
 
 pub fn parse_version_inline(text: &str) -> Option<AnpaVersion<&str>> {

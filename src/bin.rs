@@ -11,10 +11,10 @@ use std::process::exit;
 use std::time::Instant;
 
 fn main() {
-    bench_json();
     bench_hubb();
     bench_hubb_handrolled();
     bench_semver();
+    bench_json();
 }
 
 #[derive(Debug)]
@@ -56,7 +56,7 @@ fn bench_hubb() {
 
     for l in &lines {
         let r = parse_state(state_parser, l, &mut vec);
-        if r.1.is_none() {
+        if r.result.is_none() {
                 println!("No parse");
                 break
         }
@@ -91,7 +91,7 @@ fn bench_json() {
 
     let now = Instant::now();
     let res = parse(p, &string);
-    match res.1 {
+    match res.result {
         Some(JsonValue::Dic(dic)) =>
             println!("JSON: N: {}, in {}ms", dic.len(), now.elapsed().as_micros() as f64 / 1000.0),
         _ => println!("No parse"),

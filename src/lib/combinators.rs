@@ -301,35 +301,35 @@ mod tests {
     #[test]
     fn many_nums_vec() {
         let p = many_to_vec(num_parser(), true, no_separator());
-        let res = parse(p, "1,2,3,4").1.unwrap();
+        let res = parse(p, "1,2,3,4").result.unwrap();
         assert_eq!(res, vec![1,2,3,4]);
 
-        let res = parse(p, "").1.unwrap();
+        let res = parse(p, "").result.unwrap();
         assert_eq!(res, vec![]);
 
         let p = many_to_vec(num_parser(), false, no_separator());
-        let res = parse(p, "").1;
+        let res = parse(p, "").result;
         assert!(res.is_none());
     }
 
     #[test]
     fn many_nums() {
         let p = many(num_parser(), true, no_separator());
-        let res = parse(p, "1,2,3,4").1.unwrap();
+        let res = parse(p, "1,2,3,4").result.unwrap();
         assert_eq!(res, "1,2,3,4");
 
-        let res = parse(p, "").1.unwrap();
+        let res = parse(p, "").result.unwrap();
         assert_eq!(res, "");
 
         let p = many(num_parser(), false, no_separator());
-        let res = parse(p, "").1;
+        let res = parse(p, "").result;
         assert!(res.is_none());
     }
 
     #[test]
     fn fold_add() {
         let p = fold(0, num_parser(), |acc, x| *acc += x);
-        let res = parse(p, "1,2,3,4,").1.unwrap();
+        let res = parse(p, "1,2,3,4,").result.unwrap();
         assert_eq!(res, 10);
     }
 
@@ -337,10 +337,10 @@ mod tests {
     fn times_test() {
         let p = times(4, left(item('1'), item('2')));
         let res = parse(p, "12121212End");
-        assert_eq!(res.1.unwrap(), "12121212");
-        assert_eq!(res.0, "End");
+        assert_eq!(res.result.unwrap(), "12121212");
+        assert_eq!(res.state, "End");
 
-        let res = parse(p, "121212").1;
+        let res = parse(p, "121212").result;
         assert!(res.is_none());
     }
 
@@ -353,7 +353,7 @@ mod tests {
         let x = "(((((((((sought)))))))))";
 
         let res = parse(in_parens(), x);
-        assert_eq!(res.1.unwrap(), "sought");
-        assert!(res.0.is_empty());
+        assert_eq!(res.result.unwrap(), "sought");
+        assert!(res.state.is_empty());
     }
 }

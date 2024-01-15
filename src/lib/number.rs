@@ -203,35 +203,35 @@ mod tests {
 
     #[test]
     fn unsigned_integer() {
-        assert_eq!(0, parse(integer(), "0").1.unwrap());
-        assert_eq!(127, parse(integer(), "127").1.unwrap());
-        assert_eq!(255, parse(integer(), "255").1.unwrap());
+        assert_eq!(0, parse(integer(), "0").result.unwrap());
+        assert_eq!(127, parse(integer(), "127").result.unwrap());
+        assert_eq!(255, parse(integer(), "255").result.unwrap());
 
-        assert!((parse(integer(), "-1").1 as Option<u8>).is_none());
-        assert!((parse(integer_checked(), "256").1 as Option<u8>).is_none());
+        assert!((parse(integer(), "-1").result as Option<u8>).is_none());
+        assert!((parse(integer_checked(), "256").result as Option<u8>).is_none());
     }
 
     #[test]
     fn signed_integer() {
-        assert_eq!(0, parse(integer_signed(), "0").1.unwrap());
-        assert_eq!(127, parse(integer_signed(), "127").1.unwrap());
-        assert_eq!(-1, parse(integer_signed(), "-1").1.unwrap());
-        assert_eq!(-128, parse(integer_signed(), "-128").1.unwrap());
+        assert_eq!(0, parse(integer_signed(), "0").result.unwrap());
+        assert_eq!(127, parse(integer_signed(), "127").result.unwrap());
+        assert_eq!(-1, parse(integer_signed(), "-1").result.unwrap());
+        assert_eq!(-128, parse(integer_signed(), "-128").result.unwrap());
 
-        assert_eq!(128u8, parse(integer_signed(), "128").1.unwrap());
+        assert_eq!(128u8, parse(integer_signed(), "128").result.unwrap());
 
-        assert!((parse(integer_signed_checked(), "-129").1 as Option<u8>).is_none());
-        assert!((parse(integer_signed_checked(), "128").1 as Option<i8>).is_none());
+        assert!((parse(integer_signed_checked(), "-129").result as Option<u8>).is_none());
+        assert!((parse(integer_signed_checked(), "128").result as Option<i8>).is_none());
     }
 
     #[test]
     fn float_test() {
-        assert_eq!(0f32, parse(float(), "0").1.unwrap());
-        assert_eq!(100000000f32, parse(float(), "100000000").1.unwrap());
-        assert_eq!(-100000000f32, parse(float(), "-100000000").1.unwrap());
-        assert_eq!(13.37f32, parse(float(), "13.37").1.unwrap());
-        assert_eq!(-13.37f32, parse(float(), "-13.37").1.unwrap());
-        assert_eq!(13.07f32, parse(float(), "13.07").1.unwrap());
-        assert_eq!(-13.07f32, parse(float(), "-13.07").1.unwrap());
+        assert_eq!(0f32, parse(float(), "0").result.unwrap());
+        assert_eq!(100000000f32, parse(float(), "100000000").result.unwrap());
+        assert_eq!(-100000000f32, parse(float(), "-100000000").result.unwrap());
+        assert_eq!(13.37f32, parse(float(), "13.37").result.unwrap());
+        assert_eq!(-13.37f32, parse(float(), "-13.37").result.unwrap());
+        assert_eq!(13.07f32, parse(float(), "13.07").result.unwrap());
+        assert_eq!(-13.07f32, parse(float(), "-13.07").result.unwrap());
     }
 }

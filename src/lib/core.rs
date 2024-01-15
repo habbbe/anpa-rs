@@ -5,6 +5,11 @@ pub struct AnpaState<'a, T, S> {
     pub user_state: &'a mut S,
 }
 
+pub struct AnpaResult<T, O> {
+    pub state: T,
+    pub result: Option<O>
+}
+
 pub trait Parser<I, O, S>: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy {}
 impl<I, O, S, F: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy> Parser<I, O, S> for F {}
 
@@ -69,15 +74,15 @@ impl<I, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
 
 pub fn parse_state<I, O, S>(p: impl Parser<I, O, S>,
                                        input: I,
-                                       user_state: &mut S) -> (AnpaState<I, S>, Option<O>) {
+                                       user_state: &mut S) -> AnpaResult<AnpaState<I, S>, O> {
     let mut parser_state = AnpaState { input, user_state };
     let result = p(&mut parser_state);
-    (parser_state, result)
+    AnpaResult { state: parser_state, result }
 }
 
 pub fn parse<I, O>(p: impl Parser<I, O, ()>,
-                   input: I) -> (I, Option<O>) {
+                   input: I) -> AnpaResult<I, O> {
     let mut parser_state = AnpaState { input, user_state: &mut () };
     let result = p(&mut parser_state);
-    (parser_state.input, result)
+    AnpaResult { state: parser_state.input, result }
 }
