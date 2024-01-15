@@ -14,16 +14,16 @@ impl<T> AnpaVersion<T> {
     }
 }
 
-pub fn parse_general<'a, O: From<&'a str>>(text: &'a str) -> Option<AnpaVersion<O>> {
+pub fn parse_version_general<'a, O: From<&'a str>>(text: &'a str) -> Option<AnpaVersion<O>> {
     parse(semver(), text.into()).1
 }
 
-pub fn parse_inline(text: & str) -> Option<AnpaVersion<&str>> {
-    parse_general(text)
+pub fn parse_version_inline(text: &str) -> Option<AnpaVersion<&str>> {
+    parse_version_general(text)
 }
 
-pub fn parse_string(text: &str) -> Option<AnpaVersion<String>> {
-    parse_general(text)
+pub fn parse_version(text: &str) -> Option<AnpaVersion<String>> {
+    parse_version_general(text)
 }
 
 #[inline]
@@ -109,11 +109,11 @@ fn digit(c: char) -> bool {
 #[cfg(test)]
 mod tests {
 
-    use crate::{semver::{semver, parse_inline}, core::parse};
+    use crate::semver::parse_version;
 
     #[test]
     fn version_no_snapshot() {
-        let res = parse_inline("1.2.3").unwrap();
+        let res = parse_version("1.2.3").unwrap();
         assert_eq!(res.major, 1);
         assert_eq!(res.minor, 2);
         assert_eq!(res.patch, 3);
@@ -122,21 +122,21 @@ mod tests {
 
     #[test]
     fn version_snapshot() {
-        let res = parse_inline("12.345.67890-SNAPSHOT").unwrap();
+        let res = parse_version("12.345.67890-SNAPSHOT").unwrap();
         assert_eq!(res.major, 12);
         assert_eq!(res.minor, 345);
         assert_eq!(res.patch, 67890);
         assert_eq!(res.pre_release, "SNAPSHOT".to_string());
 
-        assert!(parse_inline("12.345.67890-").is_none());
-        assert!(parse_inline("12.345.67890-+").is_none());
-        assert!(parse_inline("12.345.67890-+build").is_none());
-        assert!(parse_inline("12.345.67890-SNAPSHOT+").is_none());
+        assert!(parse_version("12.345.67890-").is_none());
+        assert!(parse_version("12.345.67890-+").is_none());
+        assert!(parse_version("12.345.67890-+build").is_none());
+        assert!(parse_version("12.345.67890-SNAPSHOT+").is_none());
     }
 
     #[test]
     fn version_build() {
-        let res = parse_inline("12.345.67890+build1").unwrap();
+        let res = parse_version("12.345.67890+build1").unwrap();
         assert_eq!(res.major, 12);
         assert_eq!(res.minor, 345);
         assert_eq!(res.patch, 67890);
@@ -146,7 +146,7 @@ mod tests {
 
     #[test]
     fn version_build_and_snapshot() {
-        let res = parse_inline("12.345.67890-SNAPSHOT+build1").unwrap();
+        let res = parse_version("12.345.67890-SNAPSHOT+build1").unwrap();
         assert_eq!(res.major, 12);
         assert_eq!(res.minor, 345);
         assert_eq!(res.patch, 67890);

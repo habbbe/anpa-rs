@@ -87,7 +87,7 @@ fn bench_hubb_handrolled() {
 fn bench_json() {
     let mut string = String::new();
     let _ = read_file("canada.json").read_to_string(&mut string);
-    let p = json::object_parser();
+    let p = json::object_parser::<&str>();
 
     let now = Instant::now();
     let res = parse(p, &string);
@@ -104,7 +104,7 @@ fn bench_semver() {
     let mut ver = AnpaVersion::<_>::new(0, 0, 0, "", "");
     let now = Instant::now();
     for _ in 0..200000 {
-        ver = semver::parse_inline(v).unwrap();
+        ver = semver::parse_version_inline(v).unwrap();
     }
 
     println!("Version: {:?}, in {}ms", ver, now.elapsed().as_micros() as f64 / 1000.0);
