@@ -10,8 +10,8 @@ pub fn bind<I, O1, O2, P, S>(p: impl Parser<I, O1, S>,
 }
 
 #[inline]
-pub fn into_type<I, O, T: From<O>, S>(p: impl Parser<I, O, S>) -> impl Parser<I, T, S> {
-    lift!(|x: O| x.into(), p)
+pub fn into_type<I, O: Into<T>, T, S>(p: impl Parser<I, O, S>) -> impl Parser<I, T, S> {
+    lift!(O::into, p)
 }
 
 #[inline]
@@ -130,7 +130,7 @@ pub fn middle<I, S, O1, O2, O3>(p1: impl Parser<I, O1, S>,
 }
 
 macro_rules! internal_or {
-    ($id:ident, $allow_partial:expr) => {
+    ($id:ident, $allow_partial:tt) => {
         #[inline]
         pub fn $id<I: SliceLike, O, S>(p1: impl Parser<I, O, S>,
                                        p2: impl Parser<I, O, S>
@@ -154,7 +154,7 @@ internal_or!(or, true);
 internal_or!(or_no_partial, false);
 
 macro_rules! internal_or_diff {
-    ($id:ident, $allow_partial:expr) => {
+    ($id:ident, $allow_partial:tt) => {
         #[inline]
         pub fn $id<I: SliceLike, O1, O2, S>(p1: impl Parser<I, O1, S>,
                                             p2: impl Parser<I, O2, S>

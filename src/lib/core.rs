@@ -14,7 +14,6 @@ pub trait Parser<I, O, S>: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy {}
 impl<I, O, S, F: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy> Parser<I, O, S> for F {}
 
 pub trait ParserExt<I, O, S>: Parser<I, O, S> {
-    fn into_type<T: From<O>>(self) -> impl Parser<I, T, S>;
     fn map<O2>(self, f: impl FnOnce(O) -> O2 + Copy) -> impl Parser<I, O2, S>;
     fn map_if<O2>(self, f: impl FnOnce(O) -> Option<O2> + Copy) -> impl Parser<I, O2, S>;
     fn filter(self, f: impl FnOnce(&O) -> bool + Copy) -> impl Parser<I, O, S>;
@@ -24,12 +23,20 @@ pub trait ParserExt<I, O, S>: Parser<I, O, S> {
     fn debug(self, name: &'static str) -> impl Parser<I, O, S>;
 }
 
-impl<I, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
+/// Trait for parsers with a result that can be converted into another by means of `Into`.
+pub trait ParserInto<I, O1: Into<O2>, O2, S>: Parser<I, O1, S> {
+    /// Transform this parser into a parser with a different result.
+    fn into_type(self) -> impl Parser<I, O2, S>;
+}
+
+impl<I, O1: Into<O2>, O2, S, P: Parser<I, O1, S>> ParserInto<I, O1, O2, S> for P {
     #[inline]
-    fn into_type<T: From<O>>(self) -> impl Parser<I, T, S> {
+    fn into_type(self) -> impl Parser<I, O2, S> {
         into_type(self)
     }
+}
 
+impl<I, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
     #[inline]
     fn map<O2>(self, f: impl FnOnce(O) -> O2 + Copy) -> impl Parser<I, O2, S> {
         lift!(f, self)
