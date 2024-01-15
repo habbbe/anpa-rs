@@ -1,4 +1,4 @@
-use crate::combinators::{bind, right, left, filter, into_type};
+use crate::combinators::{bind, right, left, filter, into_type, map_if};
 
 pub struct AnpaState<'a, T, S> {
     pub input: T,
@@ -11,6 +11,7 @@ impl<I, O, S, F: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy> Parser<I, O, 
 pub trait ParserExt<I, O, S>: Parser<I, O, S> {
     fn into_type<T: From<O>>(self) -> impl Parser<I, T, S>;
     fn map<O2>(self, f: impl FnOnce(O) -> O2 + Copy) -> impl Parser<I, O2, S>;
+    fn map_if<O2>(self, f: impl FnOnce(O) -> Option<O2> + Copy) -> impl Parser<I, O2, S>;
     fn filter(self, f: impl FnOnce(&O) -> bool + Copy) -> impl Parser<I, O, S>;
     fn bind<O2, P: Parser<I, O2, S>>(self, f: impl FnOnce(O) -> P + Copy) -> impl Parser<I, O2, S>;
     fn right<O2, P: Parser<I, O2, S>>(self, p: P) -> impl Parser<I, O2, S>;
@@ -27,6 +28,11 @@ impl<I, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
     #[inline]
     fn map<O2>(self, f: impl FnOnce(O) -> O2 + Copy) -> impl Parser<I, O2, S> {
         lift!(f, self)
+    }
+
+    #[inline]
+    fn map_if<O2>(self, f: impl FnOnce(O) -> Option<O2> + Copy) -> impl Parser<I, O2, S> {
+        map_if(self, f)
     }
 
     #[inline]

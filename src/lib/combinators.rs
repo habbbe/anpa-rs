@@ -22,6 +22,15 @@ pub fn filter<I, O, S>(p: impl Parser<I, O, S>,
 }
 
 #[inline]
+pub fn map_if<I, O, O2, S>(p: impl Parser<I, O, S>,
+                           f: impl FnOnce(O) -> Option<O2> + Copy
+) -> impl Parser<I, O2, S> {
+    create_parser!(s, {
+        p(s).and_then(f)
+    })
+}
+
+#[inline]
 pub fn succeed<I, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, Option<O>, S> {
     create_parser!(s, {
         Some(p(s))
@@ -41,6 +50,18 @@ pub fn peek<I: Copy, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
 #[inline]
 pub fn not_empty<I, O: SliceLike, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
     filter(p, |r| !r.slice_is_empty())
+}
+
+#[inline]
+pub fn attempt<I: Copy, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
+    create_parser!(s, {
+        let pos = s.input;
+        let res = p(s);
+        if res.is_none() {
+            s.input = pos;
+        }
+        res
+    })
 }
 
 #[inline]
