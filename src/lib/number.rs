@@ -199,7 +199,7 @@ pub fn float_checked<O: FloatLike,
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::{parse}, number::{integer, integer_checked, float, integer_signed, integer_signed_checked}};
+    use crate::{core::parse, number::{integer, integer_checked, float, integer_signed, integer_signed_checked}};
 
     #[test]
     fn unsigned_integer() {

@@ -40,13 +40,13 @@ pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) ->
 }
 
 #[inline]
-pub fn item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I::RefItem, S> {
-    item_if(move |c| I::slice_item_eq_ref_item(item.borrow(), c))
+pub fn item<I: SliceLike, B: Into<I::Item> + Copy, S>(item: B) -> impl Parser<I, I::RefItem, S> {
+    item_if(move |c| I::slice_item_eq_ref_item(&item.into(), c))
 }
 
 #[inline]
-pub fn not_item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I::RefItem, S> {
-    item_if(move |c| !I::slice_item_eq_ref_item(item.borrow(), c))
+pub fn not_item<I: SliceLike, B: Into<I::Item> + Copy, S>(item: B) -> impl Parser<I, I::RefItem, S> {
+    item_if(move |c| !I::slice_item_eq_ref_item(&item.into(), c))
 }
 
 #[inline]
