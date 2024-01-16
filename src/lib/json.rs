@@ -56,13 +56,13 @@ pub fn object_parser<'a, T: From<&'a str> + Ord>() -> impl Parser<&'a str, JsonV
         value_parser());
     middle(
         item('{'),
-        many_to_map_ordered(pair_parser, true, Some((false, eat(item(','))))),
+        many_to_map_ordered(pair_parser, true, separator(eat(item(',')), false)),
         eat(item('}'))).map(JsonValue::Dic)
 }
 
 pub fn array_parser<'a, T: From<&'a str> + Ord>() -> impl Parser<&'a str, JsonValue<T>, ()> {
     middle(
         item('['),
-        many_to_vec(value_parser(), true, Some((false, eat(item(','))))),
+        many_to_vec(value_parser(), true, separator(eat(item(',')), false)),
         eat(item(']'))).map(JsonValue::Arr)
 }

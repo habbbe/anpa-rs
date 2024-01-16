@@ -29,13 +29,10 @@ macro_rules! internal_starts_with {
 pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I::RefItem, S> {
     create_parser!(s, {
         let first = s.input.slice_first()?;
-        let res = if pred(first) {
+        pred(first).then(|| {
             s.input = s.input.slice_from(1);
-            Some(first)
-        } else {
-            None
-        };
-        res
+            first
+        })
     })
 }
 

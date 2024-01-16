@@ -189,6 +189,11 @@ pub fn lift_to_state<I, S, O1, O2>(f: impl FnOnce(&mut S, O1) -> O2 + Copy,
 }
 
 #[inline]
+pub fn separator<I, O, S>(p: impl Parser<I, O, S>, allow_trailing: bool) -> Option<(bool, impl Parser<I, O, S>)> {
+    Some((allow_trailing, p))
+}
+
+#[inline]
 pub fn no_separator<I, S>() -> Option<(bool, impl Parser<I, (), S>)> {
     if true {
         None
