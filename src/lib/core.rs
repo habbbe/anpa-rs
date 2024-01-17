@@ -1,4 +1,4 @@
-use crate::combinators::{bind, right, left, filter, into_type, map_if};
+use crate::combinators::{bind, right, left, filter, into_type, map_if, map};
 
 pub struct AnpaState<'a, T, S> {
     pub input: T,
@@ -39,7 +39,7 @@ impl<I, O1: Into<O2>, O2, S, P: Parser<I, O1, S>> ParserInto<I, O1, O2, S> for P
 impl<I, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
     #[inline]
     fn map<O2>(self, f: impl FnOnce(O) -> O2 + Copy) -> impl Parser<I, O2, S> {
-        lift!(f, self)
+        map(self, f)
     }
 
     #[inline]

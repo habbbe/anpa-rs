@@ -10,8 +10,15 @@ pub fn bind<I, O1, O2, P, S>(p: impl Parser<I, O1, S>,
 }
 
 #[inline]
+pub fn map<I, O, O2, S>(p: impl Parser<I, O, S>,
+                        f: impl FnOnce(O) -> O2 + Copy
+) -> impl Parser<I, O2, S> {
+    lift!(f, p)
+}
+
+#[inline]
 pub fn into_type<I, O: Into<T>, T, S>(p: impl Parser<I, O, S>) -> impl Parser<I, T, S> {
-    lift!(O::into, p)
+    map(p, O::into)
 }
 
 #[inline]
@@ -246,8 +253,8 @@ pub fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 
 #[inline]
 pub fn many_to_vec<I, O, O2, S>(p: impl Parser<I, O, S>,
-                            allow_empty: bool,
-                            separator: Option<(bool, impl Parser<I, O2, S>)>,
+                                allow_empty: bool,
+                                separator: Option<(bool, impl Parser<I, O2, S>)>,
 ) -> impl Parser<I, Vec<O>, S> {
     create_parser!(s, {
         let mut vec = vec![];
@@ -258,8 +265,8 @@ pub fn many_to_vec<I, O, O2, S>(p: impl Parser<I, O, S>,
 
 #[inline]
 pub fn many_to_map<I, K: Hash + Eq, V, O2, S>(p: impl Parser<I, (K, V), S>,
-                                          allow_empty: bool,
-                                          separator: Option<(bool, impl Parser<I, O2, S>)>,
+                                              allow_empty: bool,
+                                              separator: Option<(bool, impl Parser<I, O2, S>)>,
 ) -> impl Parser<I, HashMap<K, V>, S> {
     create_parser!(s, {
         let mut map = HashMap::new();
@@ -270,8 +277,8 @@ pub fn many_to_map<I, K: Hash + Eq, V, O2, S>(p: impl Parser<I, (K, V), S>,
 
 #[inline]
 pub fn many_to_map_ordered<I, K: Ord, V, O2, S>(p: impl Parser<I, (K, V), S>,
-                                          allow_empty: bool,
-                                          separator: Option<(bool, impl Parser<I, O2, S>)>,
+                                                allow_empty: bool,
+                                                separator: Option<(bool, impl Parser<I, O2, S>)>,
 ) -> impl Parser<I, BTreeMap<K, V>, S> {
     create_parser!(s, {
         let mut map = BTreeMap::new();
@@ -282,8 +289,8 @@ pub fn many_to_map_ordered<I, K: Ord, V, O2, S>(p: impl Parser<I, (K, V), S>,
 
 #[inline]
 pub fn fold<T: Copy, I, O, S, P: Parser<I, O, S>>(acc: T,
-                              p: P,
-                              f: impl Fn(&mut T, O) -> () + Copy
+                                                  p: P,
+                                                  f: impl Fn(&mut T, O) -> () + Copy
 ) -> impl Parser<I, T, S> {
     create_parser!(s, {
         let mut acc = acc;
