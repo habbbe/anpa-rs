@@ -58,7 +58,7 @@ fn build<'a, S>() -> impl Parser<&'a str, &'a str, S> {
 
 #[inline]
 fn dot_separated<'a, S>(prefix: char, p: impl Parser<&'a str, &'a str, S>) -> impl Parser<&'a str, &'a str, S> {
-    attempt(item(prefix).right(many(p, false, Some((false, item('.'))))))
+    attempt(item(prefix).right(many(p, false, separator(item('.'), false))))
 }
 
 #[inline]
