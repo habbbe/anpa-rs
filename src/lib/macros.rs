@@ -14,21 +14,21 @@ macro_rules! defer_parser {
 
 #[macro_export]
 macro_rules! lift {
-    ($f:expr, $($e:expr),*) => {
+    ($f:expr, $($e:expr),* $(,)?) => {
         create_parser!(s, Some($f($($e(s)?),*)))
     };
 }
 
 #[macro_export]
 macro_rules! tuplify {
-    ($($e:expr),*) => {
+    ($($e:expr),* $(,)?) => {
         create_parser!(s, Some(($($e(s)?),*)))
     };
 }
 
 #[macro_export]
 macro_rules! lift_if {
-    ($f:expr, $($e:expr),*) => {
+    ($f:expr, $($e:expr),* $(,)?) => {
         create_parser!(s, $f($($e(s)?),*))
     };
 }
@@ -52,28 +52,28 @@ macro_rules! variadic {
 
 #[macro_export]
 macro_rules! or {
-    ($($e:expr),*) => {
+    ($($e:expr),* $(,)?) => {
         variadic!(or, $($e),*)
     };
 }
 
 #[macro_export]
 macro_rules! or_diff {
-    ($($e:expr),*) => {
+    ($($e:expr),* $(,)?) => {
         variadic!(or_diff, $($e),*)
     };
 }
 
 #[macro_export]
 macro_rules! left {
-    ($($e:expr),*) => {
+    ($($e:expr),* $(,)?) => {
         variadic!(left, $($e),*)
     };
 }
 
 #[macro_export]
 macro_rules! right {
-    ($($e:expr),*) => {
+    ($($e:expr),* $(,)?) => {
         variadic!(right, $($e),*)
     };
 }
