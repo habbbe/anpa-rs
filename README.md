@@ -20,6 +20,7 @@ None
 
 ### TODO
 
+- Add documentation
 - Add support for `Read`
 - More extensive test cases
 - Properly structure project
