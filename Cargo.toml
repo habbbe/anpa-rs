@@ -2,8 +2,14 @@
 name = "anpa"
 version = "0.2.0"
 authors = ["Andreas Hallberg <habbbe@gmail.com>"]
+description = "A generic monadic parser combinator library inspired by Haskell's parsec."
+keywords = ["parser", "parser-combinator", "parsec"]
 edition = "2018"
+rust-version = "1.75.0"
 license = "MIT OR Apache-2.0"
+include = ["/src", "/bench", "LICENSE-MIT", "LICENSE-APACHE"]
+readme = "README.md"
+repository = "https://github.com/habbbe/anpa-rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 [profile.release]

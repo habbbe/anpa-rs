@@ -1,4 +1,4 @@
-## anpa-rs
+## anpa
 
 A generic monadic parser combinator library based on [anpa](https://github.com/habbbe/anpa) which in turn is inspired by Haskell's parsec.
 
