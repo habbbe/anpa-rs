@@ -1,79 +1,134 @@
+/// Shorthand for creating a parser.
+/// ### Example:
+/// ```ignore
+/// let p = create_parser!(s, { /* Define parser behavior using state `s` */ })
+/// ```
 #[macro_export]
 macro_rules! create_parser {
     ($state:ident, $f:expr) => {
-        move |$state: &mut AnpaState<_, _>| $f
+        move |$state: &mut $crate::core::AnpaState<_, _>| $f
     }
 }
 
+/// Shorthand for creating a deferred parser. This is mandatory when creating recursive parsers.
+/// ### Example:
+/// ```ignore
+/// /// Can parse e.g. "(((something)))"
+/// fn in_parens<'a, S>() -> impl Parser<&'a str, &'a str, S> {
+///     defer_parser!(or(item_while(|c: char| c.is_alphanumeric()), middle(item('('), in_parens(), item(')'))))
+/// }
+/// ```
 #[macro_export]
 macro_rules! defer_parser {
     ($p:expr) => {
-        move |s: &mut AnpaState<_, _>| $p(s)
+        move |s: &mut $crate::core::AnpaState<_, _>| $p(s)
     }
 }
 
+/// Variadic version of `map`, where all provided parsers must succeed.
+/// ### Arguments
+/// * `f` - the transformation function. Its arguments must match the result types of `p...` in
+///         both type and number.
+/// * `p...` - any number of parsers.
 #[macro_export]
 macro_rules! lift {
-    ($f:expr, $($e:expr),* $(,)?) => {
-        create_parser!(s, Some($f($($e(s)?),*)))
+    ($f:expr, $($p:expr),* $(,)?) => {
+        create_parser!(s, Some($f($($p(s)?),*)))
     };
 }
 
+/// Convert a number of parsers to a single parser producing a tuple with all the results.
+/// ### Arguments
+/// * `p...` - any number of parsers.
 #[macro_export]
 macro_rules! tuplify {
-    ($($e:expr),* $(,)?) => {
-        create_parser!(s, Some(($($e(s)?),*)))
+    ($($p:expr),* $(,)?) => {
+        create_parser!(s, Some(($($p(s)?),*)))
     };
 }
 
+/// Variadic version of `map_if`, where all provided parsers must succeed.
+/// ### Arguments
+/// * `f` - the transformation function. Its arguments must match the result types of `p...` in
+///         both type and number.
+/// * `p...` - any number of parsers.
 #[macro_export]
 macro_rules! lift_if {
-    ($f:expr, $($e:expr),* $(,)?) => {
-        create_parser!(s, $f($($e(s)?),*))
+    ($f:expr, $($p:expr),* $(,)?) => {
+        create_parser!(s, $f($($p(s)?),*))
     };
 }
 
+/// Create a parser that successfully returns `x`.
+///
+/// ### Arguments
+/// * `x` - the result to be returned from the parser.
 #[macro_export]
 macro_rules! pure {
-    ($e:expr) => {
-        create_parser!(_s, Some($e))
+    ($x:expr) => {
+        create_parser!(_s, Some($x))
     };
 }
 
+/// A helper macro to generate variadic macros using repeated application of the rightmost
+/// argument of a binary function.
+///
+/// E.g. for 4 arguments, the resulting function will be constructed as:
+/// `f(e1, f(e2, f(e3, e4)))`
+///
+/// ### Arguments
+/// * `f` - a binary function.
+/// * `e...` - any number of arguments.
 #[macro_export]
 macro_rules! variadic {
-    ($f:ident, $e:expr) => {
+    ($f:expr, $e:expr) => {
         $e
     };
-    ($f:ident, $e:expr, $($e2:expr),*) => {
+    ($f:expr, $e:expr, $($e2:expr),*) => {
         $f($e, variadic!($f, $($e2),*))
     };
 }
 
+/// Variadic version of `or`.
+///
+/// ### Arguments
+/// * `p...` - any number of parsers.
 #[macro_export]
 macro_rules! or {
-    ($($e:expr),* $(,)?) => {
-        variadic!(or, $($e),*)
+    ($($p:expr),* $(,)?) => {
+        variadic!($crate::combinators::or, $($p),*)
     };
 }
 
+/// Variadic version of `or_diff`.
+///
+/// ### Arguments
+/// * `p...` - any number of parsers.
 #[macro_export]
 macro_rules! or_diff {
-    ($($e:expr),* $(,)?) => {
-        variadic!(or_diff, $($e),*)
+    ($($p:expr),* $(,)?) => {
+        variadic!($crate::combinators::or_diff, $($p),*)
     };
 }
 
+/// Variadic version of `left`, where only the leftmost parser's result will be returned.
+///
+/// ### Arguments
+/// * `p...` - any number of parsers.
 #[macro_export]
 macro_rules! left {
-    ($($e:expr),* $(,)?) => {
-        variadic!(left, $($e),*)
+    ($($p:expr),* $(,)?) => {
+        variadic!($crate::combinators::left, $($p),*)
     };
 }
 
+/// Variadic version of `right`, where only the rightmost parser's result will be returned.
+///
+/// ### Arguments
+/// * `p...` - any number of parsers.
 #[macro_export]
 macro_rules! right {
-    ($($e:expr),* $(,)?) => {
-        variadic!(right, $($e),*)
+    ($($p:expr),* $(,)?) => {
+        variadic!($crate::combinators::right, $($p),*)
     };
 }

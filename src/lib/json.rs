@@ -1,9 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::number::float;
-use super::parsers::{*};
-use super::combinators::{*};
-use super::core::{*};
+use crate::{combinators::*, core::{Parser, ParserExt, ParserInto}, number::float, parsers::*};
 
 #[derive(Debug)]
 pub enum JsonValue<StringType> {
@@ -43,6 +40,8 @@ fn null_parser<'a, T>() -> impl Parser<&'a str, JsonValue<T>, ()> {
     seq("null").map(|_| JsonValue::Null)
 }
 
+/// Get a JSON parser that parses any JSON value. The type used for strings will be inferred
+/// from the context via `From<&str>`. For examples, see `object_parser`.
 pub fn value_parser<'a, T: From<&'a str> + Ord>() -> impl Parser<&'a str, JsonValue<T>, ()> {
     defer_parser! {
         eat(or!(json_string_parser(), number_parser(), object_parser(),
@@ -50,6 +49,15 @@ pub fn value_parser<'a, T: From<&'a str> + Ord>() -> impl Parser<&'a str, JsonVa
     }
 }
 
+/// Get a JSON parser that parses a JSON object. The type used for strings will be inferred
+/// from the context via `From<&str>`.
+///
+/// ### Example
+/// ```ignore
+/// let p1 = json::object_parser::<&str>(); // Stores strings as slices of input
+/// let p2 = json::object_parser::<String>(); // Stores strings as individual `String` instances.
+/// let p2 = json::object_parser::<MyString>(); // Stores strings as custom type implementing `From<&str>`.
+/// ```
 pub fn object_parser<'a, T: From<&'a str> + Ord>() -> impl Parser<&'a str, JsonValue<T>, ()> {
     let pair_parser = tuplify!(
         left(eat(string_parser()), eat(item(':'))),
@@ -60,6 +68,8 @@ pub fn object_parser<'a, T: From<&'a str> + Ord>() -> impl Parser<&'a str, JsonV
         eat(item('}'))).map(JsonValue::Dic)
 }
 
+/// Get a JSON parser that parses a JSON array. The type used for strings will be inferred
+/// from the context via `From<&str>`. For examples, see `object_parser`.
 pub fn array_parser<'a, T: From<&'a str> + Ord>() -> impl Parser<&'a str, JsonValue<T>, ()> {
     middle(
         item('['),

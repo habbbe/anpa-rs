@@ -1,23 +1,52 @@
 use core::borrow::Borrow;
 use std::{slice::Iter, str::Chars};
 
+/// Share trait for "slicable" inputs. Anpa can be used to parse types implementing this trait.
 pub trait SliceLike: Sized + Copy {
     type Item: PartialEq;
     type RefItem: PartialEq + Copy;
     type Iter: Iterator<Item = Self::RefItem>;
+
+    /// Get an iterator for this input.
     fn slice_iter(self) -> Self::Iter;
+
+    /// Get the (optional) first item of this input.
     fn slice_first(self) -> Option<Self::RefItem>;
+
+    /// Get the (optional) index of the requested `item`.
     fn slice_find<I: Borrow<Self::Item> + Copy>(self, item: I) -> Option<usize>;
-    fn slice_find_seq<S: Borrow<Self>>(self, item: S) -> Option<usize>;
+
+    /// Get the (optional) index of the requested `seq`uence.
+    fn slice_find_seq<S: Borrow<Self>>(self, seq: S) -> Option<usize>;
+    
+    /// Get the (optional) index of the first item that matches `pred`.
     fn slice_find_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> Option<usize>;
+
+    /// Return whether the input starts with `item`.
     fn slice_starts_with<I: Borrow<Self::Item>>(self, item: I) -> bool;
-    fn slice_starts_with_seq(self, item: Self) -> bool;
+
+    /// Return whether the input starts with `seq`.
+    fn slice_starts_with_seq(self, seq: Self) -> bool;
+
+    /// Get the current length of the input.
     fn slice_len(self) -> usize;
+
+    /// Create a slice from index `from` until the end of the input.
     fn slice_from(self, from: usize) -> Self;
+
+    /// Create a slice from the start of the input until `to` (exclusive).
     fn slice_to(self, to: usize) -> Self;
+
+    /// Create a slice from index `from` until `to` (exclusive).
     fn slice_from_to(self, from: usize, to: usize) -> Self;
+
+    /// Split the input at index `at`.
     fn slice_split_at(self, at: usize) -> (Self, Self);
+
+    /// Check if the input is empty.
     fn slice_is_empty(&self) -> bool;
+
+    /// Check if a reference of type `&Self::Item` is equal to a `Self::RefItem`.
     fn slice_item_eq_ref_item(a: &Self::Item, b: Self::RefItem) -> bool;
 }
 
@@ -38,8 +67,8 @@ impl<'a, A: PartialEq> SliceLike for &'a [A] {
         self.iter().position(|x| x == item.borrow())
     }
 
-    fn slice_find_seq<S: Borrow<Self>>(self, item: S) -> Option<usize> {
-        self.windows(item.borrow().len()).position(|w| &w == item.borrow())
+    fn slice_find_seq<S: Borrow<Self>>(self, seq: S) -> Option<usize> {
+        self.windows(seq.borrow().len()).position(|w| &w == seq.borrow())
     }
 
     fn slice_find_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> Option<usize> {
@@ -50,8 +79,8 @@ impl<'a, A: PartialEq> SliceLike for &'a [A] {
         self.first().filter(|x| *x == item.borrow()).is_some()
     }
 
-    fn slice_starts_with_seq(self, item: Self) -> bool {
-        self.starts_with(item)
+    fn slice_starts_with_seq(self, seq: Self) -> bool {
+        self.starts_with(seq)
     }
 
     fn slice_len(self) -> usize {
@@ -100,8 +129,8 @@ impl<'a> SliceLike for &'a str {
         self.find(*item.borrow())
     }
 
-    fn slice_find_seq<S: Borrow<Self>>(self, item: S) -> Option<usize> {
-        self.find(item.borrow())
+    fn slice_find_seq<S: Borrow<Self>>(self, seq: S) -> Option<usize> {
+        self.find(seq.borrow())
     }
 
     fn slice_find_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> Option<usize> {
@@ -112,8 +141,8 @@ impl<'a> SliceLike for &'a str {
         self.starts_with(*item.borrow())
     }
 
-    fn slice_starts_with_seq(self, item: Self) -> bool {
-        self.starts_with(item)
+    fn slice_starts_with_seq(self, seq: Self) -> bool {
+        self.starts_with(seq)
     }
 
     fn slice_len(self) -> usize {

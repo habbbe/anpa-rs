@@ -1,6 +1,6 @@
 [package]
 name = "anpa"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Andreas Hallberg <habbbe@gmail.com>"]
 edition = "2018"
 
@@ -17,4 +17,4 @@ path = "src/lib/lib.rs"
 
 [[bin]]
 name = "anpa_test"
-path = "src/bin.rs"
+path = "bench/bin.rs"

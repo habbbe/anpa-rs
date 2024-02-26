@@ -1,11 +1,13 @@
-use crate::{slicelike::SliceLike, core::{Parser, AnpaState}};
+use crate::{slicelike::SliceLike, core::Parser};
 use core::borrow::Borrow;
 
+/// Create a parser that always succeeds.
 #[inline]
 pub fn success<I, S>() -> impl Parser<I, (), S> {
-    create_parser!(_s, Some(()))
+    pure!(())
 }
 
+/// Create a parser that always fails.
 #[inline]
 pub fn failure<I, S>() -> impl Parser<I, (), S> {
     create_parser!(_s, None)
@@ -25,6 +27,10 @@ macro_rules! internal_starts_with {
     }
 }
 
+/// Create a parser that parses a single item matching the provided predicate.
+///
+/// ### Arguments
+/// * `pred` - the predicate
 #[inline]
 pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I::RefItem, S> {
     create_parser!(s, {
@@ -36,16 +42,28 @@ pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) ->
     })
 }
 
+/// Create a parser for a single item matching the input via `==`.
+///
+/// ### Arguments
+/// * `item` - the item to match
 #[inline]
 pub fn item<I: SliceLike, B: Into<I::Item> + Copy, S>(item: B) -> impl Parser<I, I::RefItem, S> {
     item_if(move |c| I::slice_item_eq_ref_item(&item.into(), c))
 }
 
+/// Create a parser for a single item not matching the input via `==`.
+///
+/// ### Arguments
+/// * `item` - the item to _not_ match
 #[inline]
 pub fn not_item<I: SliceLike, B: Into<I::Item> + Copy, S>(item: B) -> impl Parser<I, I::RefItem, S> {
     item_if(move |c| !I::slice_item_eq_ref_item(&item.into(), c))
 }
 
+/// Create a parser that parses while the items in the input matches the predicate.
+///
+/// ### Arguments
+/// * `pred` - the predicate
 #[inline]
 pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I, S> {
     create_parser!(s, {
@@ -62,9 +80,13 @@ pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy)
     })
 }
 
+/// Create a parser for a sequence of items.
+///
+/// ### Arguments
+/// * `items` - the items to match
 #[inline]
-pub fn seq<I: SliceLike, B: Borrow<I> + Copy, S>(item: B) -> impl Parser<I, I, S> {
-    internal_starts_with!(*item.borrow(), item.borrow().slice_len(), SliceLike::slice_starts_with_seq)
+pub fn seq<I: SliceLike, B: Borrow<I> + Copy, S>(seq: B) -> impl Parser<I, I, S> {
+    internal_starts_with!(*seq.borrow(), seq.borrow().slice_len(), SliceLike::slice_starts_with_seq)
 }
 
 macro_rules! internal_until {
@@ -78,16 +100,25 @@ macro_rules! internal_until {
     }
 }
 
+/// Create a parser that parses until one item in the input matches the predicate.
+///
+/// ### Arguments
+/// * `item` - the item to match
 #[inline]
 pub fn until_item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I, S> {
     internal_until!(item.borrow(), 1, SliceLike::slice_find)
 }
 
+/// Create a parser that parses until a sequence in the input matches the predicate.
+///
+/// ### Arguments
+/// * `seq` - the sequence to match
 #[inline]
 pub fn until_seq<I: SliceLike, B: Borrow<I> + Copy, S>(seq: B) -> impl Parser<I, I, S> {
     internal_until!(*seq.borrow(), seq.borrow().slice_len(), SliceLike::slice_find_seq)
 }
 
+/// Create a parser that parses the rest of the input. This parser can never fail.
 #[inline]
 pub fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
     create_parser!(s, {
@@ -97,6 +128,7 @@ pub fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
     })
 }
 
+/// Create a parser that is successful only if the input is empty.
 #[inline]
 pub fn empty<I: SliceLike, S>() -> impl Parser<I, I, S> {
     create_parser!(s, {

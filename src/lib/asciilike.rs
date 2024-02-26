@@ -1,9 +1,13 @@
+/// Common trait for types that can be treated like ASCII characters.
 pub trait AsciiLike: Copy + PartialEq {
     type PlainType: Copy + PartialEq;
     const MINUS: Self::PlainType;
     const PERIOD: Self::PlainType;
 
+    /// Attempt converting this item to a digit.
     fn as_digit(self) -> Option<u8>;
+
+    /// Check if two items are equal.
     fn equal(self, other: Self::PlainType) -> bool;
 }
 

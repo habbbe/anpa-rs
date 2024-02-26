@@ -17,6 +17,15 @@ fn main() {
     bench_json();
 }
 
+fn read_file(path: &str) -> io::BufReader<File> {
+    let Ok(file) = File::open(path) else {
+        println!("File \"{}\" not found. Please copy it from the test folder", path);
+        exit(1)
+    };
+
+    io::BufReader::new(file)
+}
+
 #[derive(Debug)]
 #[allow(dead_code)]
 enum Item<'a> {
@@ -26,15 +35,6 @@ enum Item<'a> {
     Space,
     Ignore,
     SyntaxError { description: &'a str }
-}
-
-fn read_file(path: &str) -> io::BufReader<File> {
-    let Ok(file) = File::open(path) else {
-        println!("File \"{}\" not found. Please copy it from the test folder", path);
-        exit(1)
-    };
-
-    io::BufReader::new(file)
 }
 
 fn bench_hubb() {
@@ -90,7 +90,10 @@ fn bench_json() {
     let p = json::object_parser::<&str>();
 
     let now = Instant::now();
-    let res = parse(p, &string);
+    let mut res = AnpaResult {state: "", result: None };
+    for _ in 0..300 {
+        res = parse(p, &string);
+    }
     match res.result {
         Some(JsonValue::Dic(dic)) =>
             println!("JSON: N: {}, in {}ms", dic.len(), now.elapsed().as_micros() as f64 / 1000.0),
@@ -103,8 +106,8 @@ fn bench_semver() {
 
     let mut ver = AnpaVersion::<_>::new(0, 0, 0, "", "");
     let now = Instant::now();
-    for _ in 0..200000 {
-        ver = semver::parse_version_inline(v).unwrap();
+    for _ in 0..20000000 {
+        ver = semver::parse_inline(v).unwrap();
     }
 
     println!("Version: {:?}, in {}ms", ver, now.elapsed().as_micros() as f64 / 1000.0);
@@ -121,6 +124,7 @@ fn info<'a>(name: &'a str, com: &'a str) -> Item<'a> {
 fn syntax_error<'a>(description: &'a str) -> Item<'a> {
     Item::SyntaxError {description}
 }
+
 fn parse_handrolled(input: &str) -> Option<Item> {
     fn parse_command_tuple(input: &str) -> Option<(&str, &str)> {
         let equal_pos = input.find("=")?;

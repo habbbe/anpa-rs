@@ -2,6 +2,11 @@ use std::{collections::{HashMap, BTreeMap}, hash::Hash};
 
 use crate::{slicelike::SliceLike, core::{Parser, AnpaState}, parsers::success};
 
+/// Create a new parser by taking the result of `p`, and applying `f`.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `f` - the function to generate the new parser
 #[inline]
 pub fn bind<I, O1, O2, P, S>(p: impl Parser<I, O1, S>,
                              f: impl FnOnce(O1) -> P + Copy
@@ -9,6 +14,13 @@ pub fn bind<I, O1, O2, P, S>(p: impl Parser<I, O1, S>,
     create_parser!(s, f(p(s)?)(s))
 }
 
+/// Create a new parser by applying a transformation `f` to the result of `p`.
+/// This differs from `bind` in that the transformation does not return a new
+/// parser. Use this combinator if you just want to modify the result.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `f` - the transformation function.
 #[inline]
 pub fn map<I, O, O2, S>(p: impl Parser<I, O, S>,
                         f: impl FnOnce(O) -> O2 + Copy
@@ -16,11 +28,21 @@ pub fn map<I, O, O2, S>(p: impl Parser<I, O, S>,
     lift!(f, p)
 }
 
+/// Transform the parser `p` into a parser with a different result by means of `Into`.
+/// The existing type must implement `Into<T>` for the requested type `T`.
+///
+/// ### Arguments
+/// * `p` - the parser
 #[inline]
 pub fn into_type<I, O: Into<T>, T, S>(p: impl Parser<I, O, S>) -> impl Parser<I, T, S> {
     map(p, O::into)
 }
 
+/// Accept or reject the parse based on the predicate `f`.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `f` - the predicate
 #[inline]
 pub fn filter<I, O, S>(p: impl Parser<I, O, S>,
                        f: impl FnOnce(&O) -> bool + Copy
@@ -28,6 +50,13 @@ pub fn filter<I, O, S>(p: impl Parser<I, O, S>,
     create_parser!(s, p(s).filter(f))
 }
 
+/// Create a new parser by applying a transformation `f` to the result of `p`.
+/// Unlike `map`, this combinator allows optional rejection of the parse by returning
+/// `Some` or `None` in the transformation.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `f` - the transformation function.
 #[inline]
 pub fn map_if<I, O, O2, S>(p: impl Parser<I, O, S>,
                            f: impl FnOnce(O) -> Option<O2> + Copy
@@ -37,6 +66,12 @@ pub fn map_if<I, O, O2, S>(p: impl Parser<I, O, S>,
     })
 }
 
+/// Transform a parser to a parser that always succeeds. The resulting parser will
+/// have its result type changed to `Option`, to allow for introspection of the result
+/// of the parse.
+///
+/// ### Arguments
+/// * `p` - the parser
 #[inline]
 pub fn succeed<I, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, Option<O>, S> {
     create_parser!(s, {
@@ -44,6 +79,10 @@ pub fn succeed<I, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, Option<O>, S>
     })
 }
 
+/// Transform a parser to a parser that does not consume any input.
+///
+/// ### Arguments
+/// * `p` - the parser
 #[inline]
 pub fn peek<I: Copy, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
     create_parser!(s, {
@@ -54,11 +93,19 @@ pub fn peek<I: Copy, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
     })
 }
 
+/// Transform a parser to a parser that only succeeds if the parsed sequence is not empty.
+///
+/// ### Arguments
+/// * `p` - the parser
 #[inline]
 pub fn not_empty<I, O: SliceLike, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
     filter(p, |r| !r.slice_is_empty())
 }
 
+/// Transform a parser to a parser that does not consume any input on failure.
+///
+/// ### Arguments
+/// * `p` - the parser
 #[inline]
 pub fn attempt<I: Copy, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
     create_parser!(s, {
@@ -71,6 +118,11 @@ pub fn attempt<I: Copy, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
     })
 }
 
+/// Transform a parser to a parser that along with its result also returns how many items that
+/// were parsed.
+///
+/// ### Arguments
+/// * `p` - the parser
 #[inline]
 pub fn count_consumed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, (usize, O), S> {
     create_parser!(s, {
@@ -81,6 +133,11 @@ pub fn count_consumed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parse
     })
 }
 
+/// Transform a parser to a parser that along with its result also returns the input that
+/// was parsed.
+///
+/// ### Arguments
+/// * `p` - the parser
 #[inline]
 pub fn and_parsed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, (I, O), S> {
     create_parser!(s, {
@@ -90,6 +147,11 @@ pub fn and_parsed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I,
     })
 }
 
+/// Transform a parser to a parser that ignores its result and instead returns the input that
+/// was parsed to produce the result.
+///
+/// ### Arguments
+/// * `p` - the parser
 #[inline]
 pub fn get_parsed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, I, S> {
     create_parser!(s, {
@@ -99,6 +161,12 @@ pub fn get_parsed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I,
     })
 }
 
+/// Transform a parser to a parser that only succeeds if it can be applied `times` times without
+/// failure.
+///
+/// ### Arguments
+/// * `times` - the number of times to apply `p`
+/// * `p` - the parser
 #[inline]
 pub fn times<I: SliceLike, O, S>(times: u32, p: impl Parser<I, O, S>) -> impl Parser<I, I, S> {
     create_parser!(s, {
@@ -110,6 +178,12 @@ pub fn times<I: SliceLike, O, S>(times: u32, p: impl Parser<I, O, S>) -> impl Pa
     })
 }
 
+/// Combine one parser with another, while ignoring the result of the former.
+/// The second parser will only be attempted if the first succeeds.
+///
+/// ### Arguments
+/// * `p1` - the first parser (result will be ignored)
+/// * `p2` - the second parser
 #[inline]
 pub fn right<I, S, O1, O2>(p1: impl Parser<I, O1, S>,
                            p2: impl Parser<I, O2, S>
@@ -119,6 +193,12 @@ pub fn right<I, S, O1, O2>(p1: impl Parser<I, O1, S>,
     })
 }
 
+/// Combine one parser with another, while ignoring the result of the latter.
+/// The second parser will only be attempted if the first succeeds.
+///
+/// ### Arguments
+/// * `p1` - the first parser
+/// * `p2` - the second parser (result will be ignored)
 #[inline]
 pub fn left<I, S, O1, O2>(p1: impl Parser<I, O1, S>,
                           p2: impl Parser<I, O2, S>
@@ -128,6 +208,12 @@ pub fn left<I, S, O1, O2>(p1: impl Parser<I, O1, S>,
     })
 }
 
+/// Combine three parsers, returning the result of the middle one.
+///
+/// ### Arguments
+/// * `p1` - the first parser (result will be ignored)
+/// * `p2` - the second parser
+/// * `p3` - the third parser (result will be ignored)
 #[inline]
 pub fn middle<I, S, O1, O2, O3>(p1: impl Parser<I, O1, S>,
                                 p2: impl Parser<I, O2, S>,
@@ -137,7 +223,16 @@ pub fn middle<I, S, O1, O2, O3>(p1: impl Parser<I, O1, S>,
 }
 
 macro_rules! internal_or {
-    ($id:ident, $allow_partial:tt) => {
+    ($id:ident, $allow_partial:tt, $comment:tt) => {
+        /// Create a parser that first tries the one parser `p1`, and if it fails, tries the second parser
+        /// `p2`.
+        /// Both parsers must have the same result type.
+        ///
+        /// $comment
+        ///
+        /// ### Arguments
+        /// * `p1` - the first parser
+        /// * `p2` - the second parser
         #[inline]
         pub fn $id<I: SliceLike, O, S>(p1: impl Parser<I, O, S>,
                                        p2: impl Parser<I, O, S>
@@ -157,11 +252,21 @@ macro_rules! internal_or {
     }
 }
 
-internal_or!(or, true);
-internal_or!(or_no_partial, false);
+internal_or!(or, true, "");
+internal_or!(or_no_partial, false, "This differs from `or` in that it will not attempt to use `p2` in case there was any consumed input while processing `p1`.");
 
 macro_rules! internal_or_diff {
-    ($id:ident, $allow_partial:tt) => {
+    ($id:ident, $allow_partial:tt, $comment:tt) => {
+        /// Create a parser that first tries the one parser `p1`, and if it fails, tries the second parser
+        /// `p2`.
+        /// This version of `or` can accept parsers with different result types, and will therefore have
+        /// a result type of `()`.
+        ///
+        /// $comment
+        ///
+        /// ### Arguments
+        /// * `p1` - the first parser
+        /// * `p2` - the second parser
         #[inline]
         pub fn $id<I: SliceLike, O1, O2, S>(p1: impl Parser<I, O1, S>,
                                             p2: impl Parser<I, O2, S>
@@ -183,9 +288,15 @@ macro_rules! internal_or_diff {
     }
 }
 
-internal_or_diff!(or_diff, true);
-internal_or_diff!(or_diff_no_partial, false);
+internal_or_diff!(or_diff, true, "");
+internal_or_diff!(or_diff_no_partial, false, "This differs from `or_diff` in that it will not attempt to use `p2` in case there was any consumed input while processing `p1`.");
 
+/// Create a parser that allows for using and modifying the user state while transforming
+/// the result.
+///
+/// ### Arguments
+/// * `f` - a transformation function that is also allowed to use and modify the user state.
+/// * `p` - the parser
 #[inline]
 pub fn lift_to_state<I, S, O1, O2>(f: impl FnOnce(&mut S, O1) -> O2 + Copy,
                                    p: impl Parser<I, O1, S>
@@ -195,11 +306,19 @@ pub fn lift_to_state<I, S, O1, O2>(f: impl FnOnce(&mut S, O1) -> O2 + Copy,
     })
 }
 
+/// Only for use with the `many` family of combinators. Use this function to create the separator
+/// argument when parsing multiple elements.
+///
+/// ### Arguments
+/// * `p` - a parser for the separator
+/// * `allow_trailing` - whether a trailing separator is allowed.
 #[inline]
 pub fn separator<I, O, S>(p: impl Parser<I, O, S>, allow_trailing: bool) -> Option<(bool, impl Parser<I, O, S>)> {
     Some((allow_trailing, p))
 }
 
+/// Only for use with the `many` family of combinators. Use this function to create the separator
+/// argument when no separator should be present.
 #[inline]
 pub fn no_separator<I, S>() -> Option<(bool, impl Parser<I, (), S>)> {
     if true {
@@ -239,6 +358,13 @@ fn many_internal<I, O, O2, S>(
     (allow_empty || successes).then_some(())
 }
 
+/// Apply a parser until it fails and return the parsed input.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `allow_empty` - whether no parse should be considered successful.
+/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+///                 functions to construct this parameter.
 #[inline]
 pub fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
                                     allow_empty: bool,
@@ -251,6 +377,13 @@ pub fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
     })
 }
 
+/// Apply a parser until it fails and store the results in a `Vec`.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `allow_empty` - whether no parse should be considered successful.
+/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+///                 functions to construct this parameter.
 #[inline]
 pub fn many_to_vec<I, O, O2, S>(p: impl Parser<I, O, S>,
                                 allow_empty: bool,
@@ -263,6 +396,14 @@ pub fn many_to_vec<I, O, O2, S>(p: impl Parser<I, O, S>,
     })
 }
 
+/// Apply a parser until it fails and store the results in a `HashMap`.
+/// The parser `p` must have a result type `(K, V)`, where the key `K: Hash + Eq`.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `allow_empty` - whether no parse should be considered successful.
+/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+///                 functions to construct this parameter.
 #[inline]
 pub fn many_to_map<I, K: Hash + Eq, V, O2, S>(p: impl Parser<I, (K, V), S>,
                                               allow_empty: bool,
@@ -275,6 +416,15 @@ pub fn many_to_map<I, K: Hash + Eq, V, O2, S>(p: impl Parser<I, (K, V), S>,
     })
 }
 
+/// Apply a parser until it fails and store the results in a `BTreeMap`.
+/// The parser `p` must have a result type `(K, V)`, where the key `K: Ord`.
+/// This might give better performance than `many_to_map`.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `allow_empty` - whether no parse should be considered successful.
+/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+///                 functions to construct this parameter.
 #[inline]
 pub fn many_to_map_ordered<I, K: Ord, V, O2, S>(p: impl Parser<I, (K, V), S>,
                                                 allow_empty: bool,
@@ -287,6 +437,13 @@ pub fn many_to_map_ordered<I, K: Ord, V, O2, S>(p: impl Parser<I, (K, V), S>,
     })
 }
 
+/// Apply a parser repeatedly and accumulate a result in the spirit of fold.
+///
+/// ### Arguments
+/// * `acc` - the accumulator
+/// * `p` - the parser
+/// * `f` - a function taking the accumulator as `&mut` along with the result of each
+///         successful parse
 #[inline]
 pub fn fold<T: Copy, I, O, S, P: Parser<I, O, S>>(acc: T,
                                                   p: P,

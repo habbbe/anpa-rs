@@ -1,7 +1,8 @@
 use std::ops::{Add, Sub, Mul, Div};
 
-use crate::{slicelike::SliceLike, core::{Parser, ParserExt, AnpaState}, combinators::{right, or}, parsers::item_if, asciilike::AsciiLike};
+use crate::{slicelike::SliceLike, core::{Parser, ParserExt}, combinators::{right, or}, parsers::item_if, asciilike::AsciiLike};
 
+/// Trait for types that act like numbers.
 pub trait NumLike:
 Add<Output = Self>
 + Sub<Output = Self>
@@ -14,6 +15,7 @@ Add<Output = Self>
     fn cast_u8(n: u8) -> Self;
 }
 
+/// Trait for types that act like floating point numbers.
 pub trait FloatLike: Add<Output = Self> + Mul<Output = Self> + Div<Output = Self> + Copy {
     const ONE: Self;
     const MINUS_ONE: Self;
@@ -135,6 +137,7 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
     })
 }
 
+/// Parse an unsigned integer. The type of the integer will be inferred from the context.
 #[inline]
 pub fn integer<O: NumLike,
                A: AsciiLike,
@@ -143,6 +146,8 @@ pub fn integer<O: NumLike,
     integer_internal::<false, false, false,_,_,_,_>().map(|(n, _)| n)
 }
 
+/// Parse an unsigned integer. The type of the integer will be inferred from the context.
+/// This parser will fail if the result does not fit in the inferred integer type.
 #[inline]
 pub fn integer_checked<O: NumLike,
                        A: AsciiLike,
@@ -151,6 +156,7 @@ pub fn integer_checked<O: NumLike,
     integer_internal::<true, false, false,_,_,_,_>().map(|(n, _)| n)
 }
 
+/// Parse an signed integer. The type of the integer will be inferred from the context.
 #[inline]
 pub fn integer_signed<O: NumLike,
                       A: AsciiLike,
@@ -159,6 +165,8 @@ pub fn integer_signed<O: NumLike,
     integer_internal::<false, true, false,_,_,_,_>().map(|(n, _)| n)
 }
 
+/// Parse an signed integer. The type of the integer will be inferred from the context.
+/// This parser will fail if the result does not fit in the inferred integer type.
 #[inline]
 pub fn integer_signed_checked<O: NumLike,
                               A: AsciiLike,
@@ -184,11 +192,17 @@ fn float_internal<const CHECKED: bool,
     })
 }
 
+/// Parse a floating point number. The type of the number will be inferred from the context.
+/// This parser is incomplete, in that it will attempt to parse the float as
+/// `isize.usize`, and if the parsed number does not fit within those types, it will panic.
 #[inline]
 pub fn float<O: FloatLike, A: AsciiLike, I: SliceLike<RefItem = A>, S>() -> impl Parser<I, O, S> {
     float_internal::<false,_,_,_,_>()
 }
 
+/// Parse a floating point number. The type of the number will be inferred from the context.
+/// This parser is incomplete, in that it will attempt to parse the float as
+/// `isize.usize`, and if the parsed number does not fit within those types, it will fail.
 #[inline]
 pub fn float_checked<O: FloatLike,
                      A: AsciiLike,

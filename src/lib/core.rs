@@ -51,7 +51,8 @@ pub trait ParserExt<I, O, S>: Parser<I, O, S> {
 
 /// Trait for parsers with a result that can be converted into another by means of `Into`.
 pub trait ParserInto<I, O1: Into<O2>, O2, S>: Parser<I, O1, S> {
-    /// Transform this parser into a parser with a different result.
+    /// Transform this parser into a parser with a different result. The existing type must
+    /// implement `Into<R>` for the requested type `R`
     fn into_type(self) -> impl Parser<I, O2, S>;
 }
 
