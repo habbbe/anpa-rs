@@ -132,3 +132,22 @@ macro_rules! right {
         variadic!($crate::combinators::right, $($p),*)
     };
 }
+
+/// Create a new parser trait with a concrete input type for cleaner APIs.
+/// ### Arguments
+/// * `id` - The identifier of the new trait
+/// * `input` - The type of the input. Do not include lifetime or reference.
+/// * `comment` - The doc comment to be generated for the trait
+///
+/// ### Example
+/// ```ignore
+/// create_parser_trait(I8Parser, [i8], "Convenience alias for a parser that parses a `&'a [i8]`");
+/// ```
+#[macro_export]
+macro_rules! create_parser_trait {
+    ($id:ident, $input:ty, $comment:expr) => {
+        #[doc=$comment]
+        pub trait $id<'a, O = &'a $input, S = ()>: $crate::core::Parser<&'a $input, O, S> {}
+        impl<'a, O, S, P: $crate::core::Parser<&'a $input, O, S>> $id<'a, O, S> for P {}
+    };
+}

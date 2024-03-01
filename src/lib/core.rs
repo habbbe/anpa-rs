@@ -19,7 +19,16 @@ pub struct AnpaResult<T, O> {
 }
 
 /// The base trait for all parsers.
-pub trait Parser<I, O, S>: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy {}
+///
+/// If the output of a parser is the same as the input (e.g. if the result is the
+/// parsed input), the output type parameter `O` can be omitted.
+///
+/// If no user state is used when parsing, the state type parameter `S` can be omitted.
+pub trait Parser<I, O = I, S = ()>: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy {}
+
+// Some convenience "aliases" for common parser types
+create_parser_trait!(StrParser, str, "Convenience alias for a parser that parses a `&'a str`.");
+create_parser_trait!(U8Parser, [u8], "Convenience alias for a parser that parses a `&'a [u8]`.");
 
 /// All copyable `FnOnce` functions with the correct signature are considered parsers.
 impl<I, O, S, F: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy> Parser<I, O, S> for F {}

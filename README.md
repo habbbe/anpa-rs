@@ -20,6 +20,7 @@ None
 
 ### TODO
 
+- Add examples in doc comments
 - Add support for `Read`
 - More extensive test cases
 
