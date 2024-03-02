@@ -14,7 +14,7 @@ macro_rules! create_parser {
 /// ### Example:
 /// ```ignore
 /// /// Can parse e.g. "(((something)))"
-/// fn in_parens<'a, S>() -> impl Parser<&'a str, &'a str, S> {
+/// fn in_parens<'a, S>() -> impl StrParser<'a> {
 ///     defer_parser!(or(item_while(|c: char| c.is_alphanumeric()), middle(item('('), in_parens(), item(')'))))
 /// }
 /// ```

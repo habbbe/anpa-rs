@@ -349,10 +349,8 @@ fn many_internal<I, O, O2, S>(
         f(res);
         successes = true;
 
-        if let Some((_, sep)) = separator {
-            if sep(s).is_none() {
-                break;
-            }
+        if separator.is_some_and(|(_, sep)| sep(s).is_none()) {
+            break;
         }
     }
     (allow_empty || successes).then_some(())
@@ -462,7 +460,7 @@ mod tests {
 
     use super::{fold, or, left};
 
-    fn num_parser() -> impl Parser<&'static str, u32, ()> {
+    fn num_parser() -> impl StrParser<'static, u32> {
         let num = integer();
         or(left(num, item(',')), left(num, empty()))
     }
@@ -515,7 +513,7 @@ mod tests {
 
     #[test]
     fn recursive_parens() {
-        fn in_parens<'a, S>() -> impl Parser<&'a str, &'a str, S> {
+        fn in_parens<'a>() -> impl StrParser<'a> {
             defer_parser!(or(item_while(|c: char| c.is_alphanumeric()), middle(item('('), in_parens(), item(')'))))
         }
 
