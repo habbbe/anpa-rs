@@ -42,6 +42,20 @@ pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) ->
     })
 }
 
+/// Create a parser that skips a single item matching the provided predicate. This may
+/// be more performant than using `item_if` if the result is not required.
+///
+/// ### Arguments
+/// * `pred` - the predicate
+#[inline]
+pub fn skip_if<I: SliceLike, S>(pred: impl Fn(I::RefItem) -> bool + Copy) -> impl Parser<I, (), S> {
+    create_parser!(s, {
+        s.input.slice_starts_with_pred(pred).then(|| {
+            s.input = s.input.slice_from(1);
+        })
+    })
+}
+
 /// Create a parser for a single item matching the input via `==`.
 ///
 /// ### Arguments

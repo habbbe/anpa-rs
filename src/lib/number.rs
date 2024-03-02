@@ -1,6 +1,6 @@
 use std::ops::{Add, Sub, Mul, Div};
 
-use crate::{slicelike::SliceLike, core::{Parser, ParserExt}, combinators::{right, or}, parsers::item_if, asciilike::AsciiLike};
+use crate::{asciilike::AsciiLike, combinators::{or, right}, core::{Parser, ParserExt}, parsers::skip_if, slicelike::SliceLike};
 
 /// Trait for types that act like numbers.
 pub trait NumLike:
@@ -184,7 +184,7 @@ fn float_internal<const CHECKED: bool,
     // First parse a possibly negative signed integer
     integer_internal::<CHECKED, true, true,_,_,_,_>().bind(|(n, div): (isize, _)| {
         // Then parse a period followed by an unsigned integer.
-        let dec = right(item_if(|c: I::RefItem| c.equal(A::PERIOD)),
+        let dec = right(skip_if(|c: I::RefItem| c.equal(A::PERIOD)),
                                               integer_internal::<CHECKED,false,false,_,_,_,_>())
             .map(move |(dec, _): (usize,_)|
                 O::cast_isize(n) + if n.is_negative() {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));

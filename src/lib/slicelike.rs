@@ -18,12 +18,15 @@ pub trait SliceLike: Sized + Copy {
 
     /// Get the (optional) index of the requested `seq`uence.
     fn slice_find_seq<S: Borrow<Self>>(self, seq: S) -> Option<usize>;
-    
+
     /// Get the (optional) index of the first item that matches `pred`.
     fn slice_find_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> Option<usize>;
 
     /// Return whether the input starts with `item`.
     fn slice_starts_with<I: Borrow<Self::Item>>(self, item: I) -> bool;
+
+    /// Return whether the input starts with predicate `p`.
+    fn slice_starts_with_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> bool;
 
     /// Return whether the input starts with `seq`.
     fn slice_starts_with_seq(self, seq: Self) -> bool;
@@ -81,6 +84,10 @@ impl<'a, A: PartialEq> SliceLike for &'a [A] {
 
     fn slice_starts_with_seq(self, seq: Self) -> bool {
         self.starts_with(seq)
+    }
+
+    fn slice_starts_with_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> bool {
+        self.first().filter(|c| pred(*c)).is_some()
     }
 
     fn slice_len(self) -> usize {
@@ -143,6 +150,10 @@ impl<'a> SliceLike for &'a str {
 
     fn slice_starts_with_seq(self, seq: Self) -> bool {
         self.starts_with(seq)
+    }
+
+    fn slice_starts_with_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> bool {
+        self.starts_with(pred)
     }
 
     fn slice_len(self) -> usize {
