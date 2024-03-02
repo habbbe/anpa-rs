@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, BTreeMap}, hash::Hash};
+use std::{collections::{BTreeMap, HashMap}, hash::Hash};
 
 use crate::{slicelike::SliceLike, core::{Parser, AnpaState}, parsers::success};
 
@@ -336,24 +336,25 @@ fn many_internal<I, O, O2, S>(
     mut f: impl FnMut(O) -> (),
     allow_empty: bool,
     separator: Option<(bool, impl Parser<I, O2, S>)>
-) -> Option<()> {
+) -> bool {
     let mut successes = false;
-    loop {
-        let Some(res) = p(s) else {
-            if let (Some((false, _)), true) = (separator, successes) {
-                return None
-            }
-            break;
-        };
+    let mut has_trailing_sep = false;
 
-        f(res);
+    while let Some(res) = p(s) {
+        has_trailing_sep = false;
         successes = true;
+        f(res);
 
-        if separator.is_some_and(|(_, sep)| sep(s).is_none()) {
-            break;
+        if let Some((_, sep)) = separator {
+            if sep(s).is_none() {
+                break;
+            }
+            has_trailing_sep = true;
         }
     }
-    (allow_empty || successes).then_some(())
+
+    !separator.is_some_and(|(allow_trailing, _)| !allow_trailing && has_trailing_sep)
+        && (allow_empty || successes)
 }
 
 /// Apply a parser until it fails and return the parsed input.
@@ -371,7 +372,7 @@ pub fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
     create_parser!(s, {
         let old_input = s.input;
         many_internal(s, p, |_| {}, allow_empty, separator)
-            .map(move |_| old_input.slice_to(old_input.slice_len() - s.input.slice_len()))
+            .then(move || old_input.slice_to(old_input.slice_len() - s.input.slice_len()))
     })
 }
 
@@ -390,7 +391,7 @@ pub fn many_to_vec<I, O, O2, S>(p: impl Parser<I, O, S>,
     create_parser!(s, {
         let mut vec = vec![];
         many_internal(s, p, |x| vec.push(x), allow_empty, separator)
-            .map(move |_| vec)
+            .then(move || vec)
     })
 }
 
@@ -410,7 +411,7 @@ pub fn many_to_map<I, K: Hash + Eq, V, O2, S>(p: impl Parser<I, (K, V), S>,
     create_parser!(s, {
         let mut map = HashMap::new();
         many_internal(s, p, |(k, v)| {map.insert(k, v);}, allow_empty, separator)
-            .map(move |_| map)
+            .then(move || map)
     })
 }
 
@@ -431,7 +432,7 @@ pub fn many_to_map_ordered<I, K: Ord, V, O2, S>(p: impl Parser<I, (K, V), S>,
     create_parser!(s, {
         let mut map = BTreeMap::new();
         many_internal(s, p, |(k, v)| {map.insert(k, v);}, allow_empty, separator)
-            .map(move |_| map)
+            .then(move || map)
     })
 }
 
@@ -450,7 +451,7 @@ pub fn fold<T: Copy, I, O, S, P: Parser<I, O, S>>(acc: T,
     create_parser!(s, {
         let mut acc = acc;
         many_internal(s, p, |x| { f(&mut acc, x) }, true, no_separator())
-            .map(move |_| acc)
+            .then(move || acc)
     })
 }
 
