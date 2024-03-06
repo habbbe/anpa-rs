@@ -7,6 +7,12 @@ pub trait SliceLike: Sized + Copy {
     type RefItem: PartialEq + Copy;
     type Iter: Iterator<Item = Self::RefItem>;
 
+    /// Get the size of a RefItem
+    fn slice_size_of_ref_item(item: Self::RefItem) -> usize;
+
+    /// Get the size of an Item
+    fn slice_size_of_item(item: &Self::Item) -> usize;
+
     /// Get an iterator for this input.
     fn slice_iter(self) -> Self::Iter;
 
@@ -24,9 +30,6 @@ pub trait SliceLike: Sized + Copy {
 
     /// Return whether the input starts with `item`.
     fn slice_starts_with<I: Borrow<Self::Item>>(self, item: I) -> bool;
-
-    /// Return whether the input starts with predicate `p`.
-    fn slice_starts_with_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> bool;
 
     /// Return whether the input starts with `seq`.
     fn slice_starts_with_seq(self, seq: Self) -> bool;
@@ -58,6 +61,16 @@ impl<'a, A: PartialEq> SliceLike for &'a [A] {
     type RefItem = &'a A;
     type Iter = Iter<'a, A>;
 
+    #[inline(always)]
+    fn slice_size_of_item(_item: &Self::Item) -> usize {
+        1
+    }
+
+    #[inline(always)]
+    fn slice_size_of_ref_item(_item: Self::RefItem) -> usize {
+        1
+    }
+
     fn slice_iter(self) -> Self::Iter {
         self.iter()
     }
@@ -84,10 +97,6 @@ impl<'a, A: PartialEq> SliceLike for &'a [A] {
 
     fn slice_starts_with_seq(self, seq: Self) -> bool {
         self.starts_with(seq)
-    }
-
-    fn slice_starts_with_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> bool {
-        self.first().filter(|c| pred(*c)).is_some()
     }
 
     fn slice_len(self) -> usize {
@@ -124,6 +133,16 @@ impl<'a> SliceLike for &'a str {
     type RefItem = char;
     type Iter = Chars<'a>;
 
+    #[inline(always)]
+    fn slice_size_of_item(item: &Self::Item) -> usize {
+        item.len_utf8()
+    }
+
+    #[inline(always)]
+    fn slice_size_of_ref_item(item: Self::RefItem) -> usize {
+        Self::slice_size_of_item(&item)
+    }
+
     fn slice_iter(self) -> Self::Iter {
         self.chars()
     }
@@ -150,10 +169,6 @@ impl<'a> SliceLike for &'a str {
 
     fn slice_starts_with_seq(self, seq: Self) -> bool {
         self.starts_with(seq)
-    }
-
-    fn slice_starts_with_pred(self, pred: impl Fn(Self::RefItem) -> bool) -> bool {
-        self.starts_with(pred)
     }
 
     fn slice_len(self) -> usize {
