@@ -319,14 +319,13 @@ pub fn separator<I, O, S>(p: impl Parser<I, O, S>, allow_trailing: bool) -> Opti
 
 /// Only for use with the `many` family of combinators. Use this function to create the separator
 /// argument when no separator should be present.
+#[allow(unreachable_code)]
 #[inline]
 pub fn no_separator<I, S>() -> Option<(bool, impl Parser<I, (), S>)> {
-    if true {
-        None
-    } else {
-        // Only for type checking
-        Some((false, success()))
-    }
+    return None;
+
+    // Unreachable, but provides type/size information about the return value
+    return Some((false, success()));
 }
 
 #[inline(always)]
