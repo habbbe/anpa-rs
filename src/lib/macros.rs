@@ -133,6 +133,20 @@ macro_rules! right {
     };
 }
 
+/// Alternative to the `item` parser that inlines the argument into the parser. This
+/// can give better performance at the expence of larger binary size.
+///
+/// This macro is likely only useful when passing a literal as argument.
+///
+/// ### Arguments
+/// * `item` - the item o parse.
+#[macro_export]
+macro_rules! item {
+    ($item:expr) => {
+        $crate::parsers::item_if(move |c| c == $item)
+    }
+}
+
 /// Create a new parser trait with a concrete input type for cleaner APIs.
 /// ### Arguments
 /// * `id` - The identifier of the new trait

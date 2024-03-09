@@ -17,11 +17,11 @@ fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
 }
 
 fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
-    let unicode = right(item('u'), times(4, item_if(|c: char| c.is_digit(16))));
-    let escaped = right(item('\\'), or_diff(unicode, item_if(|c: char| "\"\\/bfnrt".contains(c))));
+    let unicode = right(item!('u'), times(4, item_if(|c: char| c.is_digit(16))));
+    let escaped = right(item!('\\'), or_diff(unicode, item_if(|c: char| "\"\\/bfnrt".contains(c))));
     let valid_char = item_if(|c: char| c != '"' && c != '\\' && !c.is_control());
     let not_end = or_diff(valid_char, escaped);
-    middle(item('"'), many(not_end, true, no_separator()), item('"')).into_type()
+    middle(item!('"'), many(not_end, true, no_separator()), item!('"')).into_type()
 }
 
 fn json_string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, JsonValue<T>> {
@@ -60,19 +60,19 @@ pub fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValu
 /// ```
 pub fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
     let pair_parser = tuplify!(
-        left(eat(string_parser()), eat(item(':'))),
+        left(eat(string_parser()), eat(item!(':'))),
         value_parser());
     middle(
-        item('{'),
-        many_to_map_ordered(pair_parser, true, separator(eat(item(',')), false)),
-        eat(item('}'))).map(JsonValue::Dic)
+        item!('{'),
+        many_to_map_ordered(pair_parser, true, separator(eat(item!(',')), false)),
+        eat(item!('}'))).map(JsonValue::Dic)
 }
 
 /// Get a JSON parser that parses a JSON array. The type used for strings will be inferred
 /// from the context via `From<&str>`. For examples, see `object_parser`.
 pub fn array_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
     middle(
-        item('['),
-        many_to_vec(value_parser(), true, separator(eat(item(',')), false)),
-        eat(item(']'))).map(JsonValue::Arr)
+        item!('['),
+        many_to_vec(value_parser(), true, separator(eat(item!(',')), false)),
+        eat(item!(']'))).map(JsonValue::Arr)
 }
