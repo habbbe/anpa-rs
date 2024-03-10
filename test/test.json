@@ -1,0 +1,28 @@
+{
+    "db": [
+        {
+            "name": "Firstname Lastname",
+            "middlename": null,
+            "age": 31,
+            "score": 123.412,
+            "member": true,
+            "hasPaid": false,
+            "address": {
+                "street": "some street name",
+                "zip": "12345"
+            }
+        },
+        {
+            "name": "Namefirst Namelast",
+            "middlename": "Namemiddle",
+            "age": 56,
+            "score": 1.4122,
+            "member": false,
+            "hasPaid": false,
+            "address": {
+                "street": "one of the longst street names that ever was",
+                "zip": "543210"
+            }
+        }
+    ]
+}

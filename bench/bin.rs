@@ -1,6 +1,4 @@
 use anpa::core::{*};
-use anpa::json::JsonValue;
-use anpa::semver::AnpaVersion;
 use anpa::{*};
 use anpa::combinators::{*};
 use anpa::parsers::{*};
@@ -8,7 +6,7 @@ use anpa::parsers::{*};
 use std::fs::File;
 use std::io::{self, BufRead, Read};
 use std::process::exit;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 fn main() {
     bench_hubb();
@@ -37,8 +35,25 @@ enum Item<'a> {
     SyntaxError { description: &'a str }
 }
 
+fn bench_fun<T>(mut n: usize, mut f: impl FnMut() -> T) -> (Duration, T) {
+    let mut best = Duration::MAX;
+    let mut r;
+
+    loop {
+        let now = Instant::now();
+        r = f();
+        best = best.min(now.elapsed());
+        n = n.saturating_sub(1);
+        if n == 0 {
+            break;
+        }
+    }
+
+    (best, r)
+}
+
 fn bench_hubb() {
-    let parse_name = until_seq("=");
+    let parse_name = until_item('=');
     let parse_cmd = not_empty(rest());
     let parse_action = right!(seq("Com:"), lift!(action, parse_name, parse_cmd));
     let parse_info = right!(seq("Info:"), lift!(info, parse_name, parse_cmd));
@@ -52,65 +67,71 @@ fn bench_hubb() {
 
     let lines: Vec<String> = read_file("hubb").lines().map(Result::unwrap).collect();
     let mut vec: Vec<Item> = Vec::with_capacity(lines.len());
-    let now = Instant::now();
 
-    for l in &lines {
-        let r = parse_state(state_parser, l, &mut vec);
-        if r.result.is_none() {
-                println!("No parse");
-                break
+    let (d, _) = bench_fun(10000, || {
+        for _ in 0..50 {
+            vec.clear();
+            for l in &lines {
+                let r = parse_state(state_parser, l, &mut vec);
+                if r.result.is_none() {
+                        println!("No parse");
+                        break
+                }
+            }
         }
-    }
+    });
 
-    println!("Hubb: N: {}, in {}ms (anpa)", vec.len(), now.elapsed().as_micros() as f64 / 1000.0);
+    println!("Hubb: N: {}, in {}us (anpa)", vec.len(), d.as_nanos() as f64 / 1000.0);
 }
 
 fn bench_hubb_handrolled() {
     let lines: Vec<String> = read_file("hubb").lines().map(Result::unwrap).collect();
     let mut vec: Vec<Item> = Vec::with_capacity(lines.len());
-    let now = Instant::now();
 
-    for l in &lines {
-        let r = parse_handrolled(&l);
-        match r {
-            None => {
-                println!("No parse");
-                break
+    let (d, _) = bench_fun(10000, || {
+        for _ in 0..50 {
+            vec.clear();
+            for l in &lines {
+                let r = parse_handrolled(&l);
+                match r {
+                    None => {
+                        println!("No parse");
+                        break
+                    }
+                    Some(Item::Ignore) => {}
+                    Some(res) => vec.push(res)
+                }
             }
-            Some(Item::Ignore) => {}
-            Some(res) => vec.push(res)
         }
-    }
-    println!("Hubb: N: {}, in {}ms (handrolled)", vec.len(), now.elapsed().as_micros() as f64 / 1000.0);
+    });
+
+    println!("Hubb: N: {}, in {}us (handrolled)", vec.len(), d.as_nanos() as f64 / 1000.0);
 }
 
 fn bench_json() {
     let mut string = String::new();
-    let _ = read_file("canada.json").read_to_string(&mut string);
+    let _ = read_file("test.json").read_to_string(&mut string);
     let p = json::object_parser::<&str>();
 
-    let now = Instant::now();
-    let mut res = AnpaResult {state: "", result: None };
-    for _ in 0..300 {
-        res = parse(p, &string);
-    }
-    match res.result {
-        Some(JsonValue::Dic(dic)) =>
-            println!("JSON: N: {}, in {}ms", dic.len(), now.elapsed().as_micros() as f64 / 1000.0),
-        _ => println!("No parse"),
-    }
+    let (d, _) = bench_fun(10000, || {
+        for _ in 0..10 {
+            parse(p, &string);
+        }
+    });
+
+    println!("JSON: in {}us", d.as_nanos() as f64 / 1000.0);
 }
 
 fn bench_semver() {
     let v = "123432134.43213421.5432344-SNAPSHOT+some.build.id";
 
-    let mut ver = AnpaVersion::<_>::new(0, 0, 0, "", "");
-    let now = Instant::now();
-    for _ in 0..20000000 {
-        ver = semver::parse_inline(v).unwrap();
-    }
-
-    println!("Version: {:?}, in {}ms", ver, now.elapsed().as_micros() as f64 / 1000.0);
+    let (d, ver) = bench_fun(10000, || {
+        for _ in 0..300 {
+            semver::parse_inline(v).unwrap();
+        }
+        semver::parse_inline(v).unwrap()
+    });
+    println!("SemVer: {:?}, in {}us", ver, d.as_nanos() as f64 / 1000.0);
 }
 
 fn action<'a>(name: &'a str, com: &'a str) -> Item<'a> {
@@ -127,7 +148,7 @@ fn syntax_error<'a>(description: &'a str) -> Item<'a> {
 
 fn parse_handrolled(input: &str) -> Option<Item> {
     fn parse_command_tuple(input: &str) -> Option<(&str, &str)> {
-        let equal_pos = input.find("=")?;
+        let equal_pos = input.find('=')?;
         if equal_pos == input.len() - 1 { return None }
         Some((&input[..equal_pos], &input[(equal_pos + 1)..]))
     }
