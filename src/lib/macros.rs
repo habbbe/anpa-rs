@@ -155,7 +155,7 @@ macro_rules! item {
 ///
 /// ### Example
 /// ```ignore
-/// create_parser_trait(I8Parser, [i8], "Convenience alias for a parser that parses a `&'a [i8]`");
+/// create_parser_trait!(I8Parser, [i8], "Convenience alias for a parser that parses a `&'a [i8]`");
 /// ```
 #[macro_export]
 macro_rules! create_parser_trait {
