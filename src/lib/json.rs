@@ -67,7 +67,7 @@ pub const fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, Js
 /// ```
 pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
     let pair_parser = tuplify!(
-        left(eat(string_parser()), eat(skip!(':'))),
+        left(eat(string_parser()), colon_parser()),
         value_parser());
     map(middle(
         skip!('{'),
@@ -80,6 +80,74 @@ pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, J
 pub const fn array_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
     map(middle(
         skip!('['),
-        many_to_vec(value_parser(), true, separator(eat(skip!(',')), false)),
+        many_to_vec(value_parser(), true, separator(comma_parser(), false)),
         eat(skip!(']'))), JsonValue::Arr)
+}
+
+pub const fn open_brace_parser<'a>() -> impl StrParser<'a, ()> {
+    eat(skip!('{'))
+}
+
+pub const fn close_brace_parser<'a>() -> impl StrParser<'a, ()> {
+    eat(skip!('}'))
+}
+
+pub const fn comma_parser<'a>() -> impl StrParser<'a, ()> {
+    eat(skip!(','))
+}
+
+pub const fn colon_parser<'a>() -> impl StrParser<'a, ()> {
+    eat(skip!(':'))
+}
+
+#[macro_export]
+macro_rules! internal_json_field {
+    (($id:expr, $parser:expr)) => {
+        $crate::right!(
+            $crate::json::eat($crate::skip!(concat!('"', $id, '"'))),
+            $crate::json::colon_parser(),
+            $crate::json::eat($parser)
+        )
+    };
+}
+
+/// Macro to generate a JSON parser for a specific structure.
+///
+/// ### Arguments
+/// * `f` - A function returning the structure from the arguments parsed by the
+///         subsequent arguments.
+/// * `(id, parser)` - a variadic list of the elements to parse. `id` is the name of
+///                    the string-value pair, and `parser` is a parser that can parse
+///                    the expected value.
+///
+/// ### Example
+/// ```
+/// use anpa::{json_parser_gen, json, number};
+/// struct Person {
+///     name: String,
+///     age: u8
+/// }
+///
+/// // The below will parse a `Person` object from a JSON string of the form:
+/// // `{"name": "John Doe", "age": 27}`
+/// let person_parser = json_parser_gen!(|name, age| Person { name, age },
+///     ("name", json::string_parser()),
+///     ("age", number::integer())
+/// );
+/// ```
+#[macro_export]
+macro_rules! json_parser_gen {
+    ($f:expr, ($id:expr, $parser:expr), $($rest:tt),*) => {
+        $crate::combinators::middle(
+            $crate::json::open_brace_parser(),
+            $crate::lift!($f,
+                $crate::internal_json_field!(($id, $parser)),
+                $($crate::combinators::right(
+                    $crate::json::comma_parser(),
+                    $crate::internal_json_field!($rest)
+                )),*
+            ),
+            $crate::json::close_brace_parser()
+        )
+    };
 }
