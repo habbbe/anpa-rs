@@ -68,7 +68,7 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
                     O: NumLike,
                     A: AsciiLike,
                     I: SliceLike<RefItem = A>,
-                    S>() -> impl Parser<I, (O, usize), S> {
+                    S>() -> impl Parser<I, (O, usize, bool), S> {
     create_parser!(s, {
         let mut idx = 0;
         let mut acc = O::cast_u8(0);
@@ -132,7 +132,7 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
             None
         } else {
             s.input = s.input.slice_from(idx + (is_negative as usize));
-            Some((acc, dec_divisor))
+            Some((acc, dec_divisor, is_negative))
         }
     })
 }
@@ -143,7 +143,7 @@ pub fn integer<O: NumLike,
                A: AsciiLike,
                I: SliceLike<RefItem = A>,
                S>() -> impl Parser<I, O, S> {
-    integer_internal::<false, false, false,_,_,_,_>().map(|(n, _)| n)
+    integer_internal::<false, false, false,_,_,_,_>().map(|(n, _, _)| n)
 }
 
 /// Parse an unsigned integer. The type of the integer will be inferred from the context.
@@ -153,7 +153,7 @@ pub fn integer_checked<O: NumLike,
                        A: AsciiLike,
                        I: SliceLike<RefItem = A>,
                        S>() -> impl Parser<I, O, S> {
-    integer_internal::<true, false, false,_,_,_,_>().map(|(n, _)| n)
+    integer_internal::<true, false, false,_,_,_,_>().map(|(n, _, _)| n)
 }
 
 /// Parse an signed integer. The type of the integer will be inferred from the context.
@@ -162,7 +162,7 @@ pub fn integer_signed<O: NumLike,
                       A: AsciiLike,
                       I: SliceLike<RefItem = A>,
                       S>() -> impl Parser<I, O, S> {
-    integer_internal::<false, true, false,_,_,_,_>().map(|(n, _)| n)
+    integer_internal::<false, true, false,_,_,_,_>().map(|(n, _, _)| n)
 }
 
 /// Parse an signed integer. The type of the integer will be inferred from the context.
@@ -172,7 +172,7 @@ pub fn integer_signed_checked<O: NumLike,
                               A: AsciiLike,
                               I: SliceLike<RefItem = A>,
                               S>() -> impl Parser<I, O, S> {
-    integer_internal::<true, true, false,_,_,_,_>().map(|(n, _)| n)
+    integer_internal::<true, true, false,_,_,_,_>().map(|(n, _, _)| n)
 }
 
 #[inline(always)]
@@ -182,12 +182,12 @@ fn float_internal<const CHECKED: bool,
                   I: SliceLike<RefItem = A>,
                   S>() -> impl Parser<I, O, S> {
     // First parse a possibly negative signed integer
-    integer_internal::<CHECKED, true, true,_,_,_,_>().bind(|(n, div): (isize, _)| {
+    integer_internal::<CHECKED, true, false,_,_,_,_>().bind(|(n, _, is_neg)| {
         // Then parse a period followed by an unsigned integer.
         let dec = right(item_if(|c: I::RefItem| c.equal(A::PERIOD)),
-                                              integer_internal::<CHECKED,false,false,_,_,_,_>())
-            .map(move |(dec, _): (usize,_)|
-                O::cast_isize(n) + if n.is_negative() {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));
+                                              integer_internal::<CHECKED,false,true,_,_,_,_>())
+            .map(move |(dec, div, _)|
+                O::cast_isize(n) + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));
         or(dec, pure!(O::cast_isize(n)))
     })
 }
@@ -247,5 +247,8 @@ mod tests {
         assert_eq!(-13.37f32, parse(float(), "-13.37").result.unwrap());
         assert_eq!(13.07f32, parse(float(), "13.07").result.unwrap());
         assert_eq!(-13.07f32, parse(float(), "-13.07").result.unwrap());
+        assert_eq!(1.123f32, parse(float(), "1.123").result.unwrap());
+        assert_eq!(0.001f32, parse(float(), "0.001").result.unwrap());
+        assert_eq!(-0.001f32, parse(float(), "-0.001").result.unwrap());
     }
 }
