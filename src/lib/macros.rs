@@ -147,6 +147,18 @@ macro_rules! item {
     }
 }
 
+/// Variadic version of `greedy_or`, where the result of the parser with the most consumed
+/// input will be returned.
+///
+/// ### Arguments
+/// * `p...` - any number of parsers.
+#[macro_export]
+macro_rules! greedy_or {
+    ($($p:expr),* $(,)?) => {
+        variadic!($crate::combinators::greedy_or, $($p),*)
+    };
+}
+
 /// Create a new parser trait with a concrete input type for cleaner APIs.
 /// ### Arguments
 /// * `id` - The identifier of the new trait

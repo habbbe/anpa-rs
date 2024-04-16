@@ -454,9 +454,54 @@ pub fn fold<T: Copy, I, O, S, P: Parser<I, O, S>>(acc: T,
     })
 }
 
+/// Combine two parsers into a parser that returns the result of the parser
+/// that consumed the most input.
+///
+/// If both parsers consume the same amount of input, the result of the first
+/// parser will be chosen.
+///
+/// If only one of the parsers succeeds, its result will be returned regardless
+/// of the consumed size of either parser.
+///
+/// ### Arguments
+/// * `p1` - the first parser
+/// * `p2` - the second parser
+#[inline]
+pub fn greedy_or<I: SliceLike, S, O>(p1: impl Parser<I, O, S>,
+                                     p2: impl Parser<I, O, S>
+) ->  impl Parser<I, O, S> {
+    create_parser!(s, {
+        let pos = s.input;
+        let res1 = p1(s);
+        let p1_consumed = pos.slice_len() - s.input.slice_len();
+        let p1_pos = s.input;
+
+        s.input = pos;
+        let res2 = p2(s);
+        let p2_consumed = pos.slice_len() - s.input.slice_len();
+        let p1_is_some = res1.is_some();
+
+        let choose_p1 = if p1_is_some == res2.is_some() {
+            // Both parsers failed or succeeded. Choose p1 if it consumed the most.
+            p1_consumed >= p2_consumed
+        }
+        else {
+            // Otherwise choose p1 if it succeeded.
+            p1_is_some
+        };
+
+        if choose_p1 {
+            s.input = p1_pos;
+            res1
+        } else {
+            res2
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{parsers::{item, empty, item_while}, core::{*}, combinators::{times, middle, many_to_vec, many, no_separator}, number::integer};
+    use crate::{combinators::{many, many_to_vec, greedy_or, middle, no_separator, times}, core::*, number::integer, parsers::{empty, item, item_while, seq}};
 
     use super::{fold, or, left};
 
@@ -521,6 +566,29 @@ mod tests {
 
         let res = parse(in_parens(), x);
         assert_eq!(res.result.unwrap(), "sought");
+        assert!(res.state.is_empty());
+    }
+
+    #[test]
+    fn greedy_or_test() {
+        let x = "12344a";
+
+        let digit_parser = item_while(|c: char| c.is_ascii_digit());
+        let seq_parser = seq("1234");
+
+        let greedy_parser = greedy_or(seq_parser, digit_parser);
+
+        let res = parse(greedy_parser, x);
+        assert_eq!(res.result.unwrap(), "12344");
+        assert_eq!(res.state, "a");
+
+        let smaller_seq_parser = seq("123");
+
+        let full_parser = digit_parser.right(seq("a"));
+
+        let greedy_parser = greedy_or!(smaller_seq_parser, full_parser, seq_parser);
+        let res = parse(greedy_parser, x);
+        assert_eq!(res.result.unwrap(), "a");
         assert!(res.state.is_empty());
     }
 }
