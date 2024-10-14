@@ -116,7 +116,7 @@ fn digit(c: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::examples::semver::{parse_inline};
+    use crate::semver::parse_inline;
 
     #[test]
     fn version_no_snapshot() {
