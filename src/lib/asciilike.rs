@@ -50,7 +50,7 @@ impl AsciiLike for u8 {
 
     #[inline(always)]
     fn as_digit(self) -> Option<u8> {
-        (self >= b'0' && self <= b'9').then_some(self - b'0')
+        self.is_ascii_digit().then_some(self - b'0')
     }
 
     #[inline(always)]

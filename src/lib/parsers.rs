@@ -67,12 +67,11 @@ pub fn not_item<I: SliceLike, B: Into<I::Item> + Copy, S>(item: B) -> impl Parse
 #[inline]
 pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I, S> {
     create_parser!(s, {
-        let idx;
-        match s.input.slice_find_pred(|x| !pred(x)) {
-            None => idx = s.input.slice_len(),
+        let idx = match s.input.slice_find_pred(|x| !pred(x)) {
+            None => s.input.slice_len(),
             Some(0) => return None,
-            Some(n) => idx = n
-        }
+            Some(n) => n
+        };
 
         let res;
         (res, s.input) = s.input.slice_split_at(idx);

@@ -6,5 +6,4 @@ pub mod core;
 pub mod combinators;
 pub mod asciilike;
 pub mod slicelike;
-pub mod semver;
-pub mod json;
+pub mod examples;

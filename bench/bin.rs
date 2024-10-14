@@ -92,7 +92,7 @@ fn bench_hubb_handrolled() {
         for _ in 0..50 {
             vec.clear();
             for l in &lines {
-                let r = parse_handrolled(&l);
+                let r = parse_handrolled(l);
                 match r {
                     None => {
                         println!("No parse");
@@ -109,6 +109,8 @@ fn bench_hubb_handrolled() {
 }
 
 fn bench_json() {
+    use examples::json;
+
     let mut string = String::new();
     let _ = read_file("test.json").read_to_string(&mut string);
     let p = json::object_parser::<&str>();
@@ -123,6 +125,7 @@ fn bench_json() {
 }
 
 fn bench_semver() {
+    use examples::semver;
     let v = "123432134.43213421.5432344-SNAPSHOT+some.build.id";
 
     let (d, ver) = bench_fun(10000, || {
@@ -142,7 +145,7 @@ fn info<'a>(name: &'a str, com: &'a str) -> Item<'a> {
     Item::Info { name, com }
 }
 
-fn syntax_error<'a>(description: &'a str) -> Item<'a> {
+fn syntax_error(description: &str) -> Item<'_> {
     Item::SyntaxError {description}
 }
 

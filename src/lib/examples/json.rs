@@ -17,7 +17,7 @@ fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
 }
 
 fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
-    let unicode = right(item!('u'), times(4, item_if(|c: char| c.is_digit(16))));
+    let unicode = right(item!('u'), times(4, item_if(|c: char| c.is_ascii_hexdigit())));
     let escaped = right(item!('\\'), or_diff(unicode, item_if(|c: char| "\"\\/bfnrt".contains(c))));
     let valid_char = item_if(|c: char| c != '"' && c != '\\' && !c.is_control());
     let not_end = or_diff(valid_char, escaped);

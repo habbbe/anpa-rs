@@ -100,6 +100,17 @@ macro_rules! or {
     };
 }
 
+/// Variadic version of `or_no_partial`.
+///
+/// ### Arguments
+/// * `p...` - any number of parsers.
+#[macro_export]
+macro_rules! or_no_partial {
+    ($($p:expr),* $(,)?) => {
+        variadic!($crate::combinators::or_no_partial, $($p),*)
+    };
+}
+
 /// Variadic version of `or_diff`.
 ///
 /// ### Arguments

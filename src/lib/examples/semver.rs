@@ -18,7 +18,7 @@ impl<T> AnpaVersion<T> {
 /// Parse a SemVer string from `text`. General version that infer the `pre_release` and `build` type
 /// by means of `From<&str>`.
 pub fn parse_general<'a, O: From<&'a str>>(text: &'a str) -> Option<AnpaVersion<O>> {
-    crate::core::parse(semver(), text.into()).result
+    crate::core::parse(semver(), text).result
 }
 
 /// Parse a SemVer string from `text`. `pre_release` and `build` will be stored as slices
@@ -115,8 +115,7 @@ fn digit(c: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::semver::parse;
+    use crate::examples::semver::parse;
 
     #[test]
     fn version_no_snapshot() {
