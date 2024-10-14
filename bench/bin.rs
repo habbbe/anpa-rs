@@ -109,8 +109,6 @@ fn bench_hubb_handrolled() {
 }
 
 fn bench_json() {
-    use examples::json;
-
     let mut string = String::new();
     let _ = read_file("test.json").read_to_string(&mut string);
     let p = json::object_parser::<&str>();
@@ -125,7 +123,7 @@ fn bench_json() {
 }
 
 fn bench_semver() {
-    use examples::semver;
+    use semver;
     let v = "123432134.43213421.5432344-SNAPSHOT+some.build.id";
 
     let (d, ver) = bench_fun(10000, || {

@@ -54,6 +54,7 @@ pub trait ParserExt<I, O, S>: Parser<I, O, S> {
     /// Combine this parser with another, while ignoring the result of the latter.
     fn left<O2, P: Parser<I, O2, S>>(self, p: P) -> impl Parser<I, O, S>;
 
+    #[cfg(feature = "std")]
     /// Add some simple debug information to this parser.
     fn debug(self, name: &'static str) -> impl Parser<I, O, S>;
 }
@@ -103,7 +104,10 @@ impl<I, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
         left(self, p)
     }
 
+    #[cfg(feature = "std")]
     fn debug(self, name: &'static str) -> impl Parser<I, O, S> {
+        use std::println;
+
         create_parser!(s, {
             let res = self(s);
             match res {

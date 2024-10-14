@@ -1,4 +1,4 @@
-use std::ops::{Add, Sub, Mul, Div};
+use core::ops::{Add, Sub, Mul, Div};
 
 use crate::{asciilike::AsciiLike, combinators::{or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 

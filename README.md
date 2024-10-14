@@ -5,7 +5,8 @@ A generic monadic parser combinator library based on [anpa](https://github.com/h
 ### Features
 
 All parsers and combinators, with few exceptions (`many_to_vec`, `many_to_map`,
-`many_to_map_ordered`), are allocation free.
+`many_to_map_ordered`), are allocation free and can be used with `no_std` when disabling
+the default features of this crate.
 
 ### Examples
 
@@ -13,6 +14,8 @@ See the provided test parsers
 - [JSON parser](src/lib/json.rs): JSON DOM parser. It's only ~30 LOC and gives a good
   overview on how to use the library, including recursive parsers.
 - [SemVer Parser](src/lib/semver.rs): a parser for the SemVer format
+
+These parsers can be enabled using the features "json" and "semver" respectively.
 
 ### Dependencies
 

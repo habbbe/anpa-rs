@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, vec::Vec};
 
 use crate::{combinators::*, core::{ParserExt, ParserInto, StrParser}, number::float, parsers::*};
 

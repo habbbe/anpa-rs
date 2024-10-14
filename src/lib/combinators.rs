@@ -1,4 +1,5 @@
-use std::{collections::{BTreeMap, HashMap}, hash::Hash};
+#[cfg(feature = "std")]
+use std::{collections::{BTreeMap, HashMap}, vec::Vec, hash::Hash};
 
 use crate::{slicelike::SliceLike, core::{Parser, AnpaState}, parsers::success};
 
@@ -399,6 +400,7 @@ pub fn fold<I, O, O2, S, R>(p: impl Parser<I, O, S>,
     })
 }
 
+#[cfg(feature = "std")]
 /// Apply a parser until it fails and store the results in a `Vec`.
 ///
 /// ### Arguments
@@ -414,6 +416,7 @@ pub fn many_to_vec<I, O, O2, S>(p: impl Parser<I, O, S>,
     fold(p, Vec::new, |v, x| v.push(x), allow_empty, separator)
 }
 
+#[cfg(feature = "std")]
 /// Apply a parser until it fails and store the results in a `HashMap`.
 /// The parser `p` must have a result type `(K, V)`, where the key `K: Hash + Eq`.
 ///
@@ -430,6 +433,7 @@ pub fn many_to_map<I, K: Hash + Eq, V, O2, S>(p: impl Parser<I, (K, V), S>,
     fold(p, HashMap::new, |m, (k, v)| { m.insert(k, v); }, allow_empty, separator)
 }
 
+#[cfg(feature = "std")]
 /// Apply a parser until it fails and store the results in a `BTreeMap`.
 /// The parser `p` must have a result type `(K, V)`, where the key `K: Ord`.
 /// This might give better performance than `many_to_map`.
@@ -494,7 +498,7 @@ pub fn greedy_or<I: SliceLike, S, O>(p1: impl Parser<I, O, S>,
 
 #[cfg(test)]
 mod tests {
-    use crate::{combinators::{many, many_to_vec, greedy_or, middle, no_separator, times}, core::*, number::integer, parsers::{empty, item, item_while, seq}};
+    use crate::{combinators::{many, greedy_or, middle, no_separator, times}, core::*, number::integer, parsers::{empty, item, item_while, seq}};
 
     use super::{fold, or, left};
 
@@ -503,8 +507,11 @@ mod tests {
         or(left(num, item(',')), left(num, empty()))
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn many_nums_vec() {
+        use std::vec;
+        use crate::combinators::many_to_vec;
         let p = many_to_vec(num_parser(), true, no_separator());
         let res = parse(p, "1,2,3,4").result.unwrap();
         assert_eq!(res, vec![1,2,3,4]);

@@ -23,5 +23,13 @@ name = "anpa"
 path = "src/lib/lib.rs"
 
 [[bin]]
-name = "anpa_test"
+name = "anpa_bench"
 path = "bench/bin.rs"
+required-features = ["build_bench"]
+
+[features]
+default = ["std"]
+std = []
+json = ["std"]
+semver = []
+build_bench = ["json", "semver"]
