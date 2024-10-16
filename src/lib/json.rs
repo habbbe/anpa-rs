@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, vec::Vec};
 
-use crate::{combinators::*, core::{ParserExt, ParserInto, StrParser}, number::float, parsers::*};
+use crate::{combinators::*, core::{ParserExt, ParserInto, StrParser}, number::float, parsers::*, whitespace::StrWhitespaceIgnore};
 
 #[derive(Debug)]
 pub enum JsonValue<StringType> {
@@ -13,7 +13,7 @@ pub enum JsonValue<StringType> {
 }
 
 fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
-    right(item_while(|c: char| c.is_whitespace()), p)
+    right(elem!(StrWhitespaceIgnore()), p)
 }
 
 fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {

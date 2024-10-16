@@ -116,7 +116,7 @@ fn bench_json() {
 
     let (d, _) = bench_fun(10000, || {
         for _ in 0..10 {
-            parse(p, &string);
+            parse(p, &string).result.unwrap();
         }
     });
 

@@ -54,7 +54,6 @@ impl<'a> Needle<&'a str, char> for char {
 }
 
 impl<'a, S: Borrow<str> + Copy> Needle<&'a str, &'a str> for S {
-
     fn find_in(&self, haystack: &str) -> Option<(NeedleLen, usize)> {
         haystack.find(self.borrow())
             .map(|pos| (self.borrow().len(), pos))

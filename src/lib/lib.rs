@@ -12,6 +12,7 @@ pub mod combinators;
 pub mod asciilike;
 pub mod slicelike;
 pub mod needle;
+pub mod whitespace;
 
 #[cfg(feature = "json")]
 pub mod json;

@@ -9,6 +9,8 @@ pub trait AsciiLike: Copy + PartialEq {
 
     /// Check if two items are equal.
     fn equal(self, other: Self::PlainType) -> bool;
+
+    fn is_whitespace_ascii(self) -> bool;
 }
 
 impl AsciiLike for char {
@@ -24,6 +26,10 @@ impl AsciiLike for char {
     #[inline(always)]
     fn equal(self, other: Self::PlainType) -> bool {
         self == other
+    }
+
+    fn is_whitespace_ascii(self) -> bool {
+        self.is_ascii_whitespace()
     }
 }
 
@@ -41,6 +47,10 @@ impl AsciiLike for &char {
     fn equal(self, other: Self::PlainType) -> bool {
         *self == other
     }
+
+    fn is_whitespace_ascii(self) -> bool {
+        self.is_ascii_whitespace()
+    }
 }
 
 impl AsciiLike for u8 {
@@ -57,6 +67,10 @@ impl AsciiLike for u8 {
     fn equal(self, other: Self::PlainType) -> bool {
         self == other
     }
+
+    fn is_whitespace_ascii(self) -> bool {
+        self.is_ascii_whitespace()
+    }
 }
 
 impl AsciiLike for &u8 {
@@ -72,5 +86,9 @@ impl AsciiLike for &u8 {
     #[inline(always)]
     fn equal(self, other: Self::PlainType) -> bool {
         (*self).equal(other)
+    }
+
+    fn is_whitespace_ascii(self) -> bool {
+        self.is_ascii_whitespace()
     }
 }
