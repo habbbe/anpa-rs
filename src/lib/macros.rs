@@ -156,7 +156,7 @@ macro_rules! right {
 macro_rules! elem {
     ($elem:expr) => {
         create_parser!(s, {
-            $crate::searchee::Searchee::remove_prefix(&$elem, s.input).map(|(res, rest)| {
+            $crate::needle::Needle::remove_prefix(&$elem, s.input).map(|(res, rest)| {
                 s.input = rest;
                 res
             })
@@ -176,7 +176,7 @@ macro_rules! elem {
 macro_rules! until {
     ($elem:expr) => {
         create_parser!(s, {
-            let (size, index) = $crate::searchee::Searchee::find_in(&$elem, s.input)?;
+            let (size, index) = $crate::needle::Needle::find_in(&$elem, s.input)?;
             let res = $crate::slicelike::SliceLike::slice_to(s.input, index);
             s.input = $crate::slicelike::SliceLike::slice_from(s.input, index + size);
             Some(res)

@@ -498,7 +498,7 @@ pub fn greedy_or<I: SliceLike, S, O>(p1: impl Parser<I, O, S>,
 
 #[cfg(test)]
 mod tests {
-    use crate::{combinators::{greedy_or, many, middle, no_separator, times}, core::*, number::integer, parsers::{elem, empty, item_while}};
+    use crate::{combinators::{greedy_or, many, middle, no_separator, not_empty, times}, core::*, number::integer, parsers::{elem, empty, item_while}};
 
     use super::{fold, or, left};
 
@@ -559,7 +559,7 @@ mod tests {
     #[test]
     fn recursive_parens() {
         fn in_parens<'a>() -> impl StrParser<'a> {
-            defer_parser!(or(item_while(|c: char| c.is_alphanumeric()), middle(elem('('), in_parens(), elem(')'))))
+            defer_parser!(or(not_empty(item_while(|c: char| c.is_alphanumeric())), middle(elem('('), in_parens(), elem(')'))))
         }
 
         let x = "(((((((((sought)))))))))";

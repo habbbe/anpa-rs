@@ -1,9 +1,9 @@
 use crate::combinators::{bind, right, left, filter, into_type, map_if, map};
 
 /// The state being passed around during parsing.
-pub struct AnpaState<'a, T, S> {
+pub struct AnpaState<'a, I, S> {
     /// The current state of the input under parse.
-    pub input: T,
+    pub input: I,
 
     /// The provided user state (if any).
     pub user_state: &'a mut S,

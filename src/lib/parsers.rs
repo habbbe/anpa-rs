@@ -1,4 +1,4 @@
-use crate::{core::Parser, searchee::Searchee, slicelike::SliceLike};
+use crate::{core::Parser, needle::Needle, slicelike::SliceLike};
 
 /// Create a parser that always succeeds.
 #[inline]
@@ -28,27 +28,27 @@ pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) ->
 
 /// Create a parser for matching the provided argument input via `==`.
 ///
-/// The element can be anything implementing the trait `Searchee` for the parser input.
+/// The element can be anything implementing the trait `Needle` for the parser input.
 ///
 /// ### Arguments
 /// * `needle` - the element to match
 #[inline]
-pub fn elem<O, I: SliceLike, S>(needle: impl Searchee<I, O>) -> impl Parser<I, O, S>{
+pub fn elem<O, I: Copy, S>(needle: impl Needle<I, O>) -> impl Parser<I, O, S>{
     elem!(needle)
 }
 
 /// Create a parser that parses while the items in the input matches the predicate.
+///
+/// This parser never fails, so if an empty parse should not be permitted, wrap it in
+/// a `not_empty` combinator.
 ///
 /// ### Arguments
 /// * `pred` - the predicate
 #[inline]
 pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I, S> {
     create_parser!(s, {
-        let idx = match s.input.slice_find_pred(|x| !pred(x)) {
-            None => s.input.slice_len(),
-            Some(0) => return None,
-            Some(n) => n
-        };
+        let idx = s.input.slice_find_pred(|x| !pred(x))
+            .unwrap_or(s.input.slice_len());
 
         let res;
         (res, s.input) = s.input.slice_split_at(idx);
@@ -61,7 +61,7 @@ pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy)
 /// ### Arguments
 /// * `search` - the element to search for
 #[inline]
-pub fn until<O, I: SliceLike, N: Searchee<I, O>, S>(needle: N) -> impl Parser<I, I, S> {
+pub fn until<O, I: SliceLike, N: Needle<I, O>, S>(needle: N) -> impl Parser<I, I, S> {
     until!(needle)
 }
 

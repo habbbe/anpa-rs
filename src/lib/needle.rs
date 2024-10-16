@@ -1,19 +1,19 @@
 use core::borrow::Borrow;
 
-pub type SearcheeLen = usize;
+pub type NeedleLen = usize;
 
 /// Trait for a type that can be sought after in the collection `Parent`.
-pub trait Searchee<Parent, Result>: Copy {
+pub trait Needle<Parent, Result>: Copy {
 
-    /// Find the index of the searchee in the provided haystack.
-    fn find_in(&self, haystack: Parent) -> Option<(SearcheeLen, usize)>;
+    /// Find the index of the needle in the provided haystack.
+    fn find_in(&self, haystack: Parent) -> Option<(NeedleLen, usize)>;
 
-    /// Remove the prefix described by this searchee from the haystack if present, and if so,
+    /// Remove the prefix described by this needle from the haystack if present, and if so,
     /// return it along with the rest of the haystack.
     fn remove_prefix(&self, haystack: Parent) -> Option<(Result, Parent)>;
 }
 
-impl<'a, T: PartialEq + Copy> Searchee<&'a [T], T> for T {
+impl<'a, T: PartialEq + Copy> Needle<&'a [T], T> for T {
     fn find_in(&self, haystack: &[T]) -> Option<(usize, usize)> {
         haystack.iter()
             .position(|x| x == self)
@@ -27,8 +27,8 @@ impl<'a, T: PartialEq + Copy> Searchee<&'a [T], T> for T {
     }
 }
 
-impl<'a, T: PartialEq + Copy, S: Borrow<[T]> + Copy> Searchee<&'a [T], &'a [T]> for S {
-    fn find_in(&self, haystack: &[T]) -> Option<(SearcheeLen, usize)> {
+impl<'a, T: PartialEq + Copy, S: Borrow<[T]> + Copy> Needle<&'a [T], &'a [T]> for S {
+    fn find_in(&self, haystack: &[T]) -> Option<(NeedleLen, usize)> {
         haystack.windows(self.borrow().len())
             .position(|w| w == self.borrow())
             .map(|pos| (self.borrow().len(), pos))
@@ -40,9 +40,9 @@ impl<'a, T: PartialEq + Copy, S: Borrow<[T]> + Copy> Searchee<&'a [T], &'a [T]> 
     }
 }
 
-impl<'a> Searchee<&'a str, char> for char {
+impl<'a> Needle<&'a str, char> for char {
     #[inline]
-    fn find_in(&self, haystack: &str) -> Option<(SearcheeLen, usize)> {
+    fn find_in(&self, haystack: &str) -> Option<(NeedleLen, usize)> {
         haystack.find(*self)
             .map(|pos| (self.len_utf8(), pos))
     }
@@ -53,9 +53,9 @@ impl<'a> Searchee<&'a str, char> for char {
     }
 }
 
-impl<'a, S: Borrow<str> + Copy> Searchee<&'a str, &'a str> for S {
+impl<'a, S: Borrow<str> + Copy> Needle<&'a str, &'a str> for S {
 
-    fn find_in(&self, haystack: &str) -> Option<(SearcheeLen, usize)> {
+    fn find_in(&self, haystack: &str) -> Option<(NeedleLen, usize)> {
         haystack.find(self.borrow())
             .map(|pos| (self.borrow().len(), pos))
     }

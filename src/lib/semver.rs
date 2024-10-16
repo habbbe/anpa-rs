@@ -81,7 +81,7 @@ fn build_identifier<'a>() -> impl StrParser<'a> {
 
 #[inline]
 fn alphanumeric_identifier<'a>() -> impl StrParser<'a> {
-    get_parsed(succeed(digits()).right(identifier_characters()))
+    get_parsed(digits().right(identifier_characters()))
 }
 
 #[inline]

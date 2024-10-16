@@ -4,6 +4,7 @@ use anpa::combinators::{*};
 use anpa::parsers::{*};
 
 use std::fs::File;
+use std::hint::black_box;
 use std::io::{self, BufRead, Read};
 use std::process::exit;
 use std::time::{Duration, Instant};
@@ -109,7 +110,7 @@ fn bench_hubb_handrolled() {
 }
 
 fn bench_json() {
-    let mut string = String::new();
+    let mut string = black_box(String::new());
     let _ = read_file("test.json").read_to_string(&mut string);
     let p = json::object_parser::<&str>();
 
@@ -124,7 +125,7 @@ fn bench_json() {
 
 fn bench_semver() {
     use semver;
-    let v = "123432134.43213421.5432344-SNAPSHOT+some.build.id";
+    let v = black_box("123432134.43213421.5432344-SNAPSHOT+some.build.id");
 
     let (d, ver) = bench_fun(10000, || {
         for _ in 0..300 {

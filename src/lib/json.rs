@@ -13,7 +13,7 @@ pub enum JsonValue<StringType> {
 }
 
 fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
-    right(succeed(item_while(|c: char| c.is_whitespace())), p)
+    right(item_while(|c: char| c.is_whitespace()), p)
 }
 
 fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
