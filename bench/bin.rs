@@ -53,16 +53,16 @@ fn bench_fun<T>(mut n: usize, mut f: impl FnMut() -> T) -> (Duration, T) {
 }
 
 fn bench_hubb() {
-    let parse_name = until_item('=');
+    let parse_name = until('=');
     let parse_cmd = not_empty(rest());
-    let parse_action = right!(seq("Com:"), lift!(action, parse_name, parse_cmd));
-    let parse_info = right!(seq("Info:"), lift!(info, parse_name, parse_cmd));
-    let parse_separator = seq("Separator").map(|_| Item::Separator);
-    let parse_space = seq("Space").map(|_| Item::Space);
+    let parse_action = right!(elem("Com:"), lift!(action, parse_name, parse_cmd));
+    let parse_info = right!(elem("Info:"), lift!(info, parse_name, parse_cmd));
+    let parse_separator = elem("Separator").map(|_| Item::Separator);
+    let parse_space = elem("Space").map(|_| Item::Space);
     let parse_error = lift!(syntax_error, rest());
     let parse_item = or!(parse_action, parse_info, parse_separator, parse_space, parse_error);
     let item_to_state = lift_to_state(|x: &mut Vec<_>, y| x.push(y), parse_item);
-    let ignore = or_diff!(empty(), item('#'));
+    let ignore = or_diff!(empty(), elem('#'));
     let state_parser = or_diff!(ignore, item_to_state);
 
     let lines: Vec<String> = read_file("hubb").lines().map(Result::unwrap).collect();

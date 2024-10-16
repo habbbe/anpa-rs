@@ -11,6 +11,7 @@ pub mod core;
 pub mod combinators;
 pub mod asciilike;
 pub mod slicelike;
+pub mod searchee;
 
 #[cfg(feature = "json")]
 pub mod json;
