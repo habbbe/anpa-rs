@@ -19,11 +19,11 @@ fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
 }
 
 fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
-    let unicode = right(elem!('u'), times(4, item_if(|c: char| c.is_ascii_hexdigit())));
-    let escaped = right(elem!('\\'), or_diff(unicode, item_if(|c: char| "\"\\/bfnrt".contains(c))));
+    let unicode = right(skip_inline!('u'), times(4, item_if(|c: char| c.is_ascii_hexdigit())));
+    let escaped = right(skip_inline!('\\'), or_diff(unicode, item_if(|c: char| "\"\\/bfnrt".contains(c))));
     let valid_char = item_if(|c: char| c != '"' && c != '\\' && !c.is_control());
     let not_end = or_diff(valid_char, escaped);
-    middle(elem!('"'), many(not_end, true, no_separator()), elem!('"')).into_type()
+    middle(skip_inline!('"'), many(not_end, true, no_separator()), skip_inline!('"')).into_type()
 }
 
 fn json_string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, JsonValue<T>> {
@@ -35,11 +35,11 @@ fn number_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
 }
 
 fn bool_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
-    or(elem!("true").map(|_| JsonValue::Bool(true)), elem!("false").map(|_| JsonValue::Bool(false)))
+    or(skip_inline!("true").map(|_| JsonValue::Bool(true)), skip_inline!("false").map(|_| JsonValue::Bool(false)))
 }
 
 fn null_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
-    elem!("null").map(|_| JsonValue::Null)
+    skip_inline!("null").map(|_| JsonValue::Null)
 }
 
 /// Get a JSON parser that parses any JSON value. The type used for strings will be inferred
@@ -62,19 +62,19 @@ pub fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValu
 /// ```
 pub fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
     let pair_parser = tuplify!(
-        left(eat(string_parser()), eat(elem!(':'))),
+        left(eat(string_parser()), eat(skip_inline!(':'))),
         value_parser());
     middle(
-        elem!('{'),
-        many_to_map_ordered(pair_parser, true, separator(eat(elem!(',')), false)),
-        eat(elem!('}'))).map(JsonValue::Dic)
+        skip_inline!('{'),
+        many_to_map_ordered(pair_parser, true, separator(eat(skip_inline!(',')), false)),
+        eat(skip_inline!('}'))).map(JsonValue::Dic)
 }
 
 /// Get a JSON parser that parses a JSON array. The type used for strings will be inferred
 /// from the context via `From<&str>`. For examples, see `object_parser`.
 pub fn array_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
     middle(
-        elem!('['),
-        many_to_vec(value_parser(), true, separator(eat(elem!(',')), false)),
-        eat(elem!(']'))).map(JsonValue::Arr)
+        skip_inline!('['),
+        many_to_vec(value_parser(), true, separator(eat(skip_inline!(',')), false)),
+        eat(skip_inline!(']'))).map(JsonValue::Arr)
 }

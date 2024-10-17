@@ -144,19 +144,20 @@ macro_rules! right {
     };
 }
 
-/// Alternative to the `elem` parser that inlines the argument into the parser. This
-/// can give better performance and/or smaller binary size, or the opposite. Try it and
-/// don't forget to measure!
+/// Alternative to the `elem` parser that inlines the argument into the parser.
+///
+/// This can give better performance and/or smaller binary size, or the opposite.
+/// Try it and don't forget to measure!
 ///
 /// This macro is likely only useful when passing a literal as argument.
 ///
 /// ### Arguments
-/// * `elem` - the element to parse.
+/// * `prefix` - the prefix to parse.
 #[macro_export]
 macro_rules! elem {
-    ($elem:expr) => {
+    ($prefix:expr) => {
         create_parser!(s, {
-            $crate::prefix::Prefix::remove_prefix(&$elem, s.input).map(|(res, rest)| {
+            $crate::prefix::Prefix::remove_prefix(&$prefix, s.input).map(|(res, rest)| {
                 s.input = rest;
                 res
             })
@@ -164,19 +165,47 @@ macro_rules! elem {
     }
 }
 
-/// Alternative to the `until` parser that inlines the argument into the parser. This
-/// can give better performance and/or smaller binary size, or the opposite. Try it and
-/// don't forget to measure!
+/// Convenience parser for parsing a prefix without returning a result.
 ///
-/// This macro is likely only useful when passing a literal as argument.
+/// This is currently only implemented for `&str` and `&[T]` inputs.
+///
+/// ### Arguments
+/// * `prefix` - the prefix to parse.
+#[macro_export]
+macro_rules! skip {
+    ($prefix:expr) => {
+        $crate::parsers::elem($crate::prefix::Ignore($prefix))
+    }
+}
+
+/// Convenience macro for parsing a prefix without returning a result. Inline version.
+///
+/// This can give better performance and/or smaller binary size, or the opposite.
+/// Try it and don't forget to measure!
 ///
 /// ### Arguments
 /// * `elem` - the element to parse.
 #[macro_export]
-macro_rules! until {
+macro_rules! skip_inline {
     ($elem:expr) => {
+        elem!($crate::prefix::Ignore($elem))
+    }
+}
+
+/// Alternative to the `until` parser that inlines the argument into the parser.
+///
+/// This can give better performance and/or smaller binary size, or the opposite.
+/// Try it and don't forget to measure!
+///
+/// This macro is likely only useful when passing a literal as argument.
+///
+/// ### Arguments
+/// * `needle` - the element to parse.
+#[macro_export]
+macro_rules! until {
+    ($needle:expr) => {
         create_parser!(s, {
-            let (size, index) = $crate::needle::Needle::find_in(&$elem, s.input)?;
+            let (size, index) = $crate::needle::Needle::find_in(&$needle, s.input)?;
             let res = $crate::slicelike::SliceLike::slice_to(s.input, index);
             s.input = $crate::slicelike::SliceLike::slice_from(s.input, index + size);
             Some(res)

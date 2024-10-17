@@ -63,7 +63,7 @@ pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy)
 /// The argument can be anything implementing the `Needle` trait for the parser input.
 ///
 /// ### Arguments
-/// * `search` - the element to search for
+/// * `needle` - the element to search for
 #[inline]
 pub fn until<O, I: SliceLike, N: Needle<I, O>, S>(needle: N) -> impl Parser<I, I, S> {
     until!(needle)

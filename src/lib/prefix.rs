@@ -35,3 +35,33 @@ impl<'a, S: Borrow<str> + Copy> Prefix<&'a str, &'a str> for S {
             .filter(|(prefix, _)| *prefix == self.borrow())
     }
 }
+
+/// Wrapper class to be used for prefix parsers that do not return any result.
+#[derive(Clone, Copy)]
+pub struct Ignore<T>(pub T);
+
+impl<'a, T: PartialEq + Copy> Prefix<&'a [T], ()> for Ignore<T> {
+    fn remove_prefix(&self, haystack: &'a [T]) -> Option<((), &'a [T])> {
+        haystack.split_first()
+            .filter(|x| x.0 == &self.0)
+            .map(|x| ((), x.1))
+    }
+}
+
+impl<'a, T: PartialEq + Copy> Prefix<&'a [T], ()> for Ignore<&[T]> {
+    fn remove_prefix(&self, haystack: &'a [T]) -> Option<((), &'a [T])> {
+        haystack.strip_prefix(self.0).map(|rest| ((), rest))
+    }
+}
+
+impl<'a> Prefix<&'a str, ()> for Ignore<char> {
+    fn remove_prefix(&self, haystack: &'a str) -> Option<((), &'a str)> {
+        haystack.strip_prefix(self.0).map(|rest| ((), rest))
+    }
+}
+
+impl<'a> Prefix<&'a str, ()> for Ignore<&str> {
+    fn remove_prefix(&self, haystack: &'a str) -> Option<((), &'a str)> {
+        haystack.strip_prefix(self.0).map(|rest| ((), rest))
+     }
+}
