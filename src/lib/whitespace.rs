@@ -41,23 +41,23 @@ impl AsciiWhitespace {
 }
 
 impl<'a, A: AsciiLike + Copy> Prefix<&'a [A], &'a [A]> for AsciiWhitespace {
-    fn pop_prefix(&self, haystack: &'a [A]) -> Option<(&'a [A], &'a [A])> {
+    fn take_prefix(&self, haystack: &'a [A]) -> Option<(&'a [A], &'a [A])> {
         let idx = Self::count_whitespace(haystack);
         Some(haystack.split_at(idx))
     }
 
-    fn drop_prefix(&self, haystack: &'a [A]) -> Option<&'a [A]> {
+    fn skip_prefix(&self, haystack: &'a [A]) -> Option<&'a [A]> {
         Some(&haystack[Self::count_whitespace(haystack)..])
     }
 }
 
 impl<'a> Prefix<&'a str, &'a str> for AsciiWhitespace {
-    fn pop_prefix(&self, haystack: &'a str) -> Option<(&'a str, &'a str)> {
+    fn take_prefix(&self, haystack: &'a str) -> Option<(&'a str, &'a str)> {
         let trimmed = haystack.trim_ascii_start();
         Some((&haystack[..haystack.len() - trimmed.len()], trimmed))
     }
 
-    fn drop_prefix(&self, haystack: &'a str) -> Option<&'a str> {
+    fn skip_prefix(&self, haystack: &'a str) -> Option<&'a str> {
         Some(haystack.trim_ascii_start())
     }
 }

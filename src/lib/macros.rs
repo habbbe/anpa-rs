@@ -157,7 +157,7 @@ macro_rules! right {
 macro_rules! take {
     ($prefix:expr) => {
         create_parser!(s, {
-            $crate::prefix::Prefix::pop_prefix(&$prefix, s.input).map(|(res, rest)| {
+            $crate::prefix::Prefix::take_prefix(&$prefix, s.input).map(|(res, rest)| {
                 s.input = rest;
                 res
             })
@@ -178,7 +178,7 @@ macro_rules! take {
 macro_rules! skip {
     ($prefix:expr) => {
         create_parser!(s, {
-            s.input = $crate::prefix::Prefix::drop_prefix(&$prefix, s.input)?;
+            s.input = $crate::prefix::Prefix::skip_prefix(&$prefix, s.input)?;
             Some(())
         })
     }
