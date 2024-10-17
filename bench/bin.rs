@@ -120,7 +120,7 @@ fn bench_json() {
         }
     });
 
-    println!("JSON: in {}us", d.as_nanos() as f64 / 1000.0);
+    println!("anpa::json: in {}us", d.as_nanos() as f64 / 1000.0);
 }
 
 fn bench_semver() {
