@@ -15,7 +15,7 @@ macro_rules! create_parser {
 /// ```ignore
 /// /// Can parse e.g. "(((something)))"
 /// fn in_parens<'a, S>() -> impl StrParser<'a> {
-///     defer_parser!(or(item_while(|c: char| c.is_alphanumeric()), middle(elem('('), in_parens(), elem(')'))))
+///     defer_parser!(or(item_while(|c: char| c.is_alphanumeric()), middle(take('('), in_parens(), take(')'))))
 /// }
 /// ```
 #[macro_export]
@@ -144,7 +144,7 @@ macro_rules! right {
     };
 }
 
-/// Alternative to the `elem` parser that inlines the argument into the parser.
+/// Alternative to the `take` parser that inlines the argument into the parser.
 ///
 /// This can give better performance and/or smaller binary size, or the opposite.
 /// Try it and don't forget to measure!
@@ -154,7 +154,7 @@ macro_rules! right {
 /// ### Arguments
 /// * `prefix` - the prefix to parse.
 #[macro_export]
-macro_rules! elem {
+macro_rules! take {
     ($prefix:expr) => {
         create_parser!(s, {
             $crate::prefix::Prefix::pop_prefix(&$prefix, s.input).map(|(res, rest)| {
@@ -191,7 +191,7 @@ macro_rules! skip {
 /// This macro is likely only useful when passing a literal as argument.
 ///
 /// ### Arguments
-/// * `needle` - the element to parse.
+/// * `needle` - the element to search for.
 #[macro_export]
 macro_rules! until {
     ($needle:expr) => {

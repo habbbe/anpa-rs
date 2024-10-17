@@ -33,8 +33,8 @@ pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) ->
 /// ### Arguments
 /// * `prefix` - the prefix to match
 #[inline]
-pub fn elem<O, I: Copy, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, S>{
-    elem!(prefix)
+pub fn take<O, I: Copy, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, S>{
+    take!(prefix)
 }
 
 /// Create a parser for matching the provided prefix via `==`, and ignoring the result.

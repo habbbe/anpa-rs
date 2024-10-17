@@ -498,13 +498,13 @@ pub fn greedy_or<I: SliceLike, S, O>(p1: impl Parser<I, O, S>,
 
 #[cfg(test)]
 mod tests {
-    use crate::{combinators::{greedy_or, many, middle, no_separator, not_empty, times}, core::*, number::integer, parsers::{elem, empty, item_while}};
+    use crate::{combinators::{greedy_or, many, middle, no_separator, not_empty, times}, core::*, number::integer, parsers::{take, empty, item_while}};
 
     use super::{fold, or, left};
 
     fn num_parser() -> impl StrParser<'static, u32> {
         let num = integer();
-        or(left(num, elem(',')), left(num, empty()))
+        or(left(num, take(',')), left(num, empty()))
     }
 
     #[cfg(feature = "std")]
@@ -547,7 +547,7 @@ mod tests {
 
     #[test]
     fn times_test() {
-        let p = times(4, left(elem('1'), elem('2')));
+        let p = times(4, left(take('1'), take('2')));
         let res = parse(p, "12121212End");
         assert_eq!(res.result.unwrap(), "12121212");
         assert_eq!(res.state, "End");
@@ -559,7 +559,7 @@ mod tests {
     #[test]
     fn recursive_parens() {
         fn in_parens<'a>() -> impl StrParser<'a> {
-            defer_parser!(or(not_empty(item_while(|c: char| c.is_alphanumeric())), middle(elem('('), in_parens(), elem(')'))))
+            defer_parser!(or(not_empty(item_while(|c: char| c.is_alphanumeric())), middle(take('('), in_parens(), take(')'))))
         }
 
         let x = "(((((((((sought)))))))))";
@@ -574,7 +574,7 @@ mod tests {
         let x = "12344a";
 
         let digit_parser = item_while(|c: char| c.is_ascii_digit());
-        let seq_parser = elem("1234");
+        let seq_parser = take("1234");
 
         let greedy_parser = greedy_or(seq_parser, digit_parser);
 
@@ -582,9 +582,9 @@ mod tests {
         assert_eq!(res.result.unwrap(), "12344");
         assert_eq!(res.state, "a");
 
-        let smaller_seq_parser = elem("123");
+        let smaller_seq_parser = take("123");
 
-        let full_parser = digit_parser.right(elem("a"));
+        let full_parser = digit_parser.right(take("a"));
 
         let greedy_parser = greedy_or!(smaller_seq_parser, full_parser, seq_parser);
         let res = parse(greedy_parser, x);

@@ -21,7 +21,7 @@ impl<'a> TrimmableAscii for &'a str {
 /// Create a parser that parses and returns ASCII whitespace.
 #[inline]
 pub fn ascii_whitespace<I: TrimmableAscii, S>() -> impl Parser<I, I, S> {
-    elem!(I::prefix())
+    take!(I::prefix())
 }
 
 /// Create a parser that parses and ignores ASCII whitespace.
