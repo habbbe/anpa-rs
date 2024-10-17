@@ -1,6 +1,6 @@
 use core::ops::{Add, Sub, Mul, Div};
 
-use crate::{asciilike::AsciiLike, combinators::{or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
+use crate::{charlike::CharLike, combinators::{or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 
 /// Trait for types that act like numbers.
 pub trait NumLike:
@@ -66,7 +66,7 @@ impl_FloatLike!(f32, f64);
 #[inline(always)]
 fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: bool,
                     O: NumLike,
-                    A: AsciiLike,
+                    A: CharLike,
                     I: SliceLike<RefItem = A>,
                     S>() -> impl Parser<I, (O, usize, bool), S> {
     create_parser!(s, {
@@ -113,18 +113,18 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
 
         let is_negative = if NEG {
             let c = iter.next()?;
-            if c.equal(A::MINUS) {
+            if c.as_char() == '-' {
                 true
             } else {
                 // We don't care about checking the result here, since a single digit can never fail.
-                consume(c.as_digit()?, false, false);
+                consume(c.as_char().to_digit(10)? as u8, false, false);
                 false
             }
         } else {
             false
         };
 
-        for digit in iter.map_while(A::as_digit) {
+        for digit in iter.map_while(|d| d.as_char().to_digit(10).map(|x| x as u8)) {
             consume(digit, is_negative, CHECKED)?;
         }
 
@@ -140,7 +140,7 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
 /// Parse an unsigned integer. The type of the integer will be inferred from the context.
 #[inline]
 pub fn integer<O: NumLike,
-               A: AsciiLike,
+               A: CharLike,
                I: SliceLike<RefItem = A>,
                S>() -> impl Parser<I, O, S> {
     integer_internal::<false, false, false,_,_,_,_>().map(|(n, _, _)| n)
@@ -150,7 +150,7 @@ pub fn integer<O: NumLike,
 /// This parser will fail if the result does not fit in the inferred integer type.
 #[inline]
 pub fn integer_checked<O: NumLike,
-                       A: AsciiLike,
+                       A: CharLike,
                        I: SliceLike<RefItem = A>,
                        S>() -> impl Parser<I, O, S> {
     integer_internal::<true, false, false,_,_,_,_>().map(|(n, _, _)| n)
@@ -159,7 +159,7 @@ pub fn integer_checked<O: NumLike,
 /// Parse an signed integer. The type of the integer will be inferred from the context.
 #[inline]
 pub fn integer_signed<O: NumLike,
-                      A: AsciiLike,
+                      A: CharLike,
                       I: SliceLike<RefItem = A>,
                       S>() -> impl Parser<I, O, S> {
     integer_internal::<false, true, false,_,_,_,_>().map(|(n, _, _)| n)
@@ -169,7 +169,7 @@ pub fn integer_signed<O: NumLike,
 /// This parser will fail if the result does not fit in the inferred integer type.
 #[inline]
 pub fn integer_signed_checked<O: NumLike,
-                              A: AsciiLike,
+                              A: CharLike,
                               I: SliceLike<RefItem = A>,
                               S>() -> impl Parser<I, O, S> {
     integer_internal::<true, true, false,_,_,_,_>().map(|(n, _, _)| n)
@@ -178,13 +178,13 @@ pub fn integer_signed_checked<O: NumLike,
 #[inline(always)]
 fn float_internal<const CHECKED: bool,
                   O: FloatLike,
-                  A: AsciiLike,
+                  A: CharLike,
                   I: SliceLike<RefItem = A>,
                   S>() -> impl Parser<I, O, S> {
     // First parse a possibly negative signed integer
     integer_internal::<CHECKED, true, false,_,_,_,_>().bind(|(n, _, is_neg)| {
         // Then parse a period followed by an unsigned integer.
-        let dec = right(item_if(|c: I::RefItem| c.equal(A::PERIOD)),
+        let dec = right(item_if(|c: I::RefItem| c.as_char() == '.'),
                                               integer_internal::<CHECKED,false,true,_,_,_,_>())
             .map(move |(dec, div, _)|
                 O::cast_isize(n) + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));
@@ -196,7 +196,7 @@ fn float_internal<const CHECKED: bool,
 /// This parser is incomplete, in that it will attempt to parse the float as
 /// `isize.usize`, and if the parsed number does not fit within those types, it will panic.
 #[inline]
-pub fn float<O: FloatLike, A: AsciiLike, I: SliceLike<RefItem = A>, S>() -> impl Parser<I, O, S> {
+pub fn float<O: FloatLike, A: CharLike, I: SliceLike<RefItem = A>, S>() -> impl Parser<I, O, S> {
     float_internal::<false,_,_,_,_>()
 }
 
@@ -205,7 +205,7 @@ pub fn float<O: FloatLike, A: AsciiLike, I: SliceLike<RefItem = A>, S>() -> impl
 /// `isize.usize`, and if the parsed number does not fit within those types, it will fail.
 #[inline]
 pub fn float_checked<O: FloatLike,
-                     A: AsciiLike,
+                     A: CharLike,
                      I: SliceLike<RefItem = A>,
                      S>() -> impl Parser<I, O, S> {
     float_internal::<true,_,_,_,_>()

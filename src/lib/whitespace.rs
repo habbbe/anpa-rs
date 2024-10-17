@@ -1,4 +1,4 @@
-use crate::{asciilike::AsciiLike, core::Parser, prefix::Prefix};
+use crate::{charlike::CharLike, core::Parser, prefix::Prefix};
 
 /// Trait for inputs that can be trimmed, i.e. having ASCII whitespace removed
 /// from the start.
@@ -6,13 +6,13 @@ pub trait TrimmableAscii: Copy {
     fn prefix() -> impl Prefix<Self, Self>;
 }
 
-impl<'a, A: AsciiLike> TrimmableAscii for &'a [A] {
+impl<A: CharLike> TrimmableAscii for &[A] {
     fn prefix() -> impl Prefix<Self, Self> {
         AsciiWhitespace()
     }
 }
 
-impl<'a> TrimmableAscii for &'a str {
+impl TrimmableAscii for &str {
     fn prefix() -> impl Prefix<Self, Self> {
         AsciiWhitespace()
     }
@@ -35,12 +35,12 @@ pub fn skip_ascii_whitespace<I: TrimmableAscii, S>() -> impl Parser<I, (), S> {
 pub struct AsciiWhitespace();
 
 impl AsciiWhitespace {
-    fn count_whitespace<A: AsciiLike>(slice: &[A]) -> usize {
-        slice.iter().position(|a| !a.is_whitespace_ascii()).unwrap_or(slice.len())
+    fn count_whitespace<A: CharLike>(slice: &[A]) -> usize {
+        slice.iter().position(|a| !a.as_char().is_ascii_whitespace()).unwrap_or(slice.len())
     }
 }
 
-impl<'a, A: AsciiLike + Copy> Prefix<&'a [A], &'a [A]> for AsciiWhitespace {
+impl<'a, A: CharLike> Prefix<&'a [A], &'a [A]> for AsciiWhitespace {
     fn take_prefix(&self, haystack: &'a [A]) -> Option<(&'a [A], &'a [A])> {
         let idx = Self::count_whitespace(haystack);
         Some(haystack.split_at(idx))
