@@ -50,7 +50,7 @@ fn version_core<'a>() -> impl StrParser<'a, (u64, u64, u64)> {
     // We could go completely with re-use, but it's faster to use the internal integer parser.
     // let component = numeric_identifier().map(|s| s.parse().unwrap());
 
-    let major_minor = left(component, skip!('.'));
+    let major_minor = left(component, skip('.'));
     tuplify!(major_minor, major_minor, component)
 }
 
@@ -66,7 +66,7 @@ fn build<'a>() -> impl StrParser<'a> {
 
 #[inline]
 fn dot_separated<'a>(prefix: char, p: impl StrParser<'a>) -> impl StrParser<'a> {
-    attempt(skip!(prefix).right(many(p, false, separator(skip!('.'), false))))
+    attempt(skip(prefix).right(many(p, false, separator(skip('.'), false))))
 }
 
 #[inline]

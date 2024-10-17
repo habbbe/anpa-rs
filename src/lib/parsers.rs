@@ -37,6 +37,19 @@ pub fn elem<O, I: Copy, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, S>{
     elem!(prefix)
 }
 
+/// Create a parser for matching the provided prefix via `==`, and ignoring the result.
+///
+/// For better performance, this parser should be used if the result isn't saved or inspected.
+///
+/// The prefix can be anything implementing the `Prefix` trait for the parser input.
+///
+/// ### Arguments
+/// * `prefix` - the prefix to match
+#[inline]
+pub fn skip<O: Copy, I: Copy, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, (), S>{
+    skip!(prefix)
+}
+
 /// Create a parser that parses while the items in the input matches the predicate.
 ///
 /// This parser never fails, so if an empty parse should not be permitted, wrap it in
