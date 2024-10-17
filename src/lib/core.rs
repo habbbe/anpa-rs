@@ -24,7 +24,7 @@ pub struct AnpaResult<T, O> {
 /// parsed input), the output type parameter `O` can be omitted.
 ///
 /// If no user state is used when parsing, the state type parameter `S` can be omitted.
-pub trait Parser<I, O = I, S = ()>: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy {}
+pub trait Parser<I: ?Sized, O = I, S = ()>: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy {}
 
 // Some convenience "aliases" for common parser types
 create_parser_trait!(StrParser, str, "Convenience alias for a parser that parses a `&'a str`.");

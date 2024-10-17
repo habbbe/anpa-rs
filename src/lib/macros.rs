@@ -156,7 +156,7 @@ macro_rules! right {
 macro_rules! elem {
     ($elem:expr) => {
         create_parser!(s, {
-            $crate::needle::Needle::remove_prefix(&$elem, s.input).map(|(res, rest)| {
+            $crate::prefix::Prefix::remove_prefix(&$elem, s.input).map(|(res, rest)| {
                 s.input = rest;
                 res
             })

@@ -1,7 +1,7 @@
 use core::{slice::Iter, str::Chars};
 
 /// Share trait for "slicable" inputs. Anpa can be used to parse types implementing this trait.
-pub trait SliceLike: Sized + Copy {
+pub trait SliceLike: Copy {
     type RefItem: PartialEq + Copy;
     type Iter: Iterator<Item = Self::RefItem>;
 

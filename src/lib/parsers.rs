@@ -1,4 +1,4 @@
-use crate::{core::Parser, needle::Needle, slicelike::SliceLike};
+use crate::{core::Parser, needle::Needle, prefix::Prefix, slicelike::SliceLike};
 
 /// Create a parser that always succeeds.
 #[inline]
@@ -26,15 +26,15 @@ pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) ->
     })
 }
 
-/// Create a parser for matching the provided argument input via `==`.
+/// Create a parser for matching the provided prefix via `==`.
 ///
-/// The element can be anything implementing the trait `Needle` for the parser input.
+/// The prefix can be anything implementing the `Prefix` trait for the parser input.
 ///
 /// ### Arguments
-/// * `needle` - the element to match
+/// * `prefix` - the prefix to match
 #[inline]
-pub fn elem<O, I: Copy, S>(needle: impl Needle<I, O>) -> impl Parser<I, O, S>{
-    elem!(needle)
+pub fn elem<O, I: Copy, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, S>{
+    elem!(prefix)
 }
 
 /// Create a parser that parses while the items in the input matches the predicate.
@@ -57,6 +57,10 @@ pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy)
 }
 
 /// Create a parser that parses until the input matches the provided argument.
+///
+/// The matched argument will be consumed and not returned as part of the parser result.
+///
+/// The argument can be anything implementing the `Needle` trait for the parser input.
 ///
 /// ### Arguments
 /// * `search` - the element to search for

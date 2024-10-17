@@ -11,6 +11,7 @@ pub mod core;
 pub mod combinators;
 pub mod asciilike;
 pub mod slicelike;
+pub mod prefix;
 pub mod needle;
 pub mod whitespace;
 
