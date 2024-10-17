@@ -1,11 +1,11 @@
 [package]
 name = "anpa"
-version = "0.5.0"
+version = "0.6.0"
 authors = ["Andreas Hallberg <habbbe@gmail.com>"]
 description = "A generic monadic parser combinator library inspired by Haskell's parsec."
 keywords = ["parser", "parser-combinator", "parsec"]
 edition = "2018"
-rust-version = "1.75.0"
+rust-version = "1.80.0"
 license = "MIT OR Apache-2.0"
 include = ["/src", "/bench", "LICENSE-MIT", "LICENSE-APACHE"]
 readme = "README.md"
@@ -23,5 +23,13 @@ name = "anpa"
 path = "src/lib/lib.rs"
 
 [[bin]]
-name = "anpa_test"
+name = "anpa_bench"
 path = "bench/bin.rs"
+required-features = ["build_bench"]
+
+[features]
+default = ["std"]
+std = []
+json = ["std"]
+semver = []
+build_bench = ["json", "semver"]

@@ -1,5 +1,4 @@
-use crate::{slicelike::SliceLike, core::Parser};
-use core::borrow::Borrow;
+use crate::{core::Parser, needle::Needle, prefix::Prefix, slicelike::SliceLike};
 
 /// Create a parser that always succeeds.
 #[inline]
@@ -13,20 +12,6 @@ pub fn failure<I, S>() -> impl Parser<I, (), S> {
     create_parser!(_s, None)
 }
 
-macro_rules! internal_starts_with {
-    ($start:expr, $len:expr, $f:expr) => {
-        create_parser!(s, {
-            if $f(s.input, $start) {
-                let res;
-                (res, s.input) = s.input.slice_split_at($len);
-                Some(res)
-            } else {
-                None
-            }
-        })
-    }
-}
-
 /// Create a parser that parses a single item matching the provided predicate.
 ///
 /// ### Arguments
@@ -34,45 +19,49 @@ macro_rules! internal_starts_with {
 #[inline]
 pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I::RefItem, S> {
     create_parser!(s, {
-        let first = s.input.slice_first()?;
-        pred(first).then(|| {
-            s.input = s.input.slice_from(I::slice_size_of_ref_item(first));
-            first
+        s.input.slice_first_if(pred).map(|(res, rest)| {
+            s.input = rest;
+            res
         })
     })
 }
 
-/// Create a parser for a single item matching the input via `==`.
+/// Create a parser for matching the provided prefix via `==`.
+///
+/// The prefix can be anything implementing the `Prefix` trait for the parser input.
 ///
 /// ### Arguments
-/// * `item` - the item to match
+/// * `prefix` - the prefix to match
 #[inline]
-pub fn item<I: SliceLike, B: Into<I::Item> + Copy, S>(item: B) -> impl Parser<I, I::RefItem, S> {
-    item_if(move |c| I::slice_item_eq_ref_item(&item.into(), c))
+pub fn take<O, I: Copy, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, S>{
+    take!(prefix)
 }
 
-/// Create a parser for a single item not matching the input via `==`.
+/// Create a parser for matching the provided prefix via `==`, and ignoring the result.
+///
+/// For better performance, this parser should be used if the result isn't saved or inspected.
+///
+/// The prefix can be anything implementing the `Prefix` trait for the parser input.
 ///
 /// ### Arguments
-/// * `item` - the item to _not_ match
+/// * `prefix` - the prefix to match
 #[inline]
-pub fn not_item<I: SliceLike, B: Into<I::Item> + Copy, S>(item: B) -> impl Parser<I, I::RefItem, S> {
-    item_if(move |c| !I::slice_item_eq_ref_item(&item.into(), c))
+pub fn skip<O: Copy, I: Copy, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, (), S>{
+    skip!(prefix)
 }
 
 /// Create a parser that parses while the items in the input matches the predicate.
+///
+/// This parser never fails, so if an empty parse should not be permitted, wrap it in
+/// a `not_empty` combinator.
 ///
 /// ### Arguments
 /// * `pred` - the predicate
 #[inline]
 pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I, S> {
     create_parser!(s, {
-        let idx;
-        match s.input.slice_find_pred(|x| !pred(x)) {
-            None => idx = s.input.slice_len(),
-            Some(0) => return None,
-            Some(n) => idx = n
-        }
+        let idx = s.input.slice_find_pred(|x| !pred(x))
+            .unwrap_or(s.input.slice_len());
 
         let res;
         (res, s.input) = s.input.slice_split_at(idx);
@@ -80,42 +69,17 @@ pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy)
     })
 }
 
-/// Create a parser for a sequence of items.
+/// Create a parser that parses until the input matches the provided argument.
+///
+/// The matched argument will be consumed and not returned as part of the parser result.
+///
+/// The argument can be anything implementing the `Needle` trait for the parser input.
 ///
 /// ### Arguments
-/// * `items` - the items to match
+/// * `needle` - the element to search for
 #[inline]
-pub fn seq<I: SliceLike, B: Borrow<I> + Copy, S>(seq: B) -> impl Parser<I, I, S> {
-    internal_starts_with!(*seq.borrow(), seq.borrow().slice_len(), SliceLike::slice_starts_with_seq)
-}
-
-macro_rules! internal_until {
-    ($item:expr, $len:expr, $f:expr) => {
-        create_parser!(s, {
-            let index = $f(s.input, $item)?;
-            let res = s.input.slice_to(index);
-            s.input = s.input.slice_from(index + $len);
-            Some(res)
-        })
-    }
-}
-
-/// Create a parser that parses until one item in the input matches the predicate.
-///
-/// ### Arguments
-/// * `item` - the item to match
-#[inline]
-pub fn until_item<I: SliceLike, B: Borrow<I::Item> + Copy, S>(item: B) -> impl Parser<I, I, S> {
-    internal_until!(item.borrow(), I::slice_size_of_item(item.borrow()), SliceLike::slice_find)
-}
-
-/// Create a parser that parses until a sequence in the input matches the predicate.
-///
-/// ### Arguments
-/// * `seq` - the sequence to match
-#[inline]
-pub fn until_seq<I: SliceLike, B: Borrow<I> + Copy, S>(seq: B) -> impl Parser<I, I, S> {
-    internal_until!(*seq.borrow(), seq.borrow().slice_len(), SliceLike::slice_find_seq)
+pub fn until<O, I: SliceLike, N: Needle<I, O>, S>(needle: N) -> impl Parser<I, I, S> {
+    until!(needle)
 }
 
 /// Create a parser that parses the rest of the input. This parser can never fail.
@@ -138,10 +102,9 @@ pub fn empty<I: SliceLike, S>() -> impl Parser<I, I, S> {
 
 #[cfg(test)]
 mod tests {
-    use crate::core::parse;
+    use crate::{core::parse, parsers::until};
 
     use super::item_while;
-
     #[test]
     fn take_while_test() {
         let p = item_while(|c| c == 'x');
@@ -151,5 +114,23 @@ mod tests {
 
         let p = item_while(|c: char| c.is_digit(10));
         assert_eq!(parse(p, "1234abcd").result.unwrap(), "1234")
+    }
+
+    #[test]
+    fn until_test() {
+        let p = until('x');
+        let res = parse(p, "xxxxy");
+        assert_eq!(res.result.unwrap(), "");
+        assert_eq!(res.state, "xxxy");
+
+        let p = until("xxx");
+        let res = parse(p, "xxxxy");
+        assert_eq!(res.result.unwrap(), "");
+        assert_eq!(res.state, "xy");
+
+        let p = until("y");
+        let res = parse(p, "xxxxy");
+        assert_eq!(res.result.unwrap(), "xxxx");
+        assert_eq!(res.state, "");
     }
 }

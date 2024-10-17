@@ -1,9 +1,9 @@
 use crate::combinators::{bind, right, left, filter, into_type, map_if, map};
 
 /// The state being passed around during parsing.
-pub struct AnpaState<'a, T, S> {
+pub struct AnpaState<'a, I, S> {
     /// The current state of the input under parse.
-    pub input: T,
+    pub input: I,
 
     /// The provided user state (if any).
     pub user_state: &'a mut S,
@@ -24,7 +24,7 @@ pub struct AnpaResult<T, O> {
 /// parsed input), the output type parameter `O` can be omitted.
 ///
 /// If no user state is used when parsing, the state type parameter `S` can be omitted.
-pub trait Parser<I, O = I, S = ()>: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy {}
+pub trait Parser<I: ?Sized, O = I, S = ()>: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy {}
 
 // Some convenience "aliases" for common parser types
 create_parser_trait!(StrParser, str, "Convenience alias for a parser that parses a `&'a str`.");
@@ -54,6 +54,7 @@ pub trait ParserExt<I, O, S>: Parser<I, O, S> {
     /// Combine this parser with another, while ignoring the result of the latter.
     fn left<O2, P: Parser<I, O2, S>>(self, p: P) -> impl Parser<I, O, S>;
 
+    #[cfg(feature = "std")]
     /// Add some simple debug information to this parser.
     fn debug(self, name: &'static str) -> impl Parser<I, O, S>;
 }
@@ -103,7 +104,10 @@ impl<I, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
         left(self, p)
     }
 
+    #[cfg(feature = "std")]
     fn debug(self, name: &'static str) -> impl Parser<I, O, S> {
+        use std::println;
+
         create_parser!(s, {
             let res = self(s);
             match res {

@@ -4,6 +4,7 @@ use anpa::combinators::{*};
 use anpa::parsers::{*};
 
 use std::fs::File;
+use std::hint::black_box;
 use std::io::{self, BufRead, Read};
 use std::process::exit;
 use std::time::{Duration, Instant};
@@ -53,16 +54,16 @@ fn bench_fun<T>(mut n: usize, mut f: impl FnMut() -> T) -> (Duration, T) {
 }
 
 fn bench_hubb() {
-    let parse_name = until_item('=');
+    let parse_name = until('=');
     let parse_cmd = not_empty(rest());
-    let parse_action = right!(seq("Com:"), lift!(action, parse_name, parse_cmd));
-    let parse_info = right!(seq("Info:"), lift!(info, parse_name, parse_cmd));
-    let parse_separator = seq("Separator").map(|_| Item::Separator);
-    let parse_space = seq("Space").map(|_| Item::Space);
+    let parse_action = right!(skip!("Com:"), lift!(action, parse_name, parse_cmd));
+    let parse_info = right!(skip!("Info:"), lift!(info, parse_name, parse_cmd));
+    let parse_separator = skip!("Separator").map(|_| Item::Separator);
+    let parse_space = skip!("Space").map(|_| Item::Space);
     let parse_error = lift!(syntax_error, rest());
     let parse_item = or!(parse_action, parse_info, parse_separator, parse_space, parse_error);
     let item_to_state = lift_to_state(|x: &mut Vec<_>, y| x.push(y), parse_item);
-    let ignore = or_diff!(empty(), item('#'));
+    let ignore = or_diff!(empty(), skip!('#'));
     let state_parser = or_diff!(ignore, item_to_state);
 
     let lines: Vec<String> = read_file("hubb").lines().map(Result::unwrap).collect();
@@ -92,7 +93,7 @@ fn bench_hubb_handrolled() {
         for _ in 0..50 {
             vec.clear();
             for l in &lines {
-                let r = parse_handrolled(&l);
+                let r = parse_handrolled(l);
                 match r {
                     None => {
                         println!("No parse");
@@ -109,21 +110,22 @@ fn bench_hubb_handrolled() {
 }
 
 fn bench_json() {
-    let mut string = String::new();
+    let mut string = black_box(String::new());
     let _ = read_file("test.json").read_to_string(&mut string);
     let p = json::object_parser::<&str>();
 
     let (d, _) = bench_fun(10000, || {
         for _ in 0..10 {
-            parse(p, &string);
+            parse(p, &string).result.unwrap();
         }
     });
 
-    println!("JSON: in {}us", d.as_nanos() as f64 / 1000.0);
+    println!("anpa::json: in {}us", d.as_nanos() as f64 / 1000.0);
 }
 
 fn bench_semver() {
-    let v = "123432134.43213421.5432344-SNAPSHOT+some.build.id";
+    use semver;
+    let v = black_box("123432134.43213421.5432344-SNAPSHOT+some.build.id");
 
     let (d, ver) = bench_fun(10000, || {
         for _ in 0..300 {
@@ -142,7 +144,7 @@ fn info<'a>(name: &'a str, com: &'a str) -> Item<'a> {
     Item::Info { name, com }
 }
 
-fn syntax_error<'a>(description: &'a str) -> Item<'a> {
+fn syntax_error(description: &str) -> Item<'_> {
     Item::SyntaxError {description}
 }
 

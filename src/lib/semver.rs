@@ -18,7 +18,7 @@ impl<T> AnpaVersion<T> {
 /// Parse a SemVer string from `text`. General version that infer the `pre_release` and `build` type
 /// by means of `From<&str>`.
 pub fn parse_general<'a, O: From<&'a str>>(text: &'a str) -> Option<AnpaVersion<O>> {
-    crate::core::parse(semver(), text.into()).result
+    crate::core::parse(semver(), text).result
 }
 
 /// Parse a SemVer string from `text`. `pre_release` and `build` will be stored as slices
@@ -27,9 +27,10 @@ pub fn parse_inline(text: &str) -> Option<AnpaVersion<&str>> {
     parse_general(text)
 }
 
+#[cfg(feature = "std")]
 /// Parse a SemVer string from `text`. `pre_release` and `build` will be stored as independent
 /// `String` values.
-pub fn parse(text: &str) -> Option<AnpaVersion<String>> {
+pub fn parse(text: &str) -> Option<AnpaVersion<std::string::String>> {
     parse_general(text)
 }
 
@@ -49,7 +50,7 @@ fn version_core<'a>() -> impl StrParser<'a, (u64, u64, u64)> {
     // We could go completely with re-use, but it's faster to use the internal integer parser.
     // let component = numeric_identifier().map(|s| s.parse().unwrap());
 
-    let major_minor = left(component, item('.'));
+    let major_minor = left(component, skip('.'));
     tuplify!(major_minor, major_minor, component)
 }
 
@@ -65,7 +66,7 @@ fn build<'a>() -> impl StrParser<'a> {
 
 #[inline]
 fn dot_separated<'a>(prefix: char, p: impl StrParser<'a>) -> impl StrParser<'a> {
-    attempt(item(prefix).right(many(p, false, separator(item('.'), false))))
+    attempt(skip(prefix).right(many(p, false, separator(skip('.'), false))))
 }
 
 #[inline]
@@ -80,7 +81,7 @@ fn build_identifier<'a>() -> impl StrParser<'a> {
 
 #[inline]
 fn alphanumeric_identifier<'a>() -> impl StrParser<'a> {
-    get_parsed(succeed(digits()).right(identifier_characters()))
+    get_parsed(digits().right(identifier_characters()))
 }
 
 #[inline]
@@ -115,12 +116,11 @@ fn digit(c: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::semver::parse;
+    use crate::semver::parse_inline;
 
     #[test]
     fn version_no_snapshot() {
-        let res = parse("1.2.3").unwrap();
+        let res = parse_inline("1.2.3").unwrap();
         assert_eq!(res.major, 1);
         assert_eq!(res.minor, 2);
         assert_eq!(res.patch, 3);
@@ -129,35 +129,35 @@ mod tests {
 
     #[test]
     fn version_snapshot() {
-        let res = parse("12.345.67890-SNAPSHOT").unwrap();
+        let res = parse_inline("12.345.67890-SNAPSHOT").unwrap();
         assert_eq!(res.major, 12);
         assert_eq!(res.minor, 345);
         assert_eq!(res.patch, 67890);
-        assert_eq!(res.pre_release, "SNAPSHOT".to_string());
+        assert_eq!(res.pre_release, "SNAPSHOT");
 
-        assert!(parse("12.345.67890-").is_none());
-        assert!(parse("12.345.67890-+").is_none());
-        assert!(parse("12.345.67890-+build").is_none());
-        assert!(parse("12.345.67890-SNAPSHOT+").is_none());
+        assert!(parse_inline("12.345.67890-").is_none());
+        assert!(parse_inline("12.345.67890-+").is_none());
+        assert!(parse_inline("12.345.67890-+build").is_none());
+        assert!(parse_inline("12.345.67890-SNAPSHOT+").is_none());
     }
 
     #[test]
     fn version_build() {
-        let res = parse("12.345.67890+build1").unwrap();
+        let res = parse_inline("12.345.67890+build1").unwrap();
         assert_eq!(res.major, 12);
         assert_eq!(res.minor, 345);
         assert_eq!(res.patch, 67890);
         assert!(res.pre_release.is_empty());
-        assert_eq!(res.build, "build1".to_string());
+        assert_eq!(res.build, "build1");
     }
 
     #[test]
     fn version_build_and_snapshot() {
-        let res = parse("12.345.67890-SNAPSHOT+build1").unwrap();
+        let res = parse_inline("12.345.67890-SNAPSHOT+build1").unwrap();
         assert_eq!(res.major, 12);
         assert_eq!(res.minor, 345);
         assert_eq!(res.patch, 67890);
-        assert_eq!(res.pre_release, "SNAPSHOT".to_string());
-        assert_eq!(res.build, "build1".to_string());
+        assert_eq!(res.pre_release, "SNAPSHOT");
+        assert_eq!(res.build, "build1");
     }
 }

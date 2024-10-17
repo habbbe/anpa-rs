@@ -1,4 +1,5 @@
-use std::{collections::{BTreeMap, HashMap}, hash::Hash};
+#[cfg(feature = "std")]
+use std::{collections::{BTreeMap, HashMap}, vec::Vec, hash::Hash};
 
 use crate::{slicelike::SliceLike, core::{Parser, AnpaState}, parsers::success};
 
@@ -302,7 +303,7 @@ pub fn lift_to_state<I, S, O1, O2>(f: impl FnOnce(&mut S, O1) -> O2 + Copy,
                                    p: impl Parser<I, O1, S>
 ) -> impl Parser<I, O2, S> {
     create_parser!(s, {
-        p(s).map(|res| f(&mut s.user_state, res))
+        p(s).map(|res| f(s.user_state, res))
     })
 }
 
@@ -325,14 +326,14 @@ pub fn no_separator<I, S>() -> Option<(bool, impl Parser<I, (), S>)> {
     return None;
 
     // Unreachable, but provides type/size information about the return value
-    return Some((false, success()));
+    Some((false, success()))
 }
 
 #[inline(always)]
 fn many_internal<I, O, O2, S>(
     s: &mut AnpaState<I, S>,
     p: impl Parser<I, O, S>,
-    mut f: impl FnMut(O) -> (),
+    mut f: impl FnMut(O),
     allow_empty: bool,
     separator: Option<(bool, impl Parser<I, O2, S>)>
 ) -> bool {
@@ -371,10 +372,35 @@ pub fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
     create_parser!(s, {
         let old_input = s.input;
         many_internal(s, p, |_| {}, allow_empty, separator)
-            .then(move || old_input.slice_to(old_input.slice_len() - s.input.slice_len()))
+            .then_some(old_input.slice_to(old_input.slice_len() - s.input.slice_len()))
     })
 }
 
+/// Apply a parser repeatedly and accumulate a result in the spirit of fold.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `init` - a function producing the initial result
+/// * `f` - a function taking the accumulator as `&mut` along with the result of each
+///         successful parse
+/// * `allow_empty` - whether no parse should be considered successful.
+/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+///                 functions to construct this parameter.
+#[inline]
+pub fn fold<I, O, O2, S, R>(p: impl Parser<I, O, S>,
+                            init: impl FnOnce() -> R + Copy,
+                            f: impl FnOnce(&mut R, O) + Copy,
+                            allow_empty: bool,
+                            separator: Option<(bool, impl Parser<I, O2, S>)>,
+) -> impl Parser<I, R, S> {
+    create_parser!(s, {
+        let mut res = init();
+        many_internal(s, p, |x| f(&mut res, x), allow_empty, separator)
+            .then_some(res)
+    })
+}
+
+#[cfg(feature = "std")]
 /// Apply a parser until it fails and store the results in a `Vec`.
 ///
 /// ### Arguments
@@ -387,13 +413,10 @@ pub fn many_to_vec<I, O, O2, S>(p: impl Parser<I, O, S>,
                                 allow_empty: bool,
                                 separator: Option<(bool, impl Parser<I, O2, S>)>,
 ) -> impl Parser<I, Vec<O>, S> {
-    create_parser!(s, {
-        let mut vec = vec![];
-        many_internal(s, p, |x| vec.push(x), allow_empty, separator)
-            .then(move || vec)
-    })
+    fold(p, Vec::new, |v, x| v.push(x), allow_empty, separator)
 }
 
+#[cfg(feature = "std")]
 /// Apply a parser until it fails and store the results in a `HashMap`.
 /// The parser `p` must have a result type `(K, V)`, where the key `K: Hash + Eq`.
 ///
@@ -407,13 +430,10 @@ pub fn many_to_map<I, K: Hash + Eq, V, O2, S>(p: impl Parser<I, (K, V), S>,
                                               allow_empty: bool,
                                               separator: Option<(bool, impl Parser<I, O2, S>)>,
 ) -> impl Parser<I, HashMap<K, V>, S> {
-    create_parser!(s, {
-        let mut map = HashMap::new();
-        many_internal(s, p, |(k, v)| {map.insert(k, v);}, allow_empty, separator)
-            .then(move || map)
-    })
+    fold(p, HashMap::new, |m, (k, v)| { m.insert(k, v); }, allow_empty, separator)
 }
 
+#[cfg(feature = "std")]
 /// Apply a parser until it fails and store the results in a `BTreeMap`.
 /// The parser `p` must have a result type `(K, V)`, where the key `K: Ord`.
 /// This might give better performance than `many_to_map`.
@@ -428,30 +448,7 @@ pub fn many_to_map_ordered<I, K: Ord, V, O2, S>(p: impl Parser<I, (K, V), S>,
                                                 allow_empty: bool,
                                                 separator: Option<(bool, impl Parser<I, O2, S>)>,
 ) -> impl Parser<I, BTreeMap<K, V>, S> {
-    create_parser!(s, {
-        let mut map = BTreeMap::new();
-        many_internal(s, p, |(k, v)| {map.insert(k, v);}, allow_empty, separator)
-            .then(move || map)
-    })
-}
-
-/// Apply a parser repeatedly and accumulate a result in the spirit of fold.
-///
-/// ### Arguments
-/// * `acc` - the accumulator
-/// * `p` - the parser
-/// * `f` - a function taking the accumulator as `&mut` along with the result of each
-///         successful parse
-#[inline]
-pub fn fold<T: Copy, I, O, S, P: Parser<I, O, S>>(acc: T,
-                                                  p: P,
-                                                  f: impl Fn(&mut T, O) -> () + Copy
-) -> impl Parser<I, T, S> {
-    create_parser!(s, {
-        let mut acc = acc;
-        many_internal(s, p, |x| { f(&mut acc, x) }, true, no_separator())
-            .then(move || acc)
-    })
+    fold(p, BTreeMap::new, |m, (k, v)| { m.insert(k, v); }, allow_empty, separator)
 }
 
 /// Combine two parsers into a parser that returns the result of the parser
@@ -501,17 +498,20 @@ pub fn greedy_or<I: SliceLike, S, O>(p1: impl Parser<I, O, S>,
 
 #[cfg(test)]
 mod tests {
-    use crate::{combinators::{many, many_to_vec, greedy_or, middle, no_separator, times}, core::*, number::integer, parsers::{empty, item, item_while, seq}};
+    use crate::{combinators::{greedy_or, many, middle, no_separator, not_empty, times}, core::*, number::integer, parsers::{take, empty, item_while}};
 
     use super::{fold, or, left};
 
     fn num_parser() -> impl StrParser<'static, u32> {
         let num = integer();
-        or(left(num, item(',')), left(num, empty()))
+        or(left(num, take(',')), left(num, empty()))
     }
 
+    #[cfg(feature = "std")]
     #[test]
     fn many_nums_vec() {
+        use std::vec;
+        use crate::combinators::many_to_vec;
         let p = many_to_vec(num_parser(), true, no_separator());
         let res = parse(p, "1,2,3,4").result.unwrap();
         assert_eq!(res, vec![1,2,3,4]);
@@ -540,14 +540,14 @@ mod tests {
 
     #[test]
     fn fold_add() {
-        let p = fold(0, num_parser(), |acc, x| *acc += x);
+        let p = fold(num_parser(), || 0, |acc, x| *acc += x, false, no_separator());
         let res = parse(p, "1,2,3,4,").result.unwrap();
         assert_eq!(res, 10);
     }
 
     #[test]
     fn times_test() {
-        let p = times(4, left(item('1'), item('2')));
+        let p = times(4, left(take('1'), take('2')));
         let res = parse(p, "12121212End");
         assert_eq!(res.result.unwrap(), "12121212");
         assert_eq!(res.state, "End");
@@ -559,7 +559,7 @@ mod tests {
     #[test]
     fn recursive_parens() {
         fn in_parens<'a>() -> impl StrParser<'a> {
-            defer_parser!(or(item_while(|c: char| c.is_alphanumeric()), middle(item('('), in_parens(), item(')'))))
+            defer_parser!(or(not_empty(item_while(|c: char| c.is_alphanumeric())), middle(take('('), in_parens(), take(')'))))
         }
 
         let x = "(((((((((sought)))))))))";
@@ -574,7 +574,7 @@ mod tests {
         let x = "12344a";
 
         let digit_parser = item_while(|c: char| c.is_ascii_digit());
-        let seq_parser = seq("1234");
+        let seq_parser = take("1234");
 
         let greedy_parser = greedy_or(seq_parser, digit_parser);
 
@@ -582,9 +582,9 @@ mod tests {
         assert_eq!(res.result.unwrap(), "12344");
         assert_eq!(res.state, "a");
 
-        let smaller_seq_parser = seq("123");
+        let smaller_seq_parser = take("123");
 
-        let full_parser = digit_parser.right(seq("a"));
+        let full_parser = digit_parser.right(take("a"));
 
         let greedy_parser = greedy_or!(smaller_seq_parser, full_parser, seq_parser);
         let res = parse(greedy_parser, x);

@@ -15,7 +15,7 @@ macro_rules! create_parser {
 /// ```ignore
 /// /// Can parse e.g. "(((something)))"
 /// fn in_parens<'a, S>() -> impl StrParser<'a> {
-///     defer_parser!(or(item_while(|c: char| c.is_alphanumeric()), middle(item('('), in_parens(), item(')'))))
+///     defer_parser!(or(item_while(|c: char| c.is_alphanumeric()), middle(take('('), in_parens(), take(')'))))
 /// }
 /// ```
 #[macro_export]
@@ -100,6 +100,17 @@ macro_rules! or {
     };
 }
 
+/// Variadic version of `or_no_partial`.
+///
+/// ### Arguments
+/// * `p...` - any number of parsers.
+#[macro_export]
+macro_rules! or_no_partial {
+    ($($p:expr),* $(,)?) => {
+        variadic!($crate::combinators::or_no_partial, $($p),*)
+    };
+}
+
 /// Variadic version of `or_diff`.
 ///
 /// ### Arguments
@@ -133,17 +144,63 @@ macro_rules! right {
     };
 }
 
-/// Alternative to the `item` parser that inlines the argument into the parser. This
-/// can give better performance at the expence of larger binary size.
+/// Alternative to the `take` parser that inlines the argument into the parser.
+///
+/// This can give better performance and/or smaller binary size, or the opposite.
+/// Try it and don't forget to measure!
 ///
 /// This macro is likely only useful when passing a literal as argument.
 ///
 /// ### Arguments
-/// * `item` - the item o parse.
+/// * `prefix` - the prefix to parse.
 #[macro_export]
-macro_rules! item {
-    ($item:expr) => {
-        $crate::parsers::item_if(move |c| c == $item)
+macro_rules! take {
+    ($prefix:expr) => {
+        create_parser!(s, {
+            $crate::prefix::Prefix::take_prefix(&$prefix, s.input).map(|(res, rest)| {
+                s.input = rest;
+                res
+            })
+        })
+    }
+}
+
+/// Alternative to the `skip` parser that inlines the argument into the parser.
+///
+/// This can give better performance and/or smaller binary size, or the opposite.
+/// Try it and don't forget to measure!
+///
+/// This macro is likely only useful when passing a literal as argument.
+///
+/// ### Arguments
+/// * `prefix` - the prefix to parse.
+#[macro_export]
+macro_rules! skip {
+    ($prefix:expr) => {
+        create_parser!(s, {
+            s.input = $crate::prefix::Prefix::skip_prefix(&$prefix, s.input)?;
+            Some(())
+        })
+    }
+}
+/// Alternative to the `until` parser that inlines the argument into the parser.
+///
+/// This can give better performance and/or smaller binary size, or the opposite.
+/// Try it and don't forget to measure!
+///
+/// This macro is likely only useful when passing a literal as argument.
+///
+/// ### Arguments
+/// * `needle` - the element to search for.
+#[macro_export]
+macro_rules! until {
+    ($needle:expr) => {
+        create_parser!(s, {
+            let (size, index) = $crate::needle::Needle::find_in(&$needle, s.input)?;
+            let res = $crate::slicelike::SliceLike::slice_to(s.input, index);
+            s.input = $crate::slicelike::SliceLike::slice_from(s.input, index + size);
+            Some(res)
+        })
     }
 }
 
@@ -167,7 +224,7 @@ macro_rules! greedy_or {
 ///
 /// ### Example
 /// ```ignore
-/// create_parser_trait(I8Parser, [i8], "Convenience alias for a parser that parses a `&'a [i8]`");
+/// create_parser_trait!(I8Parser, [i8], "Convenience alias for a parser that parses a `&'a [i8]`");
 /// ```
 #[macro_export]
 macro_rules! create_parser_trait {
