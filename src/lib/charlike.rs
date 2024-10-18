@@ -4,6 +4,12 @@ pub trait CharLike: Copy {
     fn as_char(self) -> char;
 }
 
+impl<C: CharLike> CharLike for &C {
+    fn as_char(self) -> char {
+        (*self).as_char()
+    }
+}
+
 macro_rules! impl_CharLike {
     ($t:ty) => {
         impl CharLike for $t {
@@ -16,6 +22,4 @@ macro_rules! impl_CharLike {
 }
 
 impl_CharLike!(u8);
-impl_CharLike!(&u8);
 impl_CharLike!(char);
-impl_CharLike!(&char);

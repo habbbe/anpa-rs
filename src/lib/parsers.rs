@@ -33,7 +33,7 @@ pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) ->
 /// ### Arguments
 /// * `prefix` - the prefix to match
 #[inline]
-pub fn take<O, I: Copy, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, S>{
+pub fn take<I: Copy, O, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, S>{
     take!(prefix)
 }
 
@@ -46,7 +46,7 @@ pub fn take<O, I: Copy, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, S>{
 /// ### Arguments
 /// * `prefix` - the prefix to match
 #[inline]
-pub fn skip<O: Copy, I: Copy, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, (), S>{
+pub fn skip<I: Copy, O, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, (), S>{
     skip!(prefix)
 }
 
