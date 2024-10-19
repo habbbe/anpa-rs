@@ -1,4 +1,3 @@
-use core::borrow::Borrow;
 /// Common trait for types that can be safely converted to `char`.
 pub trait CharLike: Copy {
     fn as_char(self) -> char;
@@ -15,7 +14,7 @@ macro_rules! impl_CharLike {
         impl CharLike for $t {
             #[inline]
             fn as_char(self) -> char {
-                *self.borrow() as char
+                self as char
             }
         }
     };
