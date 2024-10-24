@@ -125,7 +125,7 @@ pub fn attempt<I: Copy, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
 /// ### Arguments
 /// * `p` - the parser
 #[inline]
-pub fn count_consumed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, (usize, O), S> {
+pub fn count_consumed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, (I::Idx, O), S> {
     create_parser!(s, {
         let old = s.input.slice_len();
         let res = p(s)?;
