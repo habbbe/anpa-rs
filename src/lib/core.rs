@@ -1,7 +1,7 @@
-use crate::combinators::{bind, right, left, filter, into_type, map_if, map};
+use crate::{combinators::{bind, filter, into_type, left, map, map_if, right}, slicelike::SliceLike};
 
 /// The state being passed around during parsing.
-pub struct AnpaState<'a, I, S> {
+pub struct AnpaState<'a, I: SliceLike, S> {
     /// The current state of the input under parse.
     pub input: I,
 
@@ -66,14 +66,14 @@ pub trait ParserInto<I, O1: Into<O2>, O2, S>: Parser<I, O1, S> {
     fn into_type(self) -> impl Parser<I, O2, S>;
 }
 
-impl<I, O1: Into<O2>, O2, S, P: Parser<I, O1, S>> ParserInto<I, O1, O2, S> for P {
+impl<I: SliceLike, O1: Into<O2>, O2, S, P: Parser<I, O1, S>> ParserInto<I, O1, O2, S> for P {
     #[inline]
     fn into_type(self) -> impl Parser<I, O2, S> {
         into_type(self)
     }
 }
 
-impl<I, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
+impl<I: SliceLike, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
     #[inline]
     fn map<O2>(self, f: impl FnOnce(O) -> O2 + Copy) -> impl Parser<I, O2, S> {
         map(self, f)
@@ -125,9 +125,9 @@ impl<I, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
 /// * `p` - the parser
 /// * `input` - the input to be parsed
 /// * `user_state` - the user state
-pub fn parse_state<I, O, S>(p: impl Parser<I, O, S>,
-                            input: I,
-                            user_state: &mut S) -> AnpaResult<AnpaState<I, S>, O> {
+pub fn parse_state<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
+                                       input: I,
+                                       user_state: &mut S) -> AnpaResult<AnpaState<I, S>, O> {
     let mut parser_state = AnpaState { input, user_state };
     let result = p(&mut parser_state);
     AnpaResult { state: parser_state, result }
@@ -138,8 +138,8 @@ pub fn parse_state<I, O, S>(p: impl Parser<I, O, S>,
 /// ### Arguments
 /// * `p` - the parser
 /// * `input` - the input to be parsed
-pub fn parse<I, O>(p: impl Parser<I, O, ()>,
-                   input: I) -> AnpaResult<I, O> {
+pub fn parse<I: SliceLike, O>(p: impl Parser<I, O, ()>,
+                              input: I) -> AnpaResult<I, O> {
     let mut parser_state = AnpaState { input, user_state: &mut () };
     let result = p(&mut parser_state);
     AnpaResult { state: parser_state.input, result }

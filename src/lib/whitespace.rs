@@ -1,8 +1,8 @@
-use crate::{charlike::CharLike, core::Parser, prefix::Prefix};
+use crate::{charlike::CharLike, core::Parser, prefix::Prefix, slicelike::SliceLike};
 
 /// Trait for inputs that can be trimmed, i.e. having ASCII whitespace removed
 /// from the start.
-pub trait TrimmableAscii: Copy {
+pub trait TrimmableAscii: SliceLike {
     fn prefix() -> impl Prefix<Self, Self>;
 }
 
