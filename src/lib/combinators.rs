@@ -1,7 +1,7 @@
 #[cfg(feature = "std")]
 use std::{collections::{BTreeMap, HashMap}, vec::Vec, hash::Hash};
 
-use crate::{slicelike::SliceLike, core::{Parser, AnpaState}, parsers::success};
+use crate::{core::{AnpaState, Parser}, parsers::success, slicelike::SliceLike};
 
 /// Create a new parser by taking the result of `p`, and applying `f`.
 ///
