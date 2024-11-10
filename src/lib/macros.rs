@@ -216,22 +216,22 @@ macro_rules! greedy_or {
     };
 }
 
-/// Create a parser that takes the result of a parser, and returns a different
-/// parser depending on the result. Note that all result parsers must have the
-/// same result type.
+/// Create a parser that takes the result of a parser, and returns different
+/// parsers depending on the provided conditions.
+///
+/// If none of the provided conditions match, the parser will fail.
 ///
 /// ### Example:
 /// ```
 /// use anpa::core::*;
-/// use anpa::match_parser;
+/// use anpa::choose;
 /// use anpa::parsers::{failure, take};
 /// use anpa::pure;
 /// use anpa::number::integer;
 ///
-/// let p = match_parser!(integer() => x: u8;
-///                       x == 0 => take("zero"),
-///                       x == 1 => take("one"),
-///                       true => failure()
+/// let p = choose!(integer() => x: u8;
+///                 x == 0 => take("zero"),
+///                 x == 1 => take("one")
 /// );
 ///
 /// let input1 = "0zero";
@@ -247,7 +247,7 @@ macro_rules! greedy_or {
 /// assert_eq!(parse(p, input5).result, None);
 /// ```
 #[macro_export]
-macro_rules! match_parser {
+macro_rules! choose {
     ($p:expr => $res:ident $(: $t:ty)?; $($cond:expr => $new_p:expr),* $(,)?) => {
         $crate::create_parser!(s, {
             let $res $(:$t)? = $p(s)?;

@@ -8,7 +8,7 @@ pub trait Needle<Parent: SliceLike, Result>: Copy {
     fn find_in(&self, haystack: Parent) -> Option<(Parent::Idx, Parent::Idx)>;
 }
 
-impl<'a, T: PartialEq + Copy> Needle<&'a [T], T> for T {
+impl<T: PartialEq + Copy> Needle<&[T], T> for T {
     fn find_in(&self, haystack: &[T]) -> Option<(usize, usize)> {
         haystack.iter()
             .position(|x| x == self)
@@ -24,7 +24,7 @@ impl<'a, T: PartialEq + Copy, S: Borrow<[T]> + Copy> Needle<&'a [T], &'a [T]> fo
     }
 }
 
-impl<'a> Needle<&'a str, char> for char {
+impl Needle<&str, char> for char {
     #[inline]
     fn find_in(&self, haystack: &str) -> Option<(usize, usize)> {
         haystack.find(*self)
