@@ -75,8 +75,8 @@ fn bench_hubb() {
             for l in &lines {
                 let r = parse_state(state_parser, l, &mut vec);
                 if r.result.is_none() {
-                        println!("No parse");
-                        break
+                    println!("No parse");
+                    break
                 }
             }
         }
