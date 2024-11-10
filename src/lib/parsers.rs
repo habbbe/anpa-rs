@@ -8,7 +8,7 @@ pub fn success<I: SliceLike, S>() -> impl Parser<I, (), S> {
 
 /// Create a parser that always fails.
 #[inline]
-pub fn failure<I: SliceLike, S>() -> impl Parser<I, (), S> {
+pub fn failure<I: SliceLike, O, S>() -> impl Parser<I, O, S> {
     create_parser!(_s, None)
 }
 

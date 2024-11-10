@@ -4,6 +4,7 @@ pub trait CharLike: Copy {
 }
 
 impl<C: CharLike> CharLike for &C {
+    #[inline(always)]
     fn as_char(self) -> char {
         (*self).as_char()
     }
@@ -12,7 +13,7 @@ impl<C: CharLike> CharLike for &C {
 macro_rules! impl_CharLike {
     ($t:ty) => {
         impl CharLike for $t {
-            #[inline]
+            #[inline(always)]
             fn as_char(self) -> char {
                 self as char
             }

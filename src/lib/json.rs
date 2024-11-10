@@ -55,10 +55,14 @@ pub fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValu
 /// from the context via `From<&str>`.
 ///
 /// ### Example
-/// ```ignore
+/// ```
+/// use anpa::json;
+///
 /// let p1 = json::object_parser::<&str>(); // Stores strings as slices of input
 /// let p2 = json::object_parser::<String>(); // Stores strings as individual `String` instances.
-/// let p2 = json::object_parser::<MyString>(); // Stores strings as custom type implementing `From<&str>`.
+///
+/// // Stores strings as custom type implementing `From<&str>`.
+/// // let p3 = json::object_parser::<MyString>();
 /// ```
 pub fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
     let pair_parser = tuplify!(

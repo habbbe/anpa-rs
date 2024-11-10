@@ -216,6 +216,51 @@ macro_rules! greedy_or {
     };
 }
 
+/// Create a parser that takes the result of a parser, and returns a different
+/// parser depending on the result. Note that all result parsers must have the
+/// same result type.
+///
+/// ### Example:
+/// ```
+/// use anpa::core::*;
+/// use anpa::match_parser;
+/// use anpa::parsers::{failure, take};
+/// use anpa::pure;
+/// use anpa::number::integer;
+///
+/// let p = match_parser!(integer() => x: u8;
+///                       x == 0 => take("zero"),
+///                       x == 1 => take("one"),
+///                       true => failure()
+/// );
+///
+/// let input1 = "0zero";
+/// let input2 = "1one";
+/// let input3 = "0one";
+/// let input4 = "1zero";
+/// let input5 = "2";
+///
+/// assert_eq!(parse(p, input1).result, Some("zero"));
+/// assert_eq!(parse(p, input2).result, Some("one"));
+/// assert_eq!(parse(p, input3).result, None);
+/// assert_eq!(parse(p, input4).result, None);
+/// assert_eq!(parse(p, input5).result, None);
+/// ```
+#[macro_export]
+macro_rules! match_parser {
+    ($p:expr => $res:ident $(: $t:ty)?; $($cond:expr => $new_p:expr),* $(,)?) => {
+        $crate::create_parser!(s, {
+            let $res $(:$t)? = $p(s)?;
+
+            $(if $cond {
+                return $new_p(s)
+            })*
+
+            None
+        })
+    };
+}
+
 /// Create a new parser trait with a concrete input type for cleaner APIs.
 /// ### Arguments
 /// * `id` - The identifier of the new trait
