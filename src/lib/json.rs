@@ -20,13 +20,10 @@ fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
 
 fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
     let unicode = right(skip!('u'), times(4, item_if(|c: char| c.is_ascii_hexdigit())));
-    let not_end = choose!(item() => c: char;
-        c == '\\' => or_diff(item_if(|c: char| "\"\\/bfnrt".contains(c)), unicode),
-        c != '"' && !c.is_control() => success()
-    );
-
-    let chars = many(not_end, true, no_separator()).filter(|s: &&str| s.ends_with('"'));
-    right(skip!('"'), chars.into_type())
+    let escaped = right(skip!('\\'), or_diff(unicode, item_if(|c: char| "\"\\/bfnrt".contains(c))));
+    let valid_char = item_if(|c: char| c != '"' && c != '\\' && !c.is_control());
+    let not_end = or_diff(valid_char, escaped);
+    middle(skip!('"'), many(not_end, true, no_separator()), skip!('"')).into_type()
 }
 
 fn json_string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, JsonValue<T>> {
