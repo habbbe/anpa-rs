@@ -1,8 +1,14 @@
-use crate::{charlike::CharLike, core::Parser, prefix::Prefix};
+use crate::{charlike::CharLike, core::Parser, prefix::Prefix, slicelike::SliceLike};
 
 /// Trait for inputs that can be trimmed, i.e. having ASCII whitespace removed
 /// from the start.
-pub trait TrimmableAscii: Copy {
+pub trait TrimmableAscii: SliceLike {
+    fn prefix() -> impl Prefix<Self, Self>;
+}
+
+/// Trait for inputs that can be trimmed, i.e. having UTF-8 whitespace removed
+/// from the start.
+pub trait TrimmableUtf8: SliceLike {
     fn prefix() -> impl Prefix<Self, Self>;
 }
 
@@ -18,6 +24,12 @@ impl TrimmableAscii for &str {
     }
 }
 
+impl TrimmableUtf8 for &str {
+    fn prefix() -> impl Prefix<Self, Self> {
+        Utf8Whitespace()
+    }
+}
+
 /// Create a parser that parses and returns ASCII whitespace.
 #[inline]
 pub fn ascii_whitespace<I: TrimmableAscii, S>() -> impl Parser<I, I, S> {
@@ -30,9 +42,25 @@ pub fn skip_ascii_whitespace<I: TrimmableAscii, S>() -> impl Parser<I, (), S> {
     skip!(I::prefix())
 }
 
+/// Create a parser that parses and returns UTF-8 whitespace.
+#[inline]
+pub fn whitespace<I: TrimmableUtf8, S>() -> impl Parser<I, I, S> {
+    take!(I::prefix())
+}
+
+/// Create a parser that parses and ignores UTF-8 whitespace.
+#[inline]
+pub fn skip_whitespace<I: TrimmableUtf8, S>() -> impl Parser<I, (), S> {
+    skip!(I::prefix())
+}
+
 /// `Prefix` that matches zero or more ASCII whitespaces.
 #[derive(Clone, Copy)]
 pub struct AsciiWhitespace();
+
+/// `Prefix` that matches zero or more UTF-8 whitespaces.
+#[derive(Clone, Copy)]
+pub struct Utf8Whitespace();
 
 impl AsciiWhitespace {
     fn count_whitespace<A: CharLike>(slice: &[A]) -> usize {
@@ -51,16 +79,23 @@ impl<'a, A: CharLike> Prefix<&'a [A], &'a [A]> for AsciiWhitespace {
     }
 }
 
-impl<'a> Prefix<&'a str, &'a str> for AsciiWhitespace {
-    fn take_prefix(&self, haystack: &'a str) -> Option<(&'a str, &'a str)> {
-        let trimmed = haystack.trim_ascii_start();
-        Some((&haystack[..haystack.len() - trimmed.len()], trimmed))
-    }
+macro_rules! impl_whitespace_prefix_str {
+    ($id:ident, $trim_fn:ident) => {
+        impl<'a> Prefix<&'a str, &'a str> for $id {
+            fn take_prefix(&self, haystack: &'a str) -> Option<(&'a str, &'a str)> {
+                let trimmed = haystack.$trim_fn();
+                Some((&haystack[..haystack.len() - trimmed.len()], trimmed))
+            }
 
-    fn skip_prefix(&self, haystack: &'a str) -> Option<&'a str> {
-        Some(haystack.trim_ascii_start())
-    }
+            fn skip_prefix(&self, haystack: &'a str) -> Option<&'a str> {
+                Some(haystack.$trim_fn())
+            }
+        }
+    };
 }
+
+impl_whitespace_prefix_str!(AsciiWhitespace, trim_ascii_start);
+impl_whitespace_prefix_str!(Utf8Whitespace, trim_start);
 
 #[cfg(test)]
 mod tests {

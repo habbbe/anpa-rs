@@ -31,19 +31,9 @@ macro_rules! defer_parser {
 ///         both type and number.
 /// * `p...` - any number of parsers.
 #[macro_export]
-macro_rules! lift {
+macro_rules! map {
     ($f:expr, $($p:expr),* $(,)?) => {
-        create_parser!(s, Some($f($($p(s)?),*)))
-    };
-}
-
-/// Convert a number of parsers to a single parser producing a tuple with all the results.
-/// ### Arguments
-/// * `p...` - any number of parsers.
-#[macro_export]
-macro_rules! tuplify {
-    ($($p:expr),* $(,)?) => {
-        create_parser!(s, Some(($($p(s)?),*)))
+        $crate::create_parser!(s, Some($f($($p(s)?),*)))
     };
 }
 
@@ -53,9 +43,19 @@ macro_rules! tuplify {
 ///         both type and number.
 /// * `p...` - any number of parsers.
 #[macro_export]
-macro_rules! lift_if {
+macro_rules! map_if {
     ($f:expr, $($p:expr),* $(,)?) => {
-        create_parser!(s, $f($($p(s)?),*))
+        $crate::create_parser!(s, Some($f($($p(s)?),*)?))
+    };
+}
+
+/// Convert a number of parsers to a single parser producing a tuple with all the results.
+/// ### Arguments
+/// * `p...` - any number of parsers.
+#[macro_export]
+macro_rules! tuplify {
+    ($($p:expr),* $(,)?) => {
+        $crate::create_parser!(s, Some(($($p(s)?),*)))
     };
 }
 
@@ -66,7 +66,7 @@ macro_rules! lift_if {
 #[macro_export]
 macro_rules! pure {
     ($x:expr) => {
-        create_parser!(_s, Some($x))
+        $crate::create_parser!(_s, Some($x))
     };
 }
 
@@ -85,7 +85,7 @@ macro_rules! variadic {
         $e
     };
     ($f:expr, $e:expr, $($e2:expr),*) => {
-        $f($e, variadic!($f, $($e2),*))
+        $f($e, $crate::variadic!($f, $($e2),*))
     };
 }
 
@@ -96,7 +96,7 @@ macro_rules! variadic {
 #[macro_export]
 macro_rules! or {
     ($($p:expr),* $(,)?) => {
-        variadic!($crate::combinators::or, $($p),*)
+        $crate::variadic!($crate::combinators::or, $($p),*)
     };
 }
 
@@ -107,7 +107,7 @@ macro_rules! or {
 #[macro_export]
 macro_rules! or_no_partial {
     ($($p:expr),* $(,)?) => {
-        variadic!($crate::combinators::or_no_partial, $($p),*)
+        $crate::variadic!($crate::combinators::or_no_partial, $($p),*)
     };
 }
 
@@ -118,7 +118,18 @@ macro_rules! or_no_partial {
 #[macro_export]
 macro_rules! or_diff {
     ($($p:expr),* $(,)?) => {
-        variadic!($crate::combinators::or_diff, $($p),*)
+        $crate::variadic!($crate::combinators::or_diff, $($p),*)
+    };
+}
+
+/// Variadic version of `or_diff_no_partial`.
+///
+/// ### Arguments
+/// * `p...` - any number of parsers.
+#[macro_export]
+macro_rules! or_diff_no_partial {
+    ($($p:expr),* $(,)?) => {
+        $crate::variadic!($crate::combinators::or_diff_no_partial, $($p),*)
     };
 }
 
@@ -129,7 +140,7 @@ macro_rules! or_diff {
 #[macro_export]
 macro_rules! left {
     ($($p:expr),* $(,)?) => {
-        variadic!($crate::combinators::left, $($p),*)
+        $crate::variadic!($crate::combinators::left, $($p),*)
     };
 }
 
@@ -140,7 +151,7 @@ macro_rules! left {
 #[macro_export]
 macro_rules! right {
     ($($p:expr),* $(,)?) => {
-        variadic!($crate::combinators::right, $($p),*)
+        $crate::variadic!($crate::combinators::right, $($p),*)
     };
 }
 
@@ -156,7 +167,7 @@ macro_rules! right {
 #[macro_export]
 macro_rules! take {
     ($prefix:expr) => {
-        create_parser!(s, {
+        $crate::create_parser!(s, {
             $crate::prefix::Prefix::take_prefix(&$prefix, s.input).map(|(res, rest)| {
                 s.input = rest;
                 res
@@ -177,7 +188,7 @@ macro_rules! take {
 #[macro_export]
 macro_rules! skip {
     ($prefix:expr) => {
-        create_parser!(s, {
+        $crate::create_parser!(s, {
             s.input = $crate::prefix::Prefix::skip_prefix(&$prefix, s.input)?;
             Some(())
         })
@@ -195,7 +206,7 @@ macro_rules! skip {
 #[macro_export]
 macro_rules! until {
     ($needle:expr) => {
-        create_parser!(s, {
+        $crate::create_parser!(s, {
             let (size, index) = $crate::needle::Needle::find_in(&$needle, s.input)?;
             let res = $crate::slicelike::SliceLike::slice_to(s.input, index);
             s.input = $crate::slicelike::SliceLike::slice_from(s.input, index + size);
@@ -212,7 +223,51 @@ macro_rules! until {
 #[macro_export]
 macro_rules! greedy_or {
     ($($p:expr),* $(,)?) => {
-        variadic!($crate::combinators::greedy_or, $($p),*)
+        $crate::variadic!($crate::combinators::greedy_or, $($p),*)
+    };
+}
+
+/// Create a parser that takes the result of a parser, and returns different
+/// parsers depending on the provided conditions.
+///
+/// If none of the provided conditions match, the parser will fail.
+///
+/// ### Example:
+/// ```
+/// use anpa::core::*;
+/// use anpa::choose;
+/// use anpa::parsers::take;
+/// use anpa::number::integer;
+///
+/// let p = choose!(integer() => x: u8; // Note the semicolon
+///                 x == 0 => take("zero"),
+///                 x == 1 => take("one")
+/// );
+///
+/// let input1 = "0zero";
+/// let input2 = "1one";
+/// let input3 = "0one";
+/// let input4 = "1zero";
+/// let input5 = "2";
+///
+/// assert_eq!(parse(p, input1).result, Some("zero"));
+/// assert_eq!(parse(p, input2).result, Some("one"));
+/// assert_eq!(parse(p, input3).result, None);
+/// assert_eq!(parse(p, input4).result, None);
+/// assert_eq!(parse(p, input5).result, None);
+/// ```
+#[macro_export]
+macro_rules! choose {
+    ($p:expr => $res:ident $(: $t:ty)?; $($cond:expr => $new_p:expr),* $(,)?) => {
+        $crate::create_parser!(s, {
+            let $res $(:$t)? = $p(s)?;
+
+            $(if $cond {
+                return $new_p(s)
+            })*
+
+            None
+        })
     };
 }
 

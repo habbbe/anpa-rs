@@ -36,7 +36,7 @@ pub fn parse(text: &str) -> Option<AnpaVersion<std::string::String>> {
 
 #[inline]
 pub fn semver<'a, T: From<&'a str>>() -> impl StrParser<'a, AnpaVersion<T>> {
-    lift!(|(major, minor, patch), pre: Option<_>, build: Option<_>| {
+    map!(|(major, minor, patch), pre: Option<_>, build: Option<_>| {
         AnpaVersion::new(major, minor, patch, pre.unwrap_or(""), build.unwrap_or(""))
     }, version_core(), succeed(pre_release()), succeed(build())).left(empty())
 }

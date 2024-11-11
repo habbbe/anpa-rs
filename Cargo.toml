@@ -1,6 +1,6 @@
 [package]
 name = "anpa"
-version = "0.6.0"
+version = "0.7.0"
 authors = ["Andreas Hallberg <habbbe@gmail.com>"]
 description = "A generic monadic parser combinator library inspired by Haskell's parsec."
 keywords = ["parser", "parser-combinator", "parsec"]

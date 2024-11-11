@@ -1,4 +1,4 @@
-use core::ops::{Add, Sub, Mul, Div};
+use core::ops::{Add, Div, Mul, Sub};
 
 use crate::{charlike::CharLike, combinators::{or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 
@@ -70,16 +70,16 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
                     I: SliceLike<RefItem = A>,
                     S>() -> impl Parser<I, (O, usize, bool), S> {
     create_parser!(s, {
-        let mut idx = 0;
+        let mut idx: I::Idx = Default::default();
         let mut acc = O::cast_u8(0);
         let mut dec_divisor = 1;
 
         // The number 10 is guaranteed to fit into all our `NumLike` types
         let ten = O::cast_u8(10);
         let mut iter = s.input.slice_iter();
-        let mut consume = |digit: u8, is_negative: bool, checked: bool| -> Option<()> {
+        let mut consume = |digit: u32, is_negative: bool, checked: bool| -> Option<()> {
             // Digits are between 0 and 9, so they always fit in all types
-            let digit = O::cast_u8(digit);
+            let digit = O::cast_u8(digit as u8);
 
             if checked {
                 if acc > (O::MAX / ten) {
@@ -103,7 +103,7 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
                 }
                 acc = acc + digit;
             }
-            idx += 1;
+            idx += true.into();
             if DEC_DIVISOR {
                 dec_divisor *= 10;
             }
@@ -117,21 +117,21 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
                 true
             } else {
                 // We don't care about checking the result here, since a single digit can never fail.
-                consume(c.as_char().to_digit(10)? as u8, false, false);
+                consume(c.as_char().to_digit(10)?, false, false);
                 false
             }
         } else {
             false
         };
 
-        for digit in iter.map_while(|d| d.as_char().to_digit(10).map(|x| x as u8)) {
+        for digit in iter.map_while(|d| d.as_char().to_digit(10)) {
             consume(digit, is_negative, CHECKED)?;
         }
 
-        if idx == 0 {
+        if idx == Default::default() {
             None
         } else {
-            s.input = s.input.slice_from(idx + (is_negative as usize));
+            s.input = s.input.slice_from(idx + is_negative.into());
             Some((acc, dec_divisor, is_negative))
         }
     })
