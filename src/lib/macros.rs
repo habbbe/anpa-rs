@@ -225,11 +225,10 @@ macro_rules! greedy_or {
 /// ```
 /// use anpa::core::*;
 /// use anpa::choose;
-/// use anpa::parsers::{failure, take};
-/// use anpa::pure;
+/// use anpa::parsers::take;
 /// use anpa::number::integer;
 ///
-/// let p = choose!(integer() => x: u8;
+/// let p = choose!(integer() => x: u8; // Note the semicolon
 ///                 x == 0 => take("zero"),
 ///                 x == 1 => take("one")
 /// );
