@@ -37,16 +37,6 @@ macro_rules! lift {
     };
 }
 
-/// Convert a number of parsers to a single parser producing a tuple with all the results.
-/// ### Arguments
-/// * `p...` - any number of parsers.
-#[macro_export]
-macro_rules! tuplify {
-    ($($p:expr),* $(,)?) => {
-        $crate::create_parser!(s, Some(($($p(s)?),*)))
-    };
-}
-
 /// Variadic version of `map_if`, where all provided parsers must succeed.
 /// ### Arguments
 /// * `f` - the transformation function. Its arguments must match the result types of `p...` in
@@ -55,7 +45,17 @@ macro_rules! tuplify {
 #[macro_export]
 macro_rules! lift_if {
     ($f:expr, $($p:expr),* $(,)?) => {
-        $crate::create_parser!(s, $f($($p(s)?),*))
+        $crate::create_parser!(s, Some($f($($p(s)?),*)?))
+    };
+}
+
+/// Convert a number of parsers to a single parser producing a tuple with all the results.
+/// ### Arguments
+/// * `p...` - any number of parsers.
+#[macro_export]
+macro_rules! tuplify {
+    ($($p:expr),* $(,)?) => {
+        $crate::create_parser!(s, Some(($($p(s)?),*)))
     };
 }
 
@@ -119,6 +119,17 @@ macro_rules! or_no_partial {
 macro_rules! or_diff {
     ($($p:expr),* $(,)?) => {
         $crate::variadic!($crate::combinators::or_diff, $($p),*)
+    };
+}
+
+/// Variadic version of `or_diff_no_partial`.
+///
+/// ### Arguments
+/// * `p...` - any number of parsers.
+#[macro_export]
+macro_rules! or_diff_no_partial {
+    ($($p:expr),* $(,)?) => {
+        $crate::variadic!($crate::combinators::or_diff_no_partial, $($p),*)
     };
 }
 

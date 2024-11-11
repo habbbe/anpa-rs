@@ -35,7 +35,6 @@ impl<I, O, S, F: FnOnce(&mut AnpaState<I, S>) -> Option<O> + Copy> Parser<I, O, 
 
 /// Convenince extension functions for all parsers.
 pub trait ParserExt<I, O, S>: Parser<I, O, S> {
-
     /// Transform the result of this parser.
     fn map<O2>(self, f: impl FnOnce(O) -> O2 + Copy) -> impl Parser<I, O2, S>;
 

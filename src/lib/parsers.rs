@@ -19,12 +19,12 @@ pub fn failure<I: SliceLike, O, S>() -> impl Parser<I, O, S> {
 ///
 /// ### Arguments
 /// * `pred` - the predicate
-/// 
+///
 /// ### Example
 /// ```
 /// use anpa::core::*;
 /// use anpa::parsers::item_if;
-/// 
+///
 /// let parse_uppercase = item_if(|c: char| c.is_uppercase());
 /// let input1 = "A";
 /// let input2 = "a";
@@ -42,15 +42,15 @@ pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) ->
 }
 
 /// Create a parser that parses a single item.
-/// 
+///
 /// ### Consuming
 /// Always
-/// 
+///
 /// ### Example
 /// ```
 /// use anpa::core::*;
 /// use anpa::parsers::item;
-/// 
+///
 /// let parse_item = item();
 /// let input1 = "x";
 /// let input2 = "";
@@ -62,17 +62,17 @@ pub fn item<I: SliceLike, S>() -> impl Parser<I, I::RefItem, S> {
     item_if(|_| true)
 }
 
-/// Create a parser for matching the provided prefix via the matching condition
-/// provided by the `Prefix` implementation. Returns the parsed prefix on success.
-/// 
-/// If the result is not needed, use `skip` instead.
+/// Create a parser for matching the provided prefix.
+/// Returns the parsed prefix on success.
 ///
-/// The prefix can be anything implementing the `Prefix` trait for the parser input.
+/// If the result is not needed, use [`skip()`] instead.
+///
+/// The prefix can be anything implementing the [`Prefix`] trait for the parser input.
 /// Implementations are provided for single elements and sequences of both `&str`
 /// and `&[T]`.
-/// 
-/// For performance tuning, consider using the inlined version `anpa::take!`.
-/// 
+///
+/// For performance tuning, consider using the inlined version [`take!`].
+///
 /// ### Consuming
 /// Consumes prefix on successful parse
 ///
@@ -83,7 +83,7 @@ pub fn item<I: SliceLike, S>() -> impl Parser<I, I::RefItem, S> {
 /// ```
 /// use anpa::core::*;
 /// use anpa::parsers::take;
-/// 
+///
 /// let parse_single = take('a');
 /// let parse_seq = take("abc");
 /// let input = "abcd";
@@ -95,17 +95,16 @@ pub fn take<I: SliceLike, O, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, 
     take!(prefix)
 }
 
-/// Create a parser for matching the provided prefix via the matching condition
-/// provided by the `Prefix` implementation.
+/// Create a parser for matching the provided prefix.
 ///
 /// For better performance, this parser should be used if the result isn't saved
 /// or inspected.
 ///
-/// The prefix can be anything implementing the `Prefix` trait for the parser input.
+/// The prefix can be anything implementing the [`Prefix`] trait for the parser input.
 /// Implementations are provided for single elements and sequences of both `&str`
 /// and `&[T]`.
 ///
-/// For performance tuning, consider using the inlined version `anpa::skip!`.
+/// For performance tuning, consider using the inlined version [`skip!`].
 ///
 /// ### Consuming
 /// Consumes prefix on successful parse
@@ -117,7 +116,7 @@ pub fn take<I: SliceLike, O, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, 
 /// ```
 /// use anpa::core::*;
 /// use anpa::parsers::skip;
-/// 
+///
 /// let parse_single = skip('a');
 /// let parse_seq = skip("abc");
 /// let input = "abcd";
@@ -132,7 +131,7 @@ pub fn skip<I: SliceLike, O, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, (),
 /// Create a parser that parses while the items in the input matches the predicate.
 ///
 /// This parser never fails, so if an empty parse should not be permitted, wrap it in
-/// a `not_empty` combinator.
+/// a [`not_empty`](crate::combinators::not_empty) combinator.
 ///
 /// ### Consuming
 /// Consumes all matched items.
@@ -144,7 +143,7 @@ pub fn skip<I: SliceLike, O, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, (),
 /// ```
 /// use anpa::core::*;
 /// use anpa::parsers::item_while;
-/// 
+///
 /// let parse_odd = item_while(|n: &u8| n % 2 != 0);
 /// let input: &[u8] = &[7, 5, 3, 2];
 /// assert_eq!(parse(parse_odd, input).result, Some([7, 5, 3].as_slice()));
@@ -165,11 +164,11 @@ pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy)
 ///
 /// On a successful parse, all items until the matching needle will be returned.
 ///
-/// The argument can be anything implementing the `Needle` trait for the parser input.
+/// The argument can be anything implementing the [`Needle`] trait for the parser input.
 /// Implementations are provided for single elements and sequences of both `&str`
 /// and `&[T]`.
 ///
-/// For performance tuning, consider using the inlined version `anpa::until!`.
+/// For performance tuning, consider using the inlined version [`until!`].
 ///
 /// ### Consuming
 /// Consumes all items before the matching needle, and the needle itself.
@@ -181,7 +180,7 @@ pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy)
 /// ```
 /// use anpa::core::*;
 /// use anpa::parsers::until;
-/// 
+///
 /// let parse_statement = until(';');
 /// let input = "let x = 2;";
 /// assert_eq!(parse(parse_statement, input).result, Some("let x = 2"));
@@ -195,12 +194,12 @@ pub fn until<O, I: SliceLike, N: Needle<I, O>, S>(needle: N) -> impl Parser<I, I
 ///
 /// ### Consuming
 /// All input.
-/// 
+///
 /// ### Example
 /// ```
 /// use anpa::core::*;
 /// use anpa::parsers::rest;
-/// 
+///
 /// let parse_rest = rest();
 /// let input = "everything that is left";
 /// assert_eq!(parse(parse_rest, input).result, Some(input));
@@ -216,15 +215,15 @@ pub fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
 
 /// Create a parser that is successful only if the input is empty.
 /// Returns the empty input on success.
-/// 
+///
 /// ### Consuming
 /// Nothing
-/// 
+///
 /// ### Example
 /// ```
 /// use anpa::core::*;
 /// use anpa::parsers::empty;
-/// 
+///
 /// let parse_empty = empty();
 /// let input1 = "";
 /// let input2 = ".";
