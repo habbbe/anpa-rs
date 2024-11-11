@@ -31,7 +31,7 @@ macro_rules! defer_parser {
 ///         both type and number.
 /// * `p...` - any number of parsers.
 #[macro_export]
-macro_rules! lift {
+macro_rules! map {
     ($f:expr, $($p:expr),* $(,)?) => {
         $crate::create_parser!(s, Some($f($($p(s)?),*)))
     };
@@ -43,7 +43,7 @@ macro_rules! lift {
 ///         both type and number.
 /// * `p...` - any number of parsers.
 #[macro_export]
-macro_rules! lift_if {
+macro_rules! map_if {
     ($f:expr, $($p:expr),* $(,)?) => {
         $crate::create_parser!(s, Some($f($($p(s)?),*)?))
     };

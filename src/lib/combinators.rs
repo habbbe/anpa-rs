@@ -69,7 +69,7 @@ pub fn bind<I:SliceLike, O1, O2, P, S>(p: impl Parser<I, O1, S>,
 pub fn map<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
                                    f: impl FnOnce(O) -> O2 + Copy
 ) -> impl Parser<I, O2, S> {
-    lift!(f, p)
+    map!(f, p)
 }
 
 /// Create a new parser by applying a transformation `f` to the result of `p`.
@@ -290,7 +290,7 @@ pub fn attempt<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O,
 /// Transform a parser to a parser that along with its result also returns how many items that
 /// were parsed.
 ///
-/// Note: For [`&str`], the number of bytes parsed will be returned
+/// Note: For `&str`, the number of bytes parsed will be returned
 ///
 /// ### Arguments
 /// * `p` - the parser
