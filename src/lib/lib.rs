@@ -14,6 +14,7 @@ pub mod slicelike;
 pub mod prefix;
 pub mod needle;
 pub mod whitespace;
+pub mod findbyte;
 
 #[cfg(feature = "json")]
 pub mod json;
