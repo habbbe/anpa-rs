@@ -920,6 +920,85 @@ pub fn greedy_or<I: SliceLike, S, O>(p1: impl Parser<I, O, S>,
     })
 }
 
+/// (Description inspired by Parsec's `chainl1`)
+///
+/// Chain one or more `p` separated by `op`.
+/// `op` is a parser that returns a binary function taking as arguments the
+/// return type of `p`.
+///
+/// This parser will return the repeated left associative application of
+/// the function returned by `op` applied to the results of `p`.
+///
+/// This parser can be used to eliminate left recursion, for example in expression
+/// grammars.
+///
+/// ### Arguments
+/// * `p` - a parser for arguments to the function parsed by `op`.
+/// * `op` - a parser for a binary function.
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::defer_parser;
+/// use anpa::combinators::{chain, or, middle};
+/// use anpa::number::integer_signed;
+/// use anpa::parsers::{skip, take};
+///
+/// // A parser that calculates an arihmetic expression.
+/// // Whitespace is not supported for simplicity.
+/// fn expr<'a>() -> impl StrParser<'a, i64> {
+///     let ops = |c| {
+///         move |a, b| {
+///             match c {
+///                 '+' => a + b,
+///                 '-' => a - b,
+///                 '*' => a * b,
+///                 '/' => a / b,
+///                 _   => unreachable!()
+///             }
+///         }
+///     };
+///
+///     let add_op = or(take('+'), take('-')).map(ops);
+///     let mul_op = or(take('*'), take('/')).map(ops);
+///
+///     let atom = or(integer_signed(),
+///                   middle(skip('('), defer_parser!(expr()), skip(')')));
+///     let factor = chain(atom, mul_op);
+///     chain(factor, add_op)
+/// }
+///
+/// let input1 = "-12";
+/// let input2 = "12";
+/// let input3 = "12+24";
+/// let input4 = "2*12+24";
+/// let input5 = "(24/3-2-(3+2)-4*3/2)*5";
+///
+/// assert_eq!(parse(expr(), input1).result, Some(-12));
+/// assert_eq!(parse(expr(), input2).result, Some(12));
+/// assert_eq!(parse(expr(), input3).result, Some(36));
+/// assert_eq!(parse(expr(), input4).result, Some(48));
+/// assert_eq!(parse(expr(), input5).result, Some(-25));
+/// ```
+#[inline]
+pub fn chain<I: SliceLike, S, O, F>(p: impl Parser<I, O, S>,
+                                    op: impl Parser<I, F, S>
+) ->  impl Parser<I, O, S> where F: FnOnce(O, O) -> O {
+    create_parser!(s, {
+        let mut res = p(s)?;
+        loop {
+            if let Some(op_f) = op(s) {
+                if let Some(res2) = p(s) {
+                    res = op_f(res, res2);
+                    continue;
+                }
+            }
+
+            return Some(res)
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{combinators::{greedy_or, many, middle, no_separator, not_empty, times}, core::*, number::integer, parsers::{take, empty, item_while}};
