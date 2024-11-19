@@ -21,7 +21,7 @@ macro_rules! create_parser {
 #[macro_export]
 macro_rules! defer_parser {
     ($p:expr) => {
-        move |s: &mut $crate::core::AnpaState<_, _>| $p(s)
+        $crate::create_parser!(s, $p(s))
     }
 }
 
