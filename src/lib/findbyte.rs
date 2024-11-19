@@ -183,16 +183,51 @@ pub const fn gt(b: u8) -> GtByte {
     GtByte { b }
 }
 
+/// Helper function for performing the byte search and returning the
+/// result along with its position.
+#[inline]
+fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
+    where I: SliceLike + ContiguousBytes, B: ByteFinder {
+    let mut pos = 0;
+    let res;
+
+    {
+        let bytes = input.to_u8_slice();
+        let mut chunks = bytes.chunks_exact(Work::BITS as usize / 8);
+
+        'outer: {
+            for chunk in chunks.by_ref() {
+                let val = Work::from_le_bytes(chunk.try_into().unwrap());
+                let present = finder.intermediate(val) & HIGH_BITS;
+
+                if present != 0 {
+                    pos += (present.trailing_zeros() / u8::BITS) as usize;
+                    break 'outer
+                }
+
+                pos += Work::BITS as usize / 8;
+            }
+
+            pos += chunks.remainder().iter().position(|x| finder.slow_cmp(*x))?;
+            break 'outer
+        }
+
+        res = bytes[pos];
+    }
+
+    Some((res, input.slice_idx_from_offset(pos)))
+}
+
 /// Find a single byte in an input that can be represented as a
 /// contiguous area of bytes. It will process multiple bytes at
 /// a time, more specifically `usize::BITS / 8` bytes.
 ///
-/// When searching for individual bytes, this is likely faster than using
-/// [`until`](crate::parsers::until), or using
+/// When searching for multiple individual bytes, this is likely faster
+/// than using [`until`](crate::parsers::until), or using
 /// [`item_if`](crate::parsers::item_if) together with
 /// [`many`](crate::combinators::many)
 ///
-/// Available argment types are:
+/// Available finders are:
 /// - [`eq(x)`](eq): Search for a byte via equality, i.e. `eq(10)`
 ///             will search for a byte not equal to 10.
 /// - [`ne(x)`](ne): Search for a byte via inequality, i.e. `ne(10)`
@@ -205,6 +240,9 @@ pub const fn gt(b: u8) -> GtByte {
 /// Arguments can be combined with '|' to search for muliple bytes
 /// simultaneously.
 ///
+/// Note: When searching in an UTF-8 string, it is not safe to search
+/// for non-ASCII bytes,
+///
 /// ### Consuming
 /// If `consume_result` is:
 ///   - `true`: all items until and including the match.
@@ -212,6 +250,7 @@ pub const fn gt(b: u8) -> GtByte {
 ///
 /// ### Arguments
 /// * `finder` - the [`ByteFinder`].
+/// * `consume_result` - whether the matching byte should be consumed.
 ///
 /// ### Example:
 /// ```
@@ -233,38 +272,59 @@ pub const fn gt(b: u8) -> GtByte {
 pub fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> impl Parser<I, u8, S>
     where I: SliceLike + ContiguousBytes {
     create_parser!(s, {
-        let mut pos = 0;
-        let res;
-        {
-            let bytes = s.input.to_u8_slice();
-            let mut chunks = bytes.chunks_exact(Work::BITS as usize / 8);
+        let (res, pos) = get_byte_pos(s.input, finder)?;
+        s.input = s.input.slice_from(pos + consume_result.into());
+        Some(res)
+    })
+}
 
-            'outer: {
-                for chunk in chunks.by_ref() {
-                    let val = Work::from_le_bytes(chunk.try_into().unwrap());
-                    let present = finder.intermediate(val) & HIGH_BITS;
-
-                    if present != 0 {
-                        pos += (present.trailing_zeros() / u8::BITS) as usize;
-                        break 'outer
-                    }
-
-                    pos += Work::BITS as usize / 8;
-                }
-
-                pos += chunks.remainder().iter().position(|x| finder.slow_cmp(*x))?;
-                break 'outer
-            }
-
-            res = bytes[pos];
-        }
-
-        if consume_result {
-            pos += 1;
-        }
-
-        s.input = s.input.slice_from(s.input.slice_idx_from_offset(pos));
-        return Some(res)
+/// Parse until one byte matches in an input that can be represented as a
+/// contiguous area of bytes. It will process multiple bytes at
+/// a time, more specifically `usize::BITS / 8` bytes.
+///
+/// When searching for multiple individual bytes, this is likely faster
+/// than using [`until`](crate::parsers::until).
+///
+/// Note: When searching in an UTF-8 string, it is not safe to search
+/// for non-ASCII bytes,
+///
+/// ### Consuming
+/// If `consume_result` is:
+///   - `true`: all items until and including the match.
+///   - `false`: all items until the match.
+///
+/// ### Arguments
+/// * `finder` - the [`ByteFinder`].
+/// * `include_result` - whether the matching byte should be incuded
+///                      in the result.
+/// * `consume_result` - whether the matching byte should be consumed.
+///
+/// ### Example:
+/// ```
+/// use anpa::core::*;
+/// use anpa::findbyte::*;
+///
+/// // Find ascii `"`, `\` or control character.
+/// let p = until_byte(eq(b'"') | eq(b'\\') | lt(0x20), false, true);
+///
+/// let input1 = "abcd\"";
+/// let input2 = "ab\\cd";
+/// let input3 = "a\nbcd";
+///
+/// assert_eq!(parse(p, input1).result, Some("abcd"));
+/// assert_eq!(parse(p, input2).result, Some("ab"));
+/// assert_eq!(parse(p, input3).result, Some("a"));
+/// ```
+#[inline]
+pub fn until_byte<I, S>(finder: impl ByteFinder,
+                        include_result: bool,
+                        consume_result: bool) -> impl Parser<I, I, S>
+    where I: SliceLike + ContiguousBytes {
+    create_parser!(s, {
+        let (_, pos) = get_byte_pos(s.input, finder)?;
+        let res = s.input.slice_to(pos + include_result.into());
+        s.input = s.input.slice_from(pos + consume_result.into());
+        Some(res)
     })
 }
 
