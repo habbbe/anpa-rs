@@ -5,6 +5,7 @@
             "middlename": null,
             "age": 31,
             "score": 123.412,
+            "escape\n": "I\t want\n unicode \u12345678",
             "member": true,
             "hasPaid": false,
             "address": {
@@ -17,6 +18,7 @@
             "middlename": "Namemiddle",
             "age": 56,
             "score": 1.4122,
+            "escape\n": "\n\n\t\t\r\f\b\u12345678",
             "member": false,
             "hasPaid": false,
             "address": {
