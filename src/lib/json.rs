@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, vec::Vec};
 
-use crate::{combinators::*, core::{ParserExt, ParserInto, StrParser}, find_byte_keep, findbyte::LtByte, number::float, parsers::*, whitespace::AsciiWhitespace};
+use crate::{combinators::*, core::{ParserExt, ParserInto, StrParser}, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::AsciiWhitespace};
 
 #[derive(Debug)]
 pub enum JsonValue<StringType> {
@@ -21,10 +21,10 @@ fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
 fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
     let unicode = right(skip!('u'), times(4, item_if(|c: char| c.is_ascii_hexdigit())));
     let escaped = right(item(), or_diff(unicode, item_if(|c: char| "\"\\/bfnrt".contains(c))));
-    let parse_until = choose!(find_byte_keep!(b'"', b'\\', LtByte::new(0x20)) => c;
-                                              c == b'"' => failure(),
-                                              c == b'\\' => escaped,
-                                              true => failure());
+    let parse_until = choose!(find_byte(eq(b'"') | eq(b'\\') | lt(0x20), false) => c;
+                                        c == b'"' => failure(),
+                                        c == b'\\' => escaped,
+                                        true => failure());
 
     middle(skip!('"'), many(parse_until, true, no_separator()), skip!('"')).into_type()
 }

@@ -1,110 +1,186 @@
+use core::{convert::TryInto, ops};
+
+use crate::{core::Parser, slicelike::{ContiguousBytes, SliceLike}};
+
 /// One unit of "work". In this case `usize` will process 8 bytes
 /// at a time on a 64-bit CPU (or 4 bytes on 32-bit).
 pub type Work = usize;
 
+/// 0x0101_0101...
+pub const LOW_BITS: Work = Work::MAX / 255;
+
+/// 0x8080_8080...
+pub const HIGH_BITS: Work = LOW_BITS << 7;
+
 /// Trait for types that can be used for finding a byte in a wider
 /// integer type.
-pub trait ByteFinder {
+///
+/// Use functions [`eq`],  [`ne`], [`lt`], [`gt`] to generate finders.
+pub trait ByteFinder: Copy {
     /// Produce an intermediate format used for confirming existence
     /// of byte. The result will be applied to `& 0x808080...` as a final
     /// step.
-    fn intermediate(&self, haystack: Work) -> Work;
+    fn intermediate(self, haystack: Work) -> Work;
 
     /// The "traditional" comparison. Used when a full work unit cannot
     /// be obtained.
-    fn slow_cmp(&self, other: u8) -> bool;
+    fn slow_cmp(self, other: u8)  -> bool;
 }
 
-pub const LOW_BITS: Work = Work::MAX / 255;
-pub const HIGH_BITS: Work = LOW_BITS << 7;
+/// A wrapper for combining two [`ByteFinder`] via logic OR.
+#[derive(Clone, Copy)]
+pub struct OrByte<A: ByteFinder, B: ByteFinder> {
+    pub a: A,
+    pub b: B
+}
+
+macro_rules! impl_finder_for_combinator {
+    ($id:ident, $bit_op:tt, $logic_op:tt) => {
+        impl<A: ByteFinder, B: ByteFinder> ByteFinder for $id<A, B> {
+            #[inline]
+            fn intermediate(self, haystack: Work) -> Work {
+                self.a.intermediate(haystack) $bit_op self.b.intermediate(haystack)
+            }
+
+            #[inline]
+            fn slow_cmp(self, haystack: u8) -> bool {
+                self.a.slow_cmp(haystack) $logic_op self.b.slow_cmp(haystack)
+            }
+        }
+    };
+}
+
+impl_finder_for_combinator!(OrByte, |, ||);
+
+macro_rules! impl_or_for_finder {
+    ($id:ident) => {
+        impl<A: ByteFinder> ops::BitOr<A> for $id {
+            type Output = OrByte<Self, A>;
+
+            #[inline(always)]
+            fn bitor(self, rhs: A) -> Self::Output {
+                OrByte { a: self, b: rhs }
+            }
+        }
+    };
+}
+
+impl_or_for_finder!(EqByte);
+impl_or_for_finder!(NeByte);
+impl_or_for_finder!(LtByte);
+impl_or_for_finder!(GtByte);
+
+impl<A: ByteFinder, B: ByteFinder, C: ByteFinder> ops::BitOr<C> for OrByte<A, B> {
+    type Output = OrByte<Self, C>;
+
+    #[inline(always)]
+    fn bitor(self, rhs: C) -> Self::Output {
+        OrByte { a: self, b: rhs }
+    }
+}
+
+/// A wrapper used for finding a byte that is equal to
+/// the wrappee.
+#[derive(Clone, Copy)]
+pub struct EqByte {
+    pub b: u8
+}
 
 /// A wrapper used for finding a byte that is smaller than
 /// the wrappee.
+#[derive(Clone, Copy)]
 pub struct LtByte {
     pub b: u8
 }
 
-impl LtByte {
-    #[inline(always)]
-    pub fn new(b: u8) -> LtByte {
-        LtByte { b }
-    }
-}
-
 /// A wrapper used for finding a byte that is greater than
 /// the wrappee.
+#[derive(Clone, Copy)]
 pub struct GtByte {
     pub b: u8
 }
 
-impl GtByte {
-    #[inline(always)]
-    pub fn new(b: u8) -> GtByte {
-        GtByte { b }
-    }
-}
-
 /// A wrapper used for finding a byte that is not equal to
 /// the wrappee.
+#[derive(Clone, Copy)]
 pub struct NeByte {
     pub b: u8
 }
 
-impl NeByte {
-    #[inline(always)]
-    pub fn new(b: u8) -> NeByte {
-        NeByte { b }
-    }
-}
-
-impl ByteFinder for u8 {
+impl ByteFinder for EqByte {
     #[inline]
-    fn intermediate(&self, haystack: Work) -> Work {
-        let to_find = haystack ^ (*self as Work * LOW_BITS);
+    fn intermediate(self, haystack: Work) -> Work {
+        let to_find = haystack ^ (self.b as Work * LOW_BITS);
         to_find.wrapping_sub(LOW_BITS) & !to_find
     }
 
     #[inline(always)]
-    fn slow_cmp(&self, other: u8) -> bool {
-        *self == other
+    fn slow_cmp(self, other: u8) -> bool {
+        other == self.b
+    }
+}
+
+impl ByteFinder for NeByte {
+    #[inline]
+    fn intermediate(self, haystack: Work) -> Work {
+        // Non-equality is obtained by toggling the high bits of
+        // equality.
+        EqByte { b: self.b }.intermediate(haystack) ^ HIGH_BITS
+    }
+
+    #[inline(always)]
+    fn slow_cmp(self, other: u8) -> bool {
+        other != self.b
     }
 }
 
 impl ByteFinder for LtByte {
     #[inline]
-    fn intermediate(&self, haystack: Work) -> Work {
+    fn intermediate(self, haystack: Work) -> Work {
         haystack.wrapping_sub(LOW_BITS * self.b as Work) & !haystack
     }
 
     #[inline(always)]
-    fn slow_cmp(&self, other: u8) -> bool {
+    fn slow_cmp(self, other: u8) -> bool {
         other < self.b
     }
 }
 
 impl ByteFinder for GtByte {
     #[inline]
-    fn intermediate(&self, haystack: Work) -> Work {
+    fn intermediate(self, haystack: Work) -> Work {
         let mask = LOW_BITS * self.b as Work;
         mask.wrapping_sub(haystack) & !mask
     }
 
     #[inline(always)]
-    fn slow_cmp(&self, other: u8) -> bool {
+    fn slow_cmp(self, other: u8) -> bool {
         other > self.b
     }
 }
 
-impl ByteFinder for NeByte {
-    #[inline]
-    fn intermediate(&self, haystack: Work) -> Work {
-        self.b.intermediate(haystack) ^ HIGH_BITS
-    }
+/// Return a byte finder representing `== b`.
+#[inline(always)]
+pub const fn eq(b: u8) -> EqByte {
+    EqByte { b }
+}
 
-    #[inline(always)]
-    fn slow_cmp(&self, other: u8) -> bool {
-        other != self.b
-    }
+/// Return a byte finder representing `!= b`.
+#[inline(always)]
+pub const fn ne(b: u8) -> NeByte {
+    NeByte { b }
+}
+
+/// Return a byte finder representing `< b`.
+#[inline(always)]
+pub const fn lt(b: u8) -> LtByte {
+    LtByte { b }
+}
+
+/// Return a byte finder representing `> b`.
+#[inline(always)]
+pub const fn gt(b: u8) -> GtByte {
+    GtByte { b }
 }
 
 /// Find a single byte in an input that can be represented as a
@@ -116,30 +192,34 @@ impl ByteFinder for NeByte {
 /// [`item_if`](crate::parsers::item_if) together with
 /// [`many`](crate::combinators::many)
 ///
-/// The macro is variadic, and every provided argument will be sought
-/// individually. The first matching argument will be returned as the
-/// result.
-///
 /// Available argment types are:
-/// - `u8`: Search for a byte via equality
-/// - [`NeByte`]: Search for a byte via inequality, i.e. `NeByte::new(10)``
+/// - [`eq(x)`](eq): Search for a byte via equality, i.e. `eq(10)`
 ///             will search for a byte not equal to 10.
-/// - [`LtByte`]: Search for a byte via "less than", i.e. LtByte::new(10)
+/// - [`ne(x)`](ne): Search for a byte via inequality, i.e. `ne(10)`
+///             will search for a byte not equal to 10.
+/// - [`lt(x)`](lt): Search for a byte via "less than", i.e. `lt(10)`
 ///             will search for a byte smaller than 10.
-/// - [`GtByte`]: Search for a byte via "greater than", i.e. GtByte::new(10)
+/// - [`gt(x)`](gt): Search for a byte via "greater than", i.e. `gt(10)`
 ///             will search for a byte greater than 10.
 ///
+/// Arguments can be combined with '|' to search for muliple bytes
+/// simultaneously.
+///
 /// ### Consuming
-/// Consumes all items before the match, and the match itself.
+/// If `consume_result` is:
+///   - `true`: all items until and including the match.
+///   - `false`: all items until the match.
+///
+/// ### Arguments
+/// * `finder` - the [`ByteFinder`].
 ///
 /// ### Example:
 /// ```
 /// use anpa::core::*;
-/// use anpa::find_byte;
 /// use anpa::findbyte::*;
 ///
 /// // Find ascii `"`, `\` or control character.
-/// let p = find_byte!(b'"', b'\\', LtByte::new(0x20));
+/// let p = find_byte(eq(b'"') | eq(b'\\') | lt(0x20), true);
 ///
 /// let input1 = "abcd\"";
 /// let input2 = "ab\\cd";
@@ -149,73 +229,48 @@ impl ByteFinder for NeByte {
 /// assert_eq!(parse(p, input2).result, Some(b'\\'));
 /// assert_eq!(parse(p, input3).result, Some(b'\n'));
 /// ```
-#[macro_export]
-macro_rules! find_byte {
-    (impl $include:literal, $($mul:expr),+ $(,)?) => {
-        $crate::create_parser!(s, {
-            let mut pos = 0;
-            let res;
-            {
-                let bytes = $crate::slicelike::ContiguousBytes::to_u8_slice(&s.input);
+#[inline]
+pub fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> impl Parser<I, u8, S>
+    where I: SliceLike + ContiguousBytes {
+    create_parser!(s, {
+        let mut pos = 0;
+        let res;
+        {
+            let bytes = s.input.to_u8_slice();
+            let mut chunks = bytes.chunks_exact(Work::BITS as usize / 8);
 
-                let mut chunks = bytes.chunks_exact($crate::findbyte::Work::BITS as usize / 8);
+            'outer: {
+                for chunk in chunks.by_ref() {
+                    let val = Work::from_le_bytes(chunk.try_into().unwrap());
+                    let present = finder.intermediate(val) & HIGH_BITS;
 
-                'outer: loop {
-                    while let Some(chunk) = chunks.next() {
-                        let val = $crate::findbyte::Work::from_le_bytes(
-                            core::convert::TryInto::try_into(chunk).unwrap());
-                        let present = ($( $crate::findbyte::ByteFinder::intermediate(&$mul, val)) |*) & $crate::findbyte::HIGH_BITS;
-
-                        if present != 0 {
-                            pos = pos + (present.trailing_zeros() / u8::BITS) as usize;
-                            break 'outer
-                        }
-
-                        pos += $crate::findbyte::Work::BITS as usize / 8;
+                    if present != 0 {
+                        pos += (present.trailing_zeros() / u8::BITS) as usize;
+                        break 'outer
                     }
 
-                    pos = chunks.remainder().iter()
-                        .position(|x| $($crate::findbyte::ByteFinder::slow_cmp(&$mul, *x)) ||*)? + pos;
-
-                    break
+                    pos += Work::BITS as usize / 8;
                 }
 
-                res = bytes[pos];
+                pos += chunks.remainder().iter().position(|x| finder.slow_cmp(*x))?;
+                break 'outer
             }
 
-            if !$include {
-                pos += 1;
-            }
+            res = bytes[pos];
+        }
 
-            s.input = $crate::slicelike::SliceLike::slice_from(s.input,
-                $crate::slicelike::SliceLike::slice_idx_from_offset(s.input, pos));
+        if consume_result {
+            pos += 1;
+        }
 
-            return Some(res)
-        })
-    };
-
-    ($($mul:expr),+ $(,)?) => {
-        find_byte!(impl false, $($mul),*)
-    };
-}
-
-/// A version of [`find_byte!`] that leaves the found byte
-/// in the input.
-///
-/// ### Consuming
-/// Consumes all items before the match, but not the match itself.
-///
-/// See the aforemented for examples.
-#[macro_export]
-macro_rules! find_byte_keep {
-    ($($mul:expr),+ $(,)?) => {
-        $crate::find_byte!(impl true, $($mul),*)
-    };
+        s.input = s.input.slice_from(s.input.slice_idx_from_offset(pos));
+        return Some(res)
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::parse, findbyte::{LtByte, GtByte, NeByte}};
+    use crate::{core::parse, findbyte::{eq, find_byte, gt, lt, ne}};
 
     #[test]
     fn less_than() {
@@ -223,19 +278,19 @@ mod tests {
         let s: &[u8] = &arr;
 
         // Negative case
-        let p = find_byte!(LtByte::new(1), 0);
+        let p = find_byte(lt(1) | eq(0), true);
         let res = parse(p, s);
         assert_eq!(res.result, None);
         assert_eq!(res.state, s);
 
         // Positive case with two matches. First should match
-        let p = find_byte!(LtByte::new(3), LtByte::new(2));
+        let p = find_byte(lt(3) | lt(2), true);
         let res = parse(p, s);
         assert_eq!(res.result, Some(2));
         assert_eq!(res.state, &s[8..]);
 
         for i in 1_u8..arr.len() as u8 {
-            let p = find_byte!(LtByte::new(i + 1), i);
+            let p = find_byte(lt(i + 1) | eq(i), true);
             let res = parse(p, s);
             assert_eq!(res.result, Some(i));
             assert_eq!(res.state, &s[arr.len() - (i - 1) as usize..]);
@@ -248,19 +303,19 @@ mod tests {
         let s: &[u8] = &arr;
 
         // Negative case
-        let p = find_byte!(GtByte::new(9), 0);
+        let p = find_byte(gt(9) | eq(0), true);
         let res = parse(p, s);
         assert_eq!(res.result, None);
         assert_eq!(res.state, s);
 
         // Positive case with two matches. First should match
-        let p = find_byte!(GtByte::new(7), GtByte::new(8));
+        let p = find_byte(gt(7) | gt(8), true);
         let res = parse(p, s);
         assert_eq!(res.result, Some(8));
         assert_eq!(res.state, &s[8..]);
 
         for i in 1_u8..arr.len() as u8 {
-            let p = find_byte!(GtByte::new(i - 1), i);
+            let p = find_byte(gt(i - 1) | eq(i), true);
             let res = parse(p, s);
             assert_eq!(res.result, Some(i));
             assert_eq!(res.state, &s[i as usize..]);
@@ -272,7 +327,7 @@ mod tests {
         let target = 0x10_u8;
         let arr = [9, 8, 7, 6, 5, 4, 3, 2, 1];
         let s: &[u8] = &arr;
-        let p = find_byte!(target);
+        let p = find_byte(eq(target), true);
 
         // Negative case
         let res = parse(p, s);
@@ -288,7 +343,7 @@ mod tests {
 
         // Exhaustive position
         for i in 1..s.len() {
-            let p = find_byte!(target);
+            let p = find_byte(eq(target), true);
             let mut tmp_arr = arr;
             tmp_arr[i] = target;
             let s: &[u8] = &tmp_arr;
@@ -303,7 +358,7 @@ mod tests {
         let avoid = 10_u8;
         let arr = [avoid; 9];
         let s: &[u8] = &arr;
-        let p = find_byte!(NeByte::new(avoid));
+        let p = find_byte(ne(avoid), true);
 
         // Negative case
         let res = parse(p, s);
@@ -321,7 +376,7 @@ mod tests {
 
         // Exhaustive position
         for i in 1..s.len() {
-            let p = find_byte!(NeByte::new(avoid));
+            let p = find_byte(ne(avoid), true);
             let mut tmp_arr = arr;
             tmp_arr[i] = 1;
             let s: &[u8] = &tmp_arr;
@@ -335,17 +390,17 @@ mod tests {
     fn byte_slice() {
         let s: &[u8] = &[5, 4, 3, 2, 1, 1, 1, 1];
 
-        let p = find_byte!(2, 4);
+        let p = find_byte(eq(2) | eq(4), true);
         let res = parse(p, s);
         assert_eq!(res.result, Some(4));
         assert_eq!(res.state, &[3, 2, 1, 1, 1, 1]);
 
-        let p = find_byte_keep!(2, 4);
+        let p = find_byte(eq(2) | eq(4), false);
         let res = parse(p, s);
         assert_eq!(res.result, Some(4));
         assert_eq!(res.state, &[4, 3, 2, 1, 1, 1, 1]);
 
-        let p = find_byte!(3, LtByte::new(5));
+        let p = find_byte(eq(3) | lt(5), true);
         let res = parse(p, s);
         assert_eq!(res.result, Some(4));
         assert_eq!(res.state, &[3, 2, 1, 1, 1, 1]);
