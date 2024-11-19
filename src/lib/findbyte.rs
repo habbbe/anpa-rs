@@ -71,11 +71,11 @@ impl_or_for_finder!(LtByte);
 impl_or_for_finder!(GtByte);
 
 impl<A: ByteFinder, B: ByteFinder, C: ByteFinder> ops::BitOr<C> for OrByte<A, B> {
-    type Output = OrByte<Self, C>;
+    type Output = OrByte<A, OrByte<B, C>>;
 
     #[inline(always)]
     fn bitor(self, rhs: C) -> Self::Output {
-        OrByte { a: self, b: rhs }
+        OrByte { a: self.a, b: OrByte { a: self.b, b: rhs } }
     }
 }
 
