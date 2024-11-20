@@ -12,3 +12,4 @@
 - New variant to macro `choose!` that allows for match syntax.
 - New macro `item_matches!` used for parsing one item that matches
   any of the arguments.
+- New parser `many_to_arr` for parsing to an array (usable with no_std).

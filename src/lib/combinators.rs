@@ -760,6 +760,50 @@ pub fn fold<I: SliceLike, O, O2, S, R>(p: impl Parser<I, O, S>,
     })
 }
 
+/// Apply a parser until it fails and store the results in a fixed sized array.
+///
+/// The result is a tuple `(the_array, start_index_plus_objects_parsed)`.
+///
+/// The parser does not attempt to validate the bounds of the array, so this
+/// can panic if the array is not big enough to fit all parsed objects.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `constructor` - a constructor for generating the initial state. It shall
+///                   be a function returning a tuple `(the_array, start_index)`.
+/// * `allow_empty` - whether no parse should be considered successful.
+/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+///                 functions to construct this parameter.
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::combinators::{many_to_arr, separator};
+/// use anpa::number::integer;
+/// use anpa::parsers::skip;
+///
+/// let constructor = || ([0_i32; 4], 0);
+///
+/// let parse_nums = many_to_arr(
+///     integer(),
+///     constructor,
+///     false,
+///     separator(skip(','), false));
+///
+/// let input = "1,2,3";
+///
+/// assert_eq!(parse(parse_nums, input).result, Some(([1,2,3,0], 3)));
+/// ```
+#[inline]
+pub fn many_to_arr<I: SliceLike, O, O2, S, const N: usize >(
+    p: impl Parser<I, O, S>,
+    constructor: impl FnOnce() -> ([O; N], usize) + Copy,
+    allow_empty: bool,
+    separator: Option<(bool, impl Parser<I, O2, S>)>
+) -> impl Parser<I, ([O; N], usize), S> {
+    fold(p, constructor, |(arr, n), x| { arr[*n] = x; *n += 1; }, allow_empty, separator)
+}
+
 #[cfg(feature = "std")]
 /// Apply a parser until it fails and store the results in a `Vec`.
 ///
@@ -788,7 +832,7 @@ pub fn fold<I: SliceLike, O, O2, S, R>(p: impl Parser<I, O, S>,
 #[inline]
 pub fn many_to_vec<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
                                            allow_empty: bool,
-                                           separator: Option<(bool, impl Parser<I, O2, S>)>,
+                                           separator: Option<(bool, impl Parser<I, O2, S>)>
 ) -> impl Parser<I, Vec<O>, S> {
     fold(p, Vec::new, |v, x| v.push(x), allow_empty, separator)
 }
