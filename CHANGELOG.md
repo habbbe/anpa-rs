@@ -9,3 +9,4 @@
 - New parser `until_byte` which works similarly to `find_byte` but
   returns the consumed input instead of the matching byte itself.
 - New parser `chain` that can be used to eliminate left recursion.
+- New variant to macro `choose!` that allows for match syntax.
