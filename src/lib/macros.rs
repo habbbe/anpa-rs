@@ -274,7 +274,7 @@ macro_rules! greedy_or {
 /// # use anpa::{choose, core::parse, number::integer, parsers::take};
 ///     let p = choose!(integer() => n; // Explicit binding to variable `v`
 ///                    (0_u8..=4).contains(&n) => take("range"),
-///                     n == 5                 => take("five"));
+///                    n == 5                  => take("five"));
 /// # parse(p, "dummy");
 /// ```
 /// - match-style:
