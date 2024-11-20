@@ -10,3 +10,5 @@
   returns the consumed input instead of the matching byte itself.
 - New parser `chain` that can be used to eliminate left recursion.
 - New variant to macro `choose!` that allows for match syntax.
+- New macro `item_matches!` used for parsing one item that matches
+  any of the arguments.

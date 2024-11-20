@@ -167,6 +167,30 @@ macro_rules! right {
     };
 }
 
+/// Variadic parser that succeeds if the next item matches one of the
+/// provided arguments.
+///
+/// ### Arguments
+/// * `pattern` - any number of match patterns.
+///
+/// ### Example:
+/// ```
+/// use anpa::core::*;
+/// use anpa::item_matches;
+///
+/// let p = item_matches!('0', '1');
+///
+/// assert_eq!(parse(p, "012").result, Some('0'));
+/// assert_eq!(parse(p, "123").result, Some('1'));
+/// assert_eq!(parse(p, "234").result, None);
+/// ```
+#[macro_export]
+macro_rules! item_matches {
+    ($($pattern:pat_param $(if $guard:expr)?),+ $(,)?) => {
+        $crate::parsers::item_if(|c| matches!(c, $($pattern $(if $guard)?) |*))
+    };
+}
+
 /// Alternative to the `take` parser that inlines the argument into the parser.
 ///
 /// This can give better performance and/or smaller binary size, or the opposite.
