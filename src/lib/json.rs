@@ -12,13 +12,13 @@ pub enum JsonValue<StringType> {
     Arr(Vec<JsonValue<StringType>>)
 }
 
-const fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
+pub const fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
     // For unknown reasons, this gives better performance than `skip_ascii_whitespace()`.
     // Possibly a random optimization quirk, since it ideally shouldn't happen.
     right(skip!(AsciiWhitespace), p)
 }
 
-const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
+pub const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
     let unicode = right(skip!('u'), times(4, item_if(|c: char| c.is_ascii_hexdigit())));
     let escaped = right(item(), or_diff(item_matches!('"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't'),
                                         unicode));
@@ -78,26 +78,45 @@ pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, J
 /// Get a JSON parser that parses a JSON array. The type used for strings will be inferred
 /// from the context via `From<&str>`. For examples, see `object_parser`.
 pub const fn array_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
-    map(middle(
-        skip!('['),
-        many_to_vec(value_parser(), true, separator(comma_parser(), false)),
-        eat(skip!(']'))), JsonValue::Arr)
+    map(arr_parser(value_parser()), JsonValue::Arr)
 }
 
-pub const fn open_brace_parser<'a>() -> impl StrParser<'a, ()> {
+/// Get a JSON parser that parses an array.
+pub const fn arr_parser<'a, T>(p: impl StrParser<'a, T>) -> impl StrParser<'a, Vec<T>> {
+    middle(
+        skip!('['),
+        many_to_vec(p, true, separator(comma_parser(), false)),
+        eat(skip!(']')))
+}
+
+#[inline]
+pub fn open_brace_parser<'a>() -> impl StrParser<'a, ()> {
     eat(skip!('{'))
 }
 
+#[inline]
 pub const fn close_brace_parser<'a>() -> impl StrParser<'a, ()> {
     eat(skip!('}'))
 }
 
+#[inline]
 pub const fn comma_parser<'a>() -> impl StrParser<'a, ()> {
     eat(skip!(','))
 }
 
+#[inline]
 pub const fn colon_parser<'a>() -> impl StrParser<'a, ()> {
     eat(skip!(':'))
+}
+
+#[inline]
+pub const fn option_parser<'a, T>(p: impl StrParser<'a, T>) -> impl StrParser<'a, Option<T>> {
+    or(map(skip!("null"), |_ | None), map(p, Some))
+}
+
+#[inline]
+pub fn bool_parse<'a>() -> impl StrParser<'a, bool> {
+    or(map(skip!("true"), |_| true), map(skip!("false"), |_| false))
 }
 
 #[macro_export]
@@ -140,7 +159,7 @@ macro_rules! json_parser_gen {
     ($f:expr, ($id:expr, $parser:expr), $($rest:tt),*) => {
         $crate::combinators::middle(
             $crate::json::open_brace_parser(),
-            $crate::lift!($f,
+            $crate::map!($f,
                 $crate::internal_json_field!(($id, $parser)),
                 $($crate::combinators::right(
                     $crate::json::comma_parser(),
