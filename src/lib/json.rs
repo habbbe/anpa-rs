@@ -84,6 +84,14 @@ pub fn array_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValu
         eat(skip!(']'))).map(JsonValue::Arr)
 }
 
+/// Get a JSON parser that parses an array.
+pub fn arr_parser<'a, T>(p: impl StrParser<'a, T>) -> impl StrParser<'a, Vec<T>> {
+    middle(
+        skip!('['),
+        many_to_vec(p, true, separator(comma_parser(), false)),
+        eat(skip!(']')))
+}
+
 pub fn open_brace_parser<'a>() -> impl StrParser<'a, ()> {
     eat(skip!('{'))
 }
@@ -98,6 +106,16 @@ pub fn comma_parser<'a>() -> impl StrParser<'a, ()> {
 
 pub fn colon_parser<'a>() -> impl StrParser<'a, ()> {
     eat(skip!(':'))
+}
+
+#[inline]
+pub fn option_parser<'a, T>(p: impl StrParser<'a, T>) -> impl StrParser<'a, Option<T>> {
+    or(skip!("null").map(|_| None), p.map(Some))
+}
+
+#[inline]
+pub fn bool_parse<'a>() -> impl StrParser<'a, bool> {
+    or(skip!("true").map(|_| true), skip!("false").map(|_| false))
 }
 
 #[macro_export]
@@ -140,7 +158,7 @@ macro_rules! json_parser_gen {
     ($f:expr, ($id:expr, $parser:expr), $($rest:tt),*) => {
         $crate::combinators::middle(
             $crate::json::open_brace_parser(),
-            $crate::lift!($f,
+            $crate::map!($f,
                 $crate::internal_json_field!(($id, $parser)),
                 $($crate::combinators::right(
                     $crate::json::comma_parser(),

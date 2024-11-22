@@ -2,6 +2,8 @@ use anpa::core::{*};
 use anpa::{*};
 use anpa::combinators::{*};
 use anpa::parsers::{*};
+use json::{arr_parser, array_parser, bool_parse, close_brace_parser, colon_parser, comma_parser, eat, open_brace_parser, option_parser, string_parser, value_parser};
+use number::{float, integer};
 
 use std::fs::File;
 use std::hint::black_box;
@@ -14,6 +16,7 @@ fn main() {
     bench_hubb_handrolled();
     bench_semver();
     bench_json();
+    bench_json_derive();
 }
 
 fn read_file(path: &str) -> io::BufReader<File> {
@@ -121,6 +124,63 @@ fn bench_json() {
     });
 
     println!("anpa::json: in {}us", d.as_nanos() as f64 / 1000.0);
+}
+
+struct Address {
+    street: String,
+    zip: String
+}
+
+struct Person {
+    name: String,
+    middle_name: Option<String>,
+    age: u8,
+    score: f64,
+
+    escape: String,
+    member: bool,
+    favorite_emojis: String,
+    hasPaid: bool,
+    address: Address
+}
+
+struct Db {
+    db: Vec<Person>
+}
+
+fn bench_json_derive() {
+    let address_parser = json_parser_gen!(|street, zip| Address { street, zip },
+                                          ("street", string_parser()),
+                                          ("zip", string_parser())
+                                         );
+
+    let person_parser =
+    json_parser_gen!(|name, middle_name, age, score, escape, member, favorite_emojis, hasPaid, address|
+                     Person { name, middle_name, age, score, escape, member, favorite_emojis, hasPaid, address},
+                    ("name", string_parser()),
+                    ("middlename", option_parser(string_parser())),
+                    ("age", integer()),
+                    ("score", float()),
+                    ("escape\\n", string_parser()),
+                    ("member", bool_parse()),
+                    ("favorite_emojis", string_parser()),
+                    ("hasPaid", bool_parse()),
+                    ("address", address_parser)
+                );
+
+    let db_parser = json_parser_gen!(|db| Db { db },
+                    ("db", arr_parser(person_parser)),);
+
+    let mut string = black_box(String::new());
+    let _ = read_file("test.json").read_to_string(&mut string);
+
+    let (d, _) = bench_fun(10000, || {
+        for _ in 0..10 {
+            parse(db_parser, &string).result.unwrap();
+        }
+    });
+
+    println!("anpa::json_custom: in {}us", d.as_nanos() as f64 / 1000.0);
 }
 
 fn bench_semver() {
