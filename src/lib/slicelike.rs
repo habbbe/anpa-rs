@@ -7,6 +7,9 @@ pub trait SliceLike: Copy {
     type RefItem: Copy;
     type Iter: Iterator<Item = Self::RefItem>;
 
+    /// Get an index from `usize`.
+    fn slice_idx_from_offset(self, idx: usize) -> Self::Idx;
+
     /// Get an iterator for this input.
     fn slice_iter(self) -> Self::Iter;
 
@@ -36,6 +39,11 @@ impl<'a, A> SliceLike for &'a [A] {
     type Idx = usize;
     type RefItem = &'a A;
     type Iter = Iter<'a, A>;
+
+    #[inline(always)]
+    fn slice_idx_from_offset(self, idx: usize) -> Self::Idx {
+        idx
+    }
 
     fn slice_iter(self) -> Self::Iter {
         self.iter()
@@ -75,6 +83,11 @@ impl<'a> SliceLike for &'a str {
     type RefItem = char;
     type Iter = Chars<'a>;
 
+    #[inline(always)]
+    fn slice_idx_from_offset(self, idx: usize) -> Self::Idx {
+        idx
+    }
+
     fn slice_iter(self) -> Self::Iter {
         self.chars()
     }
@@ -107,5 +120,24 @@ impl<'a> SliceLike for &'a str {
 
     fn slice_is_empty(&self) -> bool {
         self.is_empty()
+    }
+}
+
+/// A trait for types that can be converted to `&[u8]`.
+pub trait ContiguousBytes {
+    fn to_u8_slice(&self) -> &[u8];
+}
+
+impl ContiguousBytes for &str {
+    #[inline(always)]
+    fn to_u8_slice(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
+impl ContiguousBytes for &[u8] {
+    #[inline(always)]
+    fn to_u8_slice(&self) -> &[u8] {
+        self
     }
 }
