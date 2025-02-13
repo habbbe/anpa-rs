@@ -778,13 +778,13 @@ pub fn fold<I: SliceLike, O, O2, S, R>(p: impl Parser<I, O, S>,
 /// ### Example
 /// ```
 /// use anpa::core::*;
-/// use anpa::combinators::{many_to_arr, separator};
+/// use anpa::combinators::{many_to_array, separator};
 /// use anpa::number::integer;
 /// use anpa::parsers::skip;
 ///
 /// let constructor = || ([0_i32; 4], 0);
 ///
-/// let parse_nums = many_to_arr(
+/// let parse_nums = many_to_array(
 ///     integer(),
 ///     constructor,
 ///     false,
@@ -795,7 +795,7 @@ pub fn fold<I: SliceLike, O, O2, S, R>(p: impl Parser<I, O, S>,
 /// assert_eq!(parse(parse_nums, input).result, Some(([1,2,3,0], 3)));
 /// ```
 #[inline]
-pub fn many_to_arr<I: SliceLike, O, O2, S, const N: usize >(
+pub fn many_to_array<I: SliceLike, O, O2, S, const N: usize >(
     p: impl Parser<I, O, S>,
     constructor: impl FnOnce() -> ([O; N], usize) + Copy,
     allow_empty: bool,
