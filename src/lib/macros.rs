@@ -11,17 +11,29 @@ macro_rules! create_parser {
 }
 
 /// Shorthand for creating a deferred parser. This is mandatory when creating recursive parsers.
+///
 /// ### Example:
-/// ```ignore
+/// ```
+/// use anpa::defer_parser;
+/// use anpa::core::*;
+/// use anpa::combinators::{middle, not_empty, or};
+/// use anpa::parsers::{item_while, take};
+///
 /// /// Can parse e.g. "(((something)))"
-/// fn in_parens<'a, S>() -> impl StrParser<'a> {
-///     defer_parser!(or(item_while(|c: char| c.is_alphanumeric()), middle(take('('), in_parens(), take(')'))))
+/// fn in_parens<'a>() -> impl StrParser<'a> {
+///     defer_parser!(or(
+///         not_empty(item_while(|c: char| c.is_alphanumeric())),
+///         middle(take('('), in_parens(), take(')')))
+///     )
 /// }
+///
+/// assert_eq!(parse(in_parens(), "((((inside))))" ).result, Some("inside"));
+///
 /// ```
 #[macro_export]
 macro_rules! defer_parser {
     ($p:expr) => {
-        move |s: &mut $crate::core::AnpaState<_, _>| $p(s)
+        $crate::create_parser!(s, $p(s))
     }
 }
 
@@ -155,6 +167,30 @@ macro_rules! right {
     };
 }
 
+/// Variadic parser that succeeds if the next item matches one of the
+/// provided arguments.
+///
+/// ### Arguments
+/// * `pattern` - any number of match patterns.
+///
+/// ### Example:
+/// ```
+/// use anpa::core::*;
+/// use anpa::item_matches;
+///
+/// let p = item_matches!('0', '1');
+///
+/// assert_eq!(parse(p, "012").result, Some('0'));
+/// assert_eq!(parse(p, "123").result, Some('1'));
+/// assert_eq!(parse(p, "234").result, None);
+/// ```
+#[macro_export]
+macro_rules! item_matches {
+    ($($pattern:pat_param $(if $guard:expr)?),+ $(,)?) => {
+        $crate::parsers::item_if(|c| matches!(c, $($pattern $(if $guard)?) |*))
+    };
+}
+
 /// Alternative to the `take` parser that inlines the argument into the parser.
 ///
 /// This can give better performance and/or smaller binary size, or the opposite.
@@ -232,6 +268,25 @@ macro_rules! greedy_or {
 ///
 /// If none of the provided conditions match, the parser will fail.
 ///
+/// The macro comes in two flavors:
+/// - if-style:
+/// ```
+/// # use anpa::{choose, core::parse, number::integer, parsers::take};
+///     let p = choose!(integer() => n; // Explicit binding to variable `v`
+///                    (0_u8..=4).contains(&n) => take("range"),
+///                    n == 5                  => take("five"));
+/// # parse(p, "dummy");
+/// ```
+/// - match-style:
+/// ```
+/// # use anpa::{choose, core::parse, number::integer, parsers::take};
+///     let p = choose!(integer(); // No binding of result.
+///                     0_u8..=4 => take("range"),
+///                     5        => take("five"));
+/// # parse(p, "dummy");
+/// ```
+///
+///
 /// ### Example:
 /// ```
 /// use anpa::core::*;
@@ -239,22 +294,41 @@ macro_rules! greedy_or {
 /// use anpa::parsers::take;
 /// use anpa::number::integer;
 ///
-/// let p = choose!(integer() => x: u8; // Note the semicolon
-///                 x == 0 => take("zero"),
-///                 x == 1 => take("one")
+/// let p_if = choose!(integer() => x: u8; // Note the semicolon
+///                   x == 0 => take("zero"),
+///                   x == 1 => take("one"),
+///                   (2..=100).contains(&x) => take("big")
+/// );
+///
+/// let p_match = choose!(integer(); // Note the semicolon
+///                       0_u8 => take("zero"),
+///                       1 => take("one"),
+///                       2..=100 => take("big")
 /// );
 ///
 /// let input1 = "0zero";
 /// let input2 = "1one";
-/// let input3 = "0one";
-/// let input4 = "1zero";
-/// let input5 = "2";
+/// let input3 = "2big";
+/// let input4 = "100big";
+/// let input5 = "101big";
+/// let input6 = "0one";
+/// let input7 = "1zero";
 ///
-/// assert_eq!(parse(p, input1).result, Some("zero"));
-/// assert_eq!(parse(p, input2).result, Some("one"));
-/// assert_eq!(parse(p, input3).result, None);
-/// assert_eq!(parse(p, input4).result, None);
-/// assert_eq!(parse(p, input5).result, None);
+/// assert_eq!(parse(p_if, input1).result, Some("zero"));
+/// assert_eq!(parse(p_if, input2).result, Some("one"));
+/// assert_eq!(parse(p_if, input3).result, Some("big"));
+/// assert_eq!(parse(p_if, input4).result, Some("big"));
+/// assert_eq!(parse(p_if, input5).result, None);
+/// assert_eq!(parse(p_if, input6).result, None);
+/// assert_eq!(parse(p_if, input7).result, None);
+///
+/// assert_eq!(parse(p_match, input1).result, Some("zero"));
+/// assert_eq!(parse(p_match, input2).result, Some("one"));
+/// assert_eq!(parse(p_match, input3).result, Some("big"));
+/// assert_eq!(parse(p_match, input4).result, Some("big"));
+/// assert_eq!(parse(p_match, input5).result, None);
+/// assert_eq!(parse(p_match, input6).result, None);
+/// assert_eq!(parse(p_match, input7).result, None);
 /// ```
 #[macro_export]
 macro_rules! choose {
@@ -269,6 +343,18 @@ macro_rules! choose {
             None
         })
     };
+
+    ($p:expr; $($arm:pat_param $(| $alt:pat_param)* $(if $guard:expr)? => $new_p:expr),* $(,)?) => {
+        $crate::create_parser!(s, {
+            match $p(s)? {
+                $(
+                    $arm $(| $alt)* $(if $guard)? => $new_p(s),
+                )*
+                #[allow(unreachable_patterns)]
+                _ => None
+            }
+        })
+    };
 }
 
 /// Create a new parser trait with a concrete input type for cleaner APIs.
@@ -278,7 +364,8 @@ macro_rules! choose {
 /// * `comment` - The doc comment to be generated for the trait
 ///
 /// ### Example
-/// ```ignore
+/// ```
+/// use anpa::create_parser_trait;
 /// create_parser_trait!(I8Parser, [i8], "Convenience alias for a parser that parses a `&'a [i8]`");
 /// ```
 #[macro_export]

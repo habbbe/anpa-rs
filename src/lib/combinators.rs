@@ -3,6 +3,34 @@ use std::{collections::{BTreeMap, HashMap}, vec::Vec, hash::Hash};
 
 use crate::{core::{AnpaState, Parser}, parsers::success, slicelike::SliceLike};
 
+/// An instrution for how to proceed with a parse.
+/// To be used with the `fold` combinator.
+///
+/// `Into<FlowControl>` implementations are provided for:
+///
+/// - `()` which always translates to `Pass`
+/// - `bool` where `true` translates to `Pass`, and `false` to `Fail`
+#[derive(Clone, Copy)]
+pub enum FlowControl {
+    Pass,
+    Stop,
+    Fail
+}
+
+impl From<()> for FlowControl {
+    #[inline(always)]
+    fn from(_value: ()) -> Self {
+        FlowControl::Pass
+    }
+}
+
+impl From<bool> for FlowControl {
+    #[inline(always)]
+    fn from(value: bool) -> Self {
+        if value { FlowControl::Pass } else { FlowControl::Fail }
+    }
+}
+
 /// Create a new parser by taking the result of `p`, and applying `f`.
 /// This can be used to create a new parser based on the result of another.
 ///
@@ -654,10 +682,10 @@ pub fn no_separator<I: SliceLike, S>() -> Option<(bool, impl Parser<I, (), S>)> 
 }
 
 #[inline(always)]
-fn many_internal<I: SliceLike, O, O2, S>(
+fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
     s: &mut AnpaState<I, S>,
     p: impl Parser<I, O, S>,
-    mut f: impl FnMut(O),
+    mut f: impl FnMut(O) -> F,
     allow_empty: bool,
     separator: Option<(bool, impl Parser<I, O2, S>)>
 ) -> bool {
@@ -667,7 +695,12 @@ fn many_internal<I: SliceLike, O, O2, S>(
     while let Some(res) = p(s) {
         has_trailing_sep = false;
         successes = true;
-        f(res);
+
+        match f(res).into() {
+            FlowControl::Pass => {},
+            FlowControl::Stop => break,
+            FlowControl::Fail => return false,
+        }
 
         if let Some((_, sep)) = separator {
             if sep(s).is_none() {
@@ -723,7 +756,9 @@ pub fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 /// * `p` - the parser
 /// * `init` - a function producing the initial result
 /// * `f` - a function taking the accumulator as `&mut` along with the result of each
-///         successful parse
+///         successful parse. Return `FlowControl` if you want to affect how the parse
+///         will proceed. Returning nothing, i.e. `()` will always cause each parsed
+///         element to succeed.
 /// * `allow_empty` - whether no parse should be considered successful.
 /// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
 ///                 functions to construct this parameter.
@@ -747,17 +782,75 @@ pub fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 /// assert_eq!(parse(parse_nums, input).result, Some(6));
 /// ```
 #[inline]
-pub fn fold<I: SliceLike, O, O2, S, R>(p: impl Parser<I, O, S>,
-                                       init: impl FnOnce() -> R + Copy,
-                                       f: impl FnOnce(&mut R, O) + Copy,
-                                       allow_empty: bool,
-                                       separator: Option<(bool, impl Parser<I, O2, S>)>,
+pub fn fold<I: SliceLike, O, O2, S, R, F: Into<FlowControl>>(
+    p: impl Parser<I, O, S>,
+    init: impl FnOnce() -> R + Copy,
+    f: impl FnOnce(&mut R, O) -> F + Copy,
+    allow_empty: bool,
+    separator: Option<(bool, impl Parser<I, O2, S>)>,
 ) -> impl Parser<I, R, S> {
     create_parser!(s, {
         let mut res = init();
         many_internal(s, p, |x| f(&mut res, x), allow_empty, separator)
             .then_some(res)
     })
+}
+
+/// Apply a parser until it fails and store the results in a fixed sized array.
+///
+/// The result is a tuple `(the_array, start_index_plus_objects_parsed)`.
+///
+/// The parser validates the bounds of the array, and fails the parse if
+/// the number of parsed results exceeds the size of the array.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `constructor` - a constructor for generating the initial state. It shall
+///                   be a function returning a tuple `(the_array, start_index)`.
+/// * `allow_empty` - whether no parse should be considered successful.
+/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+///                 functions to construct this parameter.
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::combinators::{many_to_array, separator};
+/// use anpa::number::integer;
+/// use anpa::parsers::skip;
+///
+/// let constructor = || ([0_i32; 4], 0);
+///
+/// let parse_nums = many_to_array(
+///     integer(),
+///     constructor,
+///     false,
+///     separator(skip(','), false));
+///
+/// let input = "1,2,3";
+/// assert_eq!(parse(parse_nums, input).result, Some(([1,2,3,0], 3)));
+///
+/// let input = "1,2,3,4";
+/// assert_eq!(parse(parse_nums, input).result, Some(([1,2,3,4], 4)));
+///
+/// let input = "1,2,3,4,5";
+/// assert_eq!(parse(parse_nums, input).result, None);
+/// ```
+#[inline]
+pub fn many_to_array<I: SliceLike, O, O2, S, const N: usize>(
+    p: impl Parser<I, O, S>,
+    constructor: impl FnOnce() -> ([O; N], usize) + Copy,
+    allow_empty: bool,
+    separator: Option<(bool, impl Parser<I, O2, S>)>
+) -> impl Parser<I, ([O; N], usize), S> {
+    fold(p, constructor, |(arr, n), x| {
+        if *n >= N {
+            return FlowControl::Fail
+        }
+
+        arr[*n] = x;
+        *n += 1;
+        FlowControl::Pass
+    }, allow_empty, separator)
 }
 
 #[cfg(feature = "std")]
@@ -788,7 +881,7 @@ pub fn fold<I: SliceLike, O, O2, S, R>(p: impl Parser<I, O, S>,
 #[inline]
 pub fn many_to_vec<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
                                            allow_empty: bool,
-                                           separator: Option<(bool, impl Parser<I, O2, S>)>,
+                                           separator: Option<(bool, impl Parser<I, O2, S>)>
 ) -> impl Parser<I, Vec<O>, S> {
     fold(p, Vec::new, |v, x| v.push(x), allow_empty, separator)
 }
@@ -916,6 +1009,85 @@ pub fn greedy_or<I: SliceLike, S, O>(p1: impl Parser<I, O, S>,
             res1
         } else {
             res2
+        }
+    })
+}
+
+/// (Description inspired by Parsec's `chainl1`)
+///
+/// Chain one or more `p` separated by `op`.
+/// `op` is a parser that returns a binary function taking as arguments the
+/// return type of `p`.
+///
+/// This parser will return the repeated left associative application of
+/// the function returned by `op` applied to the results of `p`.
+///
+/// This parser can be used to eliminate left recursion, for example in expression
+/// grammars.
+///
+/// ### Arguments
+/// * `p` - a parser for arguments to the function parsed by `op`.
+/// * `op` - a parser for a binary function.
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::defer_parser;
+/// use anpa::combinators::{chain, or, middle};
+/// use anpa::number::integer_signed;
+/// use anpa::parsers::{skip, take};
+///
+/// // A parser that calculates an arihmetic expression.
+/// // Whitespace is not supported for simplicity.
+/// fn expr<'a>() -> impl StrParser<'a, i64> {
+///     let ops = |c| {
+///         move |a, b| {
+///             match c {
+///                 '+' => a + b,
+///                 '-' => a - b,
+///                 '*' => a * b,
+///                 '/' => a / b,
+///                 _   => unreachable!()
+///             }
+///         }
+///     };
+///
+///     let add_op = or(take('+'), take('-')).map(ops);
+///     let mul_op = or(take('*'), take('/')).map(ops);
+///
+///     let atom = or(integer_signed(),
+///                   middle(skip('('), defer_parser!(expr()), skip(')')));
+///     let factor = chain(atom, mul_op);
+///     chain(factor, add_op)
+/// }
+///
+/// let input1 = "-12";
+/// let input2 = "12";
+/// let input3 = "12+24";
+/// let input4 = "2*12+24";
+/// let input5 = "(24/3-2-(3+2)-4*3/2)*5";
+///
+/// assert_eq!(parse(expr(), input1).result, Some(-12));
+/// assert_eq!(parse(expr(), input2).result, Some(12));
+/// assert_eq!(parse(expr(), input3).result, Some(36));
+/// assert_eq!(parse(expr(), input4).result, Some(48));
+/// assert_eq!(parse(expr(), input5).result, Some(-25));
+/// ```
+#[inline]
+pub fn chain<I: SliceLike, S, O, F>(p: impl Parser<I, O, S>,
+                                    op: impl Parser<I, F, S>
+) ->  impl Parser<I, O, S> where F: FnOnce(O, O) -> O {
+    create_parser!(s, {
+        let mut res = p(s)?;
+        loop {
+            if let Some(op_f) = op(s) {
+                if let Some(res2) = p(s) {
+                    res = op_f(res, res2);
+                    continue;
+                }
+            }
+
+            return Some(res)
         }
     })
 }
