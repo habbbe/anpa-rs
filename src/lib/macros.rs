@@ -167,18 +167,19 @@ macro_rules! right {
     };
 }
 
-/// Variadic parser that succeeds if the next item matches one of the
-/// provided arguments.
+/// Variadic parser that succeeds if the next item matches the provided
+/// patterns. Note that unlike `matches!`, this macro accepts multiple
+/// patterns.
 ///
 /// ### Arguments
-/// * `pattern` - any number of match patterns.
+/// * `patterns` - match patterns (as one would pass to `matches!`)
 ///
 /// ### Example:
 /// ```
 /// use anpa::core::*;
 /// use anpa::item_matches;
 ///
-/// let p = item_matches!('0', '1');
+/// let p = item_matches!('0' | '1');
 ///
 /// assert_eq!(parse(p, "012").result, Some('0'));
 /// assert_eq!(parse(p, "123").result, Some('1'));
@@ -186,8 +187,13 @@ macro_rules! right {
 /// ```
 #[macro_export]
 macro_rules! item_matches {
-    ($($pattern:pat_param $(if $guard:expr)?),+ $(,)?) => {
-        $crate::parsers::item_if(|c| matches!(c, $($pattern $(if $guard)?) |*))
+    ($($($patterns:pat_param)|+ $(if $guard:expr)?),+ $(,)?) => {
+        $crate::parsers::item_if(|c| {
+            match c {
+                $($($patterns)|+ $(if $guard)? => true,)+
+                _ => false
+            }
+        })
     };
 }
 

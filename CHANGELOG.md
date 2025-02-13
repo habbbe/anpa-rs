@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.9.0
+
+### New features
+
+- `item_matches!` now supports `matches!` like syntax for the patterns,
+  e.g. `item_matches!('a' | 'b')`
+
 ## 0.8.0
 
 ### New features
