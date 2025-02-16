@@ -12,6 +12,7 @@ Add<Output = Self>
 + Copy {
     const MIN: Self;
     const MAX: Self;
+    const SIZE: usize;
     fn cast_u8(n: u8) -> Self;
 }
 
@@ -29,6 +30,7 @@ macro_rules! impl_NumLike {
             impl NumLike for $type {
                 const MIN: $type = $type::MIN;
                 const MAX: $type = $type::MAX;
+                const SIZE: usize = core::mem::size_of::<$type>();
 
                 #[inline(always)]
                 fn cast_u8(n: u8) -> Self {

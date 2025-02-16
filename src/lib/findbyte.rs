@@ -1,6 +1,6 @@
 use core::{convert::TryInto, ops};
 
-use crate::{core::Parser, slicelike::{ContiguousBytes, SliceLike}};
+use crate::{core::Parser, number::NumLike, slicelike::{ContiguousBytes, SliceLike}};
 
 /// One unit of "work". In this case `usize` will process 8 bytes
 /// at a time on a 64-bit CPU (or 4 bytes on 32-bit).
@@ -192,11 +192,10 @@ fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
     let res;
 
     {
-        const CHUNK_SIZE: usize = (Work::BITS / u8::BITS) as usize;
         let bytes = input.to_u8_slice();
 
         'outer: {
-            let mut chunks = bytes.chunks_exact(CHUNK_SIZE);
+            let mut chunks = bytes.chunks_exact(Work::SIZE);
             for chunk in chunks.by_ref() {
                 let val = Work::from_le_bytes(chunk.try_into().unwrap());
                 let present = finder.intermediate(val) & HIGH_BITS;
@@ -206,7 +205,7 @@ fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
                     break 'outer
                 }
 
-                pos += CHUNK_SIZE;
+                pos += Work::SIZE;
             }
 
             pos += chunks.remainder().iter().position(|x| finder.slow_cmp(*x))?;
