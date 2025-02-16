@@ -164,7 +164,7 @@ pub fn map_if<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 /// ```
 #[inline]
 pub fn into_type<I: SliceLike, O: Into<T>, T, S>(p: impl Parser<I, O, S>) -> impl Parser<I, T, S> {
-    map(p, O::into)
+    map!(O::into, p)
 }
 
 /// Accept or reject the parse based on the predicate `f`.
@@ -719,7 +719,7 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
 /// ### Arguments
 /// * `p` - the parser
 /// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
 ///                 functions to construct this parameter.
 ///
 /// ### Example
@@ -760,7 +760,7 @@ pub fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 ///         will proceed. Returning nothing, i.e. `()` will always cause each parsed
 ///         element to succeed.
 /// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
 ///                 functions to construct this parameter.
 ///
 /// ### Example
@@ -808,7 +808,7 @@ pub fn fold<I: SliceLike, O, O2, S, R, F: Into<FlowControl>>(
 /// * `constructor` - a constructor for generating the initial state. It shall
 ///                   be a function returning a tuple `(the_array, start_index)`.
 /// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
 ///                 functions to construct this parameter.
 ///
 /// ### Example
@@ -859,7 +859,7 @@ pub fn many_to_array<I: SliceLike, O, O2, S, const N: usize>(
 /// ### Arguments
 /// * `p` - the parser
 /// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
 ///                 functions to construct this parameter.
 ///
 /// ### Example
@@ -893,7 +893,7 @@ pub fn many_to_vec<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 /// ### Arguments
 /// * `p` - the parser
 /// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
 ///                 functions to construct this parameter.
 ///
 /// ### Example
@@ -936,7 +936,7 @@ pub fn many_to_map<I: SliceLike, K: Hash + Eq, V, O2, S>(p: impl Parser<I, (K, V
 /// ### Arguments
 /// * `p` - the parser
 /// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
 ///                 functions to construct this parameter.
 ///
 /// ### Example
