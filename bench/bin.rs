@@ -64,7 +64,7 @@ fn bench_hubb() {
     let parse_item = or!(parse_action, parse_info, parse_separator, parse_space, parse_error);
     let item_to_state = lift_to_state(|x: &mut Vec<_>, y| x.push(y), parse_item);
     let ignore = or_diff!(empty(), skip!('#'));
-    let state_parser = or_diff!(ignore, item_to_state);
+    let parser = or_diff!(ignore, item_to_state);
 
     let lines: Vec<String> = read_file("hubb").lines().map(Result::unwrap).collect();
     let mut vec: Vec<Item> = Vec::with_capacity(lines.len());
@@ -73,7 +73,7 @@ fn bench_hubb() {
         for _ in 0..50 {
             vec.clear();
             for l in &lines {
-                let r = parse_state(state_parser, l, &mut vec);
+                let r = parser.parse_state(l, &mut vec);
                 if r.result.is_none() {
                     println!("No parse");
                     break
@@ -116,7 +116,7 @@ fn bench_json() {
 
     let (d, _) = bench_fun(10000, || {
         for _ in 0..10 {
-            parse(p, &string).result.unwrap();
+            p.parse(&string).result.unwrap();
         }
     });
 

@@ -1,4 +1,4 @@
-use crate::{combinators::*, core::{ParserExt, StrParser}, number::integer, parsers::{*}};
+use crate::{combinators::*, core::{ParserExt, ParserExtNoState, StrParser}, number::integer, parsers::*};
 
 #[derive(Debug)]
 pub struct AnpaVersion<T> {
@@ -18,7 +18,7 @@ impl<T> AnpaVersion<T> {
 /// Parse a SemVer string from `text`. General version that infer the `pre_release` and `build` type
 /// by means of `From<&str>`.
 pub fn parse_general<'a, O: From<&'a str>>(text: &'a str) -> Option<AnpaVersion<O>> {
-    crate::core::parse(semver(), text).result
+    semver().parse(text).result
 }
 
 /// Parse a SemVer string from `text`. `pre_release` and `build` will be stored as slices
