@@ -189,32 +189,26 @@ pub const fn gt(b: u8) -> GtByte {
 fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
     where I: SliceLike + ContiguousBytes, B: ByteFinder {
     let mut pos = 0;
-    let res;
+    let bytes = input.to_u8_slice();
 
-    {
-        let bytes = input.to_u8_slice();
+    let mut chunks = bytes.chunks_exact(Work::SIZE);
+    for chunk in chunks.by_ref() {
+        let val = Work::from_le_bytes(chunk.try_into().unwrap());
+        let present = finder.intermediate(val) & HIGH_BITS;
 
-        'outer: {
-            let mut chunks = bytes.chunks_exact(Work::SIZE);
-            for chunk in chunks.by_ref() {
-                let val = Work::from_le_bytes(chunk.try_into().unwrap());
-                let present = finder.intermediate(val) & HIGH_BITS;
+        if present != 0 {
+            pos += (present.trailing_zeros() / u8::BITS) as usize;
 
-                if present != 0 {
-                    pos += (present.trailing_zeros() / u8::BITS) as usize;
-                    break 'outer
-                }
-
-                pos += Work::SIZE;
-            }
-
-            pos += chunks.remainder().iter().position(|x| finder.slow_cmp(*x))?;
+            // Inlining this rather than using a labeled break yields slightly
+            // better performance.
+            return Some((bytes[pos], input.slice_idx_from_offset(pos)))
         }
 
-        res = bytes[pos];
+        pos += Work::SIZE;
     }
 
-    Some((res, input.slice_idx_from_offset(pos)))
+    pos += chunks.remainder().iter().position(|x| finder.slow_cmp(*x))?;
+    Some((bytes[pos], input.slice_idx_from_offset(pos)))
 }
 
 /// Find a single byte in an input that can be represented as a

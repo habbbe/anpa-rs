@@ -124,12 +124,10 @@ fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: boo
             consume(digit, is_negative)?;
         }
 
-        if idx == Default::default() {
-            None
-        } else {
+        (idx != Default::default()).then(|| {
             s.input = s.input.slice_from(idx + is_negative.into());
-            Some((acc, dec_divisor, is_negative))
-        }
+            (acc, dec_divisor, is_negative)
+        })
     })
 }
 
@@ -181,7 +179,7 @@ fn float_internal<const CHECKED: bool,
     integer_internal::<CHECKED, true, false,_,_,_,_>().bind(|(n, _, is_neg)| {
         // Then parse a period followed by an unsigned integer.
         let dec = right(item_if(|c: I::RefItem| c.as_char() == '.'),
-                                              integer_internal::<CHECKED,false,true,_,_,_,_>())
+                                              integer_internal::<CHECKED, false, true,_,_,_,_>())
             .map(move |(dec, div, _)|
                 O::cast_isize(n) + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));
         or(dec, pure!(O::cast_isize(n)))

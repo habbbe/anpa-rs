@@ -56,8 +56,8 @@ fn bench_fun<T>(mut n: usize, mut f: impl FnMut() -> T) -> (Duration, T) {
 fn bench_hubb() {
     let parse_name = until('=');
     let parse_cmd = not_empty(rest());
-    let parse_action = right!(skip!("Com:"), map!(action, parse_name, parse_cmd));
-    let parse_info = right!(skip!("Info:"), map!(info, parse_name, parse_cmd));
+    let parse_action = right(skip!("Com:"), map!(action, parse_name, parse_cmd));
+    let parse_info = right(skip!("Info:"), map!(info, parse_name, parse_cmd));
     let parse_separator = skip!("Separator").map(|_| Item::Separator);
     let parse_space = skip!("Space").map(|_| Item::Space);
     let parse_error = map!(syntax_error, rest());

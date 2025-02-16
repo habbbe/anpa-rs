@@ -425,10 +425,10 @@ pub fn get_parsed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I,
 pub fn times<I: SliceLike, O, S>(times: u32, p: impl Parser<I, O, S>) -> impl Parser<I, I, S> {
     create_parser!(s, {
         let old_input = s.input;
-        for _ in 0..times {
-            p(s)?;
-        }
-        Some(old_input.slice_to(old_input.slice_len() - s.input.slice_len()))
+
+        (0..times).all(|_| p(s).is_some()).then(|| {
+            old_input.slice_to(old_input.slice_len() - s.input.slice_len())
+        })
     })
 }
 
@@ -710,7 +710,7 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
         }
     }
 
-    !separator.is_some_and(|(allow_trailing, _)| !allow_trailing && has_trailing_sep)
+    separator.is_none_or(|(allow_trailing, _)| allow_trailing || !has_trailing_sep)
         && (allow_empty || successes)
 }
 
