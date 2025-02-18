@@ -1,4 +1,4 @@
-use crate::{combinators::*, core::{ParserExt, ParserExtNoState, StrParser}, number::integer, parsers::*};
+use crate::{combinators::*, core::{ParserExtNoState, StrParser}, number::integer, parsers::*};
 
 #[derive(Debug)]
 pub struct AnpaVersion<T> {
@@ -35,15 +35,15 @@ pub fn parse(text: &str) -> Option<AnpaVersion<std::string::String>> {
 }
 
 #[inline]
-pub fn semver<'a, T: From<&'a str>>() -> impl StrParser<'a, AnpaVersion<T>> {
-    map!(|(major, minor, patch), pre: Option<_>, build: Option<_>| {
+pub const fn semver<'a, T: From<&'a str>>() -> impl StrParser<'a, AnpaVersion<T>> {
+    left(map!(|(major, minor, patch), pre: Option<_>, build: Option<_>| {
         AnpaVersion::new(major, minor, patch, pre.unwrap_or(""), build.unwrap_or(""))
-    }, version_core(), succeed(pre_release()), succeed(build())).left(empty())
+    }, version_core(), succeed(pre_release()), succeed(build())), empty())
 }
 
 #[inline]
-fn version_core<'a>() -> impl StrParser<'a, (u64, u64, u64)> {
-    let component = and_parsed(integer()).map_if(|(i, p): (&str, _)| {
+const fn version_core<'a>() -> impl StrParser<'a, (u64, u64, u64)> {
+    let component = map_if(and_parsed(integer()), |(i, p): (&str, _)| {
         (!i.starts_with('0') || p == 0).then_some(p)
     });
 
@@ -55,62 +55,62 @@ fn version_core<'a>() -> impl StrParser<'a, (u64, u64, u64)> {
 }
 
 #[inline]
-fn pre_release<'a>() -> impl StrParser<'a> {
+const fn pre_release<'a>() -> impl StrParser<'a> {
     dot_separated('-', pre_release_identifier())
 }
 
 #[inline]
-fn build<'a>() -> impl StrParser<'a> {
+const fn build<'a>() -> impl StrParser<'a> {
     dot_separated('+', build_identifier())
 }
 
 #[inline]
-fn dot_separated<'a>(prefix: char, p: impl StrParser<'a>) -> impl StrParser<'a> {
-    attempt(skip(prefix).right(many(p, false, separator(skip('.'), false))))
+const fn dot_separated<'a>(prefix: char, p: impl StrParser<'a>) -> impl StrParser<'a> {
+    attempt(right(skip(prefix), many(p, false, separator(skip('.'), false))))
 }
 
 #[inline]
-fn pre_release_identifier<'a>() -> impl StrParser<'a> {
+const fn pre_release_identifier<'a>() -> impl StrParser<'a> {
     or(alphanumeric_identifier(), numeric_identifier())
 }
 
 #[inline]
-fn build_identifier<'a>() -> impl StrParser<'a> {
+const fn build_identifier<'a>() -> impl StrParser<'a> {
     identifier_characters()
 }
 
 #[inline]
-fn alphanumeric_identifier<'a>() -> impl StrParser<'a> {
-    get_parsed(digits().right(identifier_characters()))
+const fn alphanumeric_identifier<'a>() -> impl StrParser<'a> {
+    get_parsed(right(digits(), identifier_characters()))
 }
 
 #[inline]
-fn numeric_identifier<'a>() -> impl StrParser<'a> {
-    not_empty(digits()).filter(|d| d.len() == 1 || !d.starts_with('0'))
+const fn numeric_identifier<'a>() -> impl StrParser<'a> {
+    filter(not_empty(digits()), |d| d.len() == 1 || !d.starts_with('0'))
 }
 
 #[inline]
-fn identifier_characters<'a>() -> impl StrParser<'a> {
+const fn identifier_characters<'a>() -> impl StrParser<'a> {
     not_empty(item_while(identifier_character))
 }
 
 #[inline]
-fn identifier_character(c: char) -> bool {
+const fn identifier_character(c: char) -> bool {
     digit(c) || non_digit(c)
 }
 
 #[inline]
-fn non_digit(c: char) -> bool {
+const fn non_digit(c: char) -> bool {
     c.is_ascii_alphabetic() || c == '-'
 }
 
 #[inline]
-fn digits<'a>() -> impl StrParser<'a> {
+const fn digits<'a>() -> impl StrParser<'a> {
     item_while(digit)
 }
 
 #[inline]
-fn digit(c: char) -> bool {
+const fn digit(c: char) -> bool {
     c.is_ascii_digit()
 }
 

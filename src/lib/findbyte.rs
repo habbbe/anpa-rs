@@ -251,7 +251,7 @@ fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
 /// assert_eq!(parse(p, input3).result, Some(b'\n'));
 /// ```
 #[inline]
-pub fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> impl Parser<I, u8, S>
+pub const fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> impl Parser<I, u8, S>
     where I: SliceLike + ContiguousBytes {
     create_parser!(s, {
         let (res, pos) = get_byte_pos(s.input, finder)?;
@@ -298,9 +298,9 @@ pub fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> impl Pa
 /// assert_eq!(parse(p, input3).result, Some("a"));
 /// ```
 #[inline]
-pub fn until_byte<I, S>(finder: impl ByteFinder,
-                        include_result: bool,
-                        consume_result: bool) -> impl Parser<I, I, S>
+pub const fn until_byte<I, S>(finder: impl ByteFinder,
+                              include_result: bool,
+                              consume_result: bool) -> impl Parser<I, I, S>
     where I: SliceLike + ContiguousBytes {
     create_parser!(s, {
         let (_, pos) = get_byte_pos(s.input, finder)?;

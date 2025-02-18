@@ -32,25 +32,25 @@ impl TrimmableUtf8 for &str {
 
 /// Create a parser that parses and returns ASCII whitespace.
 #[inline]
-pub fn ascii_whitespace<I: TrimmableAscii, S>() -> impl Parser<I, I, S> {
+pub const fn ascii_whitespace<I: TrimmableAscii, S>() -> impl Parser<I, I, S> {
     take!(I::prefix())
 }
 
 /// Create a parser that parses and ignores ASCII whitespace.
 #[inline]
-pub fn skip_ascii_whitespace<I: TrimmableAscii, S>() -> impl Parser<I, (), S> {
+pub const fn skip_ascii_whitespace<I: TrimmableAscii, S>() -> impl Parser<I, (), S> {
     skip!(I::prefix())
 }
 
 /// Create a parser that parses and returns UTF-8 whitespace.
 #[inline]
-pub fn whitespace<I: TrimmableUtf8, S>() -> impl Parser<I, I, S> {
+pub const fn whitespace<I: TrimmableUtf8, S>() -> impl Parser<I, I, S> {
     take!(I::prefix())
 }
 
 /// Create a parser that parses and ignores UTF-8 whitespace.
 #[inline]
-pub fn skip_whitespace<I: TrimmableUtf8, S>() -> impl Parser<I, (), S> {
+pub const fn skip_whitespace<I: TrimmableUtf8, S>() -> impl Parser<I, (), S> {
     skip!(I::prefix())
 }
 

@@ -2,13 +2,13 @@ use crate::{core::Parser, needle::Needle, prefix::Prefix, slicelike::SliceLike};
 
 /// Create a parser that always succeeds.
 #[inline]
-pub fn success<I: SliceLike, S>() -> impl Parser<I, (), S> {
+pub const fn success<I: SliceLike, S>() -> impl Parser<I, (), S> {
     pure!(())
 }
 
 /// Create a parser that always fails.
 #[inline]
-pub fn failure<I: SliceLike, O, S>() -> impl Parser<I, O, S> {
+pub const fn failure<I: SliceLike, O, S>() -> impl Parser<I, O, S> {
     create_parser!(_s, None)
 }
 
@@ -32,7 +32,7 @@ pub fn failure<I: SliceLike, O, S>() -> impl Parser<I, O, S> {
 /// assert_eq!(parse(parse_uppercase, input2).result, None);
 /// ```
 #[inline]
-pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I::RefItem, S> {
+pub const fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I::RefItem, S> {
     create_parser!(s, {
         s.input.slice_first_if(pred).map(|(res, rest)| {
             s.input = rest;
@@ -58,7 +58,7 @@ pub fn item_if<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) ->
 /// assert_eq!(parse(parse_item, input2).result, None);
 /// ```
 #[inline]
-pub fn item<I: SliceLike, S>() -> impl Parser<I, I::RefItem, S> {
+pub const fn item<I: SliceLike, S>() -> impl Parser<I, I::RefItem, S> {
     item_if(|_| true)
 }
 
@@ -91,7 +91,7 @@ pub fn item<I: SliceLike, S>() -> impl Parser<I, I::RefItem, S> {
 /// assert_eq!(parse(parse_seq, input).result, Some("abc"));
 /// ```
 #[inline]
-pub fn take<I: SliceLike, O, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, S>{
+pub const fn take<I: SliceLike, O, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, S>{
     take!(prefix)
 }
 
@@ -124,7 +124,7 @@ pub fn take<I: SliceLike, O, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, O, 
 /// assert_eq!(parse(parse_seq, input).result, Some(()));
 /// ```
 #[inline]
-pub fn skip<I: SliceLike, O, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, (), S>{
+pub const fn skip<I: SliceLike, O, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, (), S>{
     skip!(prefix)
 }
 
@@ -149,7 +149,7 @@ pub fn skip<I: SliceLike, O, S>(prefix: impl Prefix<I, O>) -> impl Parser<I, (),
 /// assert_eq!(parse(parse_odd, input).result, Some([7, 5, 3].as_slice()));
 /// ```
 #[inline]
-pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I, S> {
+pub const fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy) -> impl Parser<I, I, S> {
     create_parser!(s, {
         let idx = s.input.slice_find_pred(|x| !pred(x))
             .unwrap_or(s.input.slice_len());
@@ -186,7 +186,7 @@ pub fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool + Copy)
 /// assert_eq!(parse(parse_statement, input).result, Some("let x = 2"));
 /// ```
 #[inline]
-pub fn until<O, I: SliceLike, N: Needle<I, O>, S>(needle: N) -> impl Parser<I, I, S> {
+pub const fn until<O, I: SliceLike, N: Needle<I, O>, S>(needle: N) -> impl Parser<I, I, S> {
     until!(needle)
 }
 
@@ -205,7 +205,7 @@ pub fn until<O, I: SliceLike, N: Needle<I, O>, S>(needle: N) -> impl Parser<I, I
 /// assert_eq!(parse(parse_rest, input).result, Some(input));
 /// ```
 #[inline]
-pub fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
+pub const fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
     create_parser!(s, {
         let all;
         (all, s.input) = s.input.slice_split_at(s.input.slice_len());
@@ -231,7 +231,7 @@ pub fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
 /// assert_eq!(parse(parse_empty, input2).result, None);
 /// ```
 #[inline]
-pub fn empty<I: SliceLike, S>() -> impl Parser<I, I, S> {
+pub const fn empty<I: SliceLike, S>() -> impl Parser<I, I, S> {
     create_parser!(s, {
         s.input.slice_is_empty().then_some(s.input)
     })
