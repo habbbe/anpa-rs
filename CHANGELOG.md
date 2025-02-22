@@ -7,6 +7,7 @@
 - Add extension functions for starting a parse. Instead of writing
   e.g. `parse(p, input)` you can write `p.parse(input)`.
 - Made all parsers and combinators `const`. Note that parsing is _not_ `const` (yet).
+- Made Utf8Whitespace implement Prefix.
 
 ## 0.9.0
 
