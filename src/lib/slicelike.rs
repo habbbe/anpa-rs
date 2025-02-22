@@ -17,7 +17,7 @@ pub trait SliceLike: Copy {
     fn slice_first_if(self, pred: impl FnOnce(Self::RefItem) -> bool + Copy) -> Option<(Self::RefItem, Self)>;
 
     /// Get the (optional) index of the first item that matches `pred`.
-    fn slice_find_pred(self, pred: impl FnOnce(Self::RefItem) -> bool + Copy) -> Option<Self::Idx>;
+    fn slice_find_pred(self, pred: impl FnMut(Self::RefItem) -> bool + Copy) -> Option<Self::Idx>;
 
     /// Get the current length of the input.
     fn slice_len(self) -> Self::Idx;
@@ -53,8 +53,8 @@ impl<'a, A> SliceLike for &'a [A] {
         self.split_first().filter(|x| pred(x.0))
     }
 
-    fn slice_find_pred(self, pred: impl FnOnce(Self::RefItem) -> bool + Copy) -> Option<usize> {
-        self.iter().position(|x| pred(x))
+    fn slice_find_pred(self, pred: impl FnMut(Self::RefItem) -> bool + Copy) -> Option<usize> {
+        self.iter().position(pred)
     }
 
     fn slice_len(self) -> usize {
@@ -98,8 +98,8 @@ impl<'a> SliceLike for &'a str {
         pred(first).then_some((first, chars.as_str()))
     }
 
-    fn slice_find_pred(self, pred: impl FnOnce(Self::RefItem) -> bool + Copy) -> Option<usize> {
-        self.find(|c| pred(c))
+    fn slice_find_pred(self, pred: impl FnMut(Self::RefItem) -> bool + Copy) -> Option<usize> {
+        self.find(pred)
     }
 
     fn slice_len(self) -> usize {
