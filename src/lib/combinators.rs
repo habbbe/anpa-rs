@@ -672,12 +672,12 @@ pub const fn separator<I, O, S>(p: impl Parser<I, O, S>, allow_trailing: bool) -
 
 /// Only for use with the `many` family of combinators. Use this function to create the separator
 /// argument when no separator should be present.
-#[allow(unreachable_code)]
 #[inline]
 pub const fn no_separator<I: SliceLike, S>() -> Option<(bool, impl Parser<I, (), S>)> {
     return None;
 
     // Unreachable, but provides type/size information about the return value
+    #[allow(unreachable_code)]
     Some((false, success()))
 }
 
