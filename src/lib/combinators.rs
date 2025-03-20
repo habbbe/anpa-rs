@@ -689,12 +689,11 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
     allow_empty: bool,
     separator: Option<(bool, impl Parser<I, O2, S>)>
 ) -> bool {
-    let mut successes = false;
-    let mut has_trailing_sep = false;
+    let mut successful = allow_empty;
+    let mut trailing_ok = true;
 
     while let Some(res) = p(s) {
-        has_trailing_sep = false;
-        successes = true;
+        successful = true;
 
         match f(res).into() {
             FlowControl::Pass => {},
@@ -702,16 +701,17 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
             FlowControl::Fail => return false,
         }
 
-        if let Some((_, sep)) = separator {
-            if sep(s).is_none() {
+        if let Some((allow_trailing, sep)) = separator {
+            trailing_ok = true;
+            if sep(s).is_some() {
+                trailing_ok = allow_trailing;
+            } else {
                 break;
             }
-            has_trailing_sep = true;
         }
     }
 
-    !separator.is_some_and(|(allow_trailing, _)| !allow_trailing && has_trailing_sep)
-        && (allow_empty || successes)
+    trailing_ok && successful
 }
 
 /// Apply a parser until it fails and return the parsed input.
