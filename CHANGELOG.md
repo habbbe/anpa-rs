@@ -8,6 +8,8 @@
   e.g. `parse(p, input)` you can write `p.parse(input)`.
 - Made all parsers and combinators `const`. Note that parsing is _not_ `const` (yet).
 - Made Utf8Whitespace implement Prefix.
+- New parser `fold_state`, that uses the user state instead of a provided accumulator.
+- `many_to_array` now supports `BorrowMut<[T, N]>` in initializer.
 
 ## 0.9.0
 

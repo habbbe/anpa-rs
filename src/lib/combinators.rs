@@ -1,6 +1,7 @@
 #[cfg(feature = "std")]
 use std::{collections::{BTreeMap, HashMap}, vec::Vec, hash::Hash};
 
+use core::borrow::BorrowMut;
 use crate::{core::{AnpaState, Parser}, parsers::success, slicelike::SliceLike};
 
 /// An instrution for how to proceed with a parse.
@@ -685,7 +686,7 @@ pub const fn no_separator<I: SliceLike, S>() -> Option<(bool, impl Parser<I, (),
 fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
     s: &mut AnpaState<I, S>,
     p: impl Parser<I, O, S>,
-    mut f: impl FnMut(O) -> F,
+    mut f: impl FnMut(&mut S, O) -> F,
     allow_empty: bool,
     separator: Option<(bool, impl Parser<I, O2, S>)>
 ) -> bool {
@@ -695,7 +696,7 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
     while let Some(res) = p(s) {
         successful = true;
 
-        match f(res).into() {
+        match f(s.user_state, res).into() {
             FlowControl::Pass => {},
             FlowControl::Stop => break,
             FlowControl::Fail => return false,
@@ -745,7 +746,7 @@ pub const fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 ) -> impl Parser<I, I, S> {
     create_parser!(s, {
         let old_input = s.input;
-        many_internal(s, p, |_| {}, allow_empty, separator)
+        many_internal(s, p, |_, _| {}, allow_empty, separator)
             .then_some(old_input.slice_to(old_input.slice_len() - s.input.slice_len()))
     })
 }
@@ -791,8 +792,56 @@ pub const fn fold<I: SliceLike, O, O2, S, R, F: Into<FlowControl>>(
 ) -> impl Parser<I, R, S> {
     create_parser!(s, {
         let mut res = init();
-        many_internal(s, p, |x| f(&mut res, x), allow_empty, separator)
+        many_internal(s, p, |_, x| f(&mut res, x), allow_empty, separator)
             .then_some(res)
+    })
+}
+
+/// Apply a parser repeatedly and accumulate a result in the spirit of fold.
+///
+/// This version uses the user provided state instead of a provided accumulator.
+/// This allows for the parser to be used for modifying values in the outer scope.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `f` - a function taking the user state as `&mut` along with the result of each
+///         successful parse. Return `FlowControl` if you want to affect how the parse
+///         will proceed. Returning nothing, i.e. `()` will always cause each parsed
+///         element to succeed.
+/// * `allow_empty` - whether no parse should be considered successful.
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
+///                 functions to construct this parameter.
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::combinators::{fold_state, separator};
+/// use anpa::number::integer;
+/// use anpa::parsers::skip;
+///
+/// let mut state = 0;
+///
+/// let parse_nums = fold_state(
+///     integer().map(|n: u32| n),
+///     |acc, n| *acc += n,
+///     false,
+///     separator(skip(','), false));
+///
+/// let input = "1,2,3";
+///
+/// assert_eq!(parse_state(parse_nums, input, &mut state).result, Some(()));
+/// assert_eq!(state, 6);
+/// ```
+#[inline]
+pub const fn fold_state<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
+    p: impl Parser<I, O, S>,
+    f: impl FnOnce(&mut S, O) -> F + Copy,
+    allow_empty: bool,
+    separator: Option<(bool, impl Parser<I, O2, S>)>,
+) -> impl Parser<I, (), S> {
+    create_parser!(s, {
+        many_internal(s, p, |state, x| f(state, x), allow_empty, separator)
+            .then_some(())
     })
 }
 
@@ -836,18 +885,18 @@ pub const fn fold<I: SliceLike, O, O2, S, R, F: Into<FlowControl>>(
 /// assert_eq!(parse(parse_nums, input).result, None);
 /// ```
 #[inline]
-pub const fn many_to_array<I: SliceLike, O, O2, S, const N: usize>(
+pub const fn many_to_array<I: SliceLike, O, O2, S, const N: usize, A: BorrowMut<[O; N]>>(
     p: impl Parser<I, O, S>,
-    constructor: impl FnOnce() -> ([O; N], usize) + Copy,
+    constructor: impl FnOnce() -> (A, usize) + Copy,
     allow_empty: bool,
     separator: Option<(bool, impl Parser<I, O2, S>)>
-) -> impl Parser<I, ([O; N], usize), S> {
+) -> impl Parser<I, (A, usize), S> {
     fold(p, constructor, |(arr, n), x| {
         if *n >= N {
             return FlowControl::Fail
         }
 
-        arr[*n] = x;
+        arr.borrow_mut()[*n] = x;
         *n += 1;
         FlowControl::Pass
     }, allow_empty, separator)
