@@ -25,12 +25,14 @@ impl<A: CharLike> TrimmableUtf8 for &[A] {
 }
 
 impl TrimmableAscii for &str {
+    #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
         AsciiWhitespace()
     }
 }
 
 impl TrimmableUtf8 for &str {
+    #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
         Utf8Whitespace()
     }

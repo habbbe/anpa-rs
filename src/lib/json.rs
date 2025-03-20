@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, vec::Vec};
 
-use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::AsciiWhitespace};
+use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::skip_ascii_whitespace};
 
 #[derive(Debug)]
 pub enum JsonValue<StringType> {
@@ -13,9 +13,7 @@ pub enum JsonValue<StringType> {
 }
 
 const fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
-    // For unknown reasons, this gives much better performance than `skip_ascii_whitespace()`.
-    // Possibly a random optimization quirk, since it ideally shouldn't happen.
-    right(skip!(AsciiWhitespace()), p)
+    right(skip_ascii_whitespace(), p)
 }
 
 const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
