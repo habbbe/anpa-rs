@@ -703,10 +703,10 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
         }
 
         if let Some((allow_trailing, sep)) = separator {
-            trailing_ok = true;
             if sep(s).is_some() {
                 trailing_ok = allow_trailing;
             } else {
+                trailing_ok = true;
                 break;
             }
         }
