@@ -697,21 +697,20 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
     let mut trailing_ok = true;
 
     while let Some(res) = p(s) {
-        successful = true;
-
         match f(s.user_state, res).into() {
             FlowControl::Pass => {},
             FlowControl::Stop => break,
             FlowControl::Fail => return false,
         }
 
+        successful = true;
+
         if let Some((allow_trailing, sep)) = separator {
-            if sep(s).is_some() {
-                trailing_ok = allow_trailing;
-            } else {
+            if sep(s).is_none() {
                 trailing_ok = true;
                 break;
             }
+            trailing_ok = allow_trailing;
         }
     }
 
