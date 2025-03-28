@@ -28,8 +28,9 @@ path = "bench/bin.rs"
 required-features = ["build_bench"]
 
 [features]
-default = ["std"]
-std = []
-json = ["std"]
+alloc = []
+std = ["alloc"]
+json = ["alloc"]
 semver = []
-build_bench = ["json", "semver"]
+default = ["std"]
+build_bench = ["std", "json", "semver"]

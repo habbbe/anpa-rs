@@ -1,5 +1,8 @@
 #[cfg(feature = "std")]
-use std::{collections::{BTreeMap, HashMap}, vec::Vec, hash::Hash};
+use std::{collections::HashMap, hash::Hash};
+
+#[cfg(feature = "alloc")]
+use alloc::{vec::Vec, collections::BTreeMap};
 
 use core::borrow::BorrowMut;
 use crate::{core::{AnpaState, Parser}, parsers::success, slicelike::SliceLike};
@@ -902,8 +905,10 @@ pub const fn many_to_array<I: SliceLike, O, O2, S, const N: usize, A: BorrowMut<
     }, allow_empty, separator)
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 /// Apply a parser until it fails and store the results in a `Vec`.
+///
+/// Requires feature "alloc".
 ///
 /// ### Arguments
 /// * `p` - the parser
@@ -936,9 +941,37 @@ pub const fn many_to_vec<I: SliceLike, O, O2, S>(
     fold(p, Vec::new, |v, x| v.push(x), allow_empty, separator)
 }
 
+#[cfg(feature = "alloc")]
+/// Apply a parser until it fails and store the results in a `BTreeMap`.
+/// The parser `p` must have a result type `(K, V)`, where the key `K: Ord`.
+/// This might give better performance than `many_to_map` in some use cases.
+///
+/// Requires feature "alloc".
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `allow_empty` - whether no parse should be considered successful.
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
+///                 functions to construct this parameter.
+///
+/// ### Example
+/// See [`many_to_map`]
+#[inline]
+pub const fn many_to_map_ordered<I: SliceLike, K: Ord, V, O2, S>(
+    p: impl Parser<I, (K, V), S>,
+    allow_empty: bool,
+    separator: Option<(bool, impl Parser<I, O2, S>)>,
+) -> impl Parser<I, BTreeMap<K, V>, S> {
+    fold(p, BTreeMap::new, |m, (k, v)| { m.insert(k, v); }, allow_empty, separator)
+}
+
 #[cfg(feature = "std")]
 /// Apply a parser until it fails and store the results in a `HashMap`.
 /// The parser `p` must have a result type `(K, V)`, where the key `K: Hash + Eq`.
+///
+/// Requires feature "std".
+///
+/// [`many_to_map_ordered`] is an alternative that only requires the feature "alloc".
 ///
 /// ### Arguments
 /// * `p` - the parser
@@ -977,28 +1010,6 @@ pub const fn many_to_map<I: SliceLike, K: Hash + Eq, V, O2, S>(
     separator: Option<(bool, impl Parser<I, O2, S>)>,
 ) -> impl Parser<I, HashMap<K, V>, S> {
     fold(p, HashMap::new, |m, (k, v)| { m.insert(k, v); }, allow_empty, separator)
-}
-
-#[cfg(feature = "std")]
-/// Apply a parser until it fails and store the results in a `BTreeMap`.
-/// The parser `p` must have a result type `(K, V)`, where the key `K: Ord`.
-/// This might give better performance than `many_to_map`.
-///
-/// ### Arguments
-/// * `p` - the parser
-/// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
-///                 functions to construct this parameter.
-///
-/// ### Example
-/// See [`many_to_map`]
-#[inline]
-pub const fn many_to_map_ordered<I: SliceLike, K: Ord, V, O2, S>(
-    p: impl Parser<I, (K, V), S>,
-    allow_empty: bool,
-    separator: Option<(bool, impl Parser<I, O2, S>)>,
-) -> impl Parser<I, BTreeMap<K, V>, S> {
-    fold(p, BTreeMap::new, |m, (k, v)| { m.insert(k, v); }, allow_empty, separator)
 }
 
 /// Combine two parsers into a parser that returns the result of the parser
