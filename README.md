@@ -4,9 +4,13 @@ A generic monadic parser combinator library based on [anpa](https://github.com/h
 
 ### Features
 
-All parsers and combinators, with few exceptions (`many_to_vec`, `many_to_map`,
-`many_to_map_ordered`), are allocation free and can be used with `no_std` when disabling
-the default features of this crate.
+All parsers and combinators, with the exceptions below, are allocation free and
+can be used with `no_std` when disabling the default features of this crate.
+
+Allocating parsers:
+- `many_to_vec`, `many_to_map_ordered`: Require feature "alloc"
+- `many_to_map`: Requires feature "std"
+
 
 ### Examples
 

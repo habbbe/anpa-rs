@@ -1,6 +1,6 @@
-use std::{collections::BTreeMap, vec::Vec};
+use alloc::{collections::BTreeMap, vec::Vec};
 
-use crate::{combinators::*, core::{ParserExt, ParserInto, StrParser}, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::AsciiWhitespace};
+use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::skip_ascii_whitespace};
 
 #[derive(Debug)]
 pub enum JsonValue<StringType> {
@@ -12,40 +12,38 @@ pub enum JsonValue<StringType> {
     Arr(Vec<JsonValue<StringType>>)
 }
 
-fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
-    // For unknown reasons, this gives much better performance than `skip_ascii_whitespace()`.
-    // Possibly a random optimization quirk, since it ideally shouldn't happen.
-    right(skip!(AsciiWhitespace()), p)
+const fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
+    right(skip_ascii_whitespace(), p)
 }
 
-fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
+const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
     let unicode = right(skip!('u'), times(4, item_if(|c: char| c.is_ascii_hexdigit())));
     let escaped = right(item(), or_diff(item_matches!('"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't'),
                                         unicode));
     let parse_until = choose!(find_byte(eq(b'"') | eq(b'\\') | lt(0x20), false);
                                         b'\\' => escaped);
-    middle(skip!('"'), many(parse_until, true, no_separator()), skip!('"')).into_type()
+    into_type(middle(skip!('"'), many(parse_until, true, no_separator()), skip!('"')))
 }
 
-fn json_string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, JsonValue<T>> {
-    string_parser().map(JsonValue::Str)
+const fn json_string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, JsonValue<T>> {
+    map(string_parser(), JsonValue::Str)
 }
 
-fn number_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
-    float().map(JsonValue::Num)
+const fn number_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
+    map(float(), JsonValue::Num)
 }
 
-fn bool_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
-    or(skip!("true").map(|_| JsonValue::Bool(true)), skip!("false").map(|_| JsonValue::Bool(false)))
+const fn bool_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
+    or(map(skip!("true"), |_| JsonValue::Bool(true)), map(skip!("false"), |_| JsonValue::Bool(false)))
 }
 
-fn null_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
-    skip!("null").map(|_| JsonValue::Null)
+const fn null_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
+    map(skip!("null"), |_| JsonValue::Null)
 }
 
 /// Get a JSON parser that parses any JSON value. The type used for strings will be inferred
 /// from the context via `From<&str>`. For examples, see `object_parser`.
-pub fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
+pub const fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
     defer_parser! {
         eat(or!(json_string_parser(), number_parser(), object_parser(),
                 array_parser(), bool_parser(), null_parser()))
@@ -65,21 +63,21 @@ pub fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValu
 /// // Stores strings as custom type implementing `From<&str>`.
 /// // let p3 = json::object_parser::<MyString>();
 /// ```
-pub fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
+pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
     let pair_parser = tuplify!(
         left(eat(string_parser()), eat(skip!(':'))),
         value_parser());
-    middle(
+    map(middle(
         skip!('{'),
         many_to_map_ordered(pair_parser, true, separator(eat(skip!(',')), false)),
-        eat(skip!('}'))).map(JsonValue::Dic)
+        eat(skip!('}'))), JsonValue::Dic)
 }
 
 /// Get a JSON parser that parses a JSON array. The type used for strings will be inferred
 /// from the context via `From<&str>`. For examples, see `object_parser`.
-pub fn array_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
-    middle(
+pub const fn array_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
+    map(middle(
         skip!('['),
         many_to_vec(value_parser(), true, separator(eat(skip!(',')), false)),
-        eat(skip!(']'))).map(JsonValue::Arr)
+        eat(skip!(']'))), JsonValue::Arr)
 }

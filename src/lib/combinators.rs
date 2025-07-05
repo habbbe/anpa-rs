@@ -1,6 +1,10 @@
 #[cfg(feature = "std")]
-use std::{collections::{BTreeMap, HashMap}, vec::Vec, hash::Hash};
+use std::{collections::HashMap, hash::Hash};
 
+#[cfg(feature = "alloc")]
+use alloc::{vec::Vec, collections::BTreeMap};
+
+use core::borrow::BorrowMut;
 use crate::{core::{AnpaState, Parser}, parsers::success, slicelike::SliceLike};
 
 /// An instrution for how to proceed with a parse.
@@ -60,8 +64,8 @@ impl From<bool> for FlowControl {
 /// assert_eq!(parse(parse_xes, input3).result, None);
 /// ```
 #[inline]
-pub fn bind<I:SliceLike, O1, O2, P, S>(p: impl Parser<I, O1, S>,
-                                       f: impl FnOnce(O1) -> P + Copy
+pub const fn bind<I:SliceLike, O1, O2, P, S>(p: impl Parser<I, O1, S>,
+                                             f: impl FnOnce(O1) -> P + Copy
 ) -> impl Parser<I, O2, S> where P: Parser<I, O2, S> {
     create_parser!(s, f(p(s)?)(s))
 }
@@ -94,7 +98,7 @@ pub fn bind<I:SliceLike, O1, O2, P, S>(p: impl Parser<I, O1, S>,
 /// assert_eq!(parse(parse_next_even, input3).result, Some(4));
 /// ```
 #[inline]
-pub fn map<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
+pub const fn map<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
                                    f: impl FnOnce(O) -> O2 + Copy
 ) -> impl Parser<I, O2, S> {
     map!(f, p)
@@ -133,7 +137,7 @@ pub fn map<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 /// assert_eq!(parse(parse_binary, input3).result, None);
 /// ```
 #[inline]
-pub fn map_if<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
+pub const fn map_if<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
                                       f: impl FnOnce(O) -> Option<O2> + Copy
 ) -> impl Parser<I, O2, S> {
     create_parser!(s, { p(s).and_then(f) })
@@ -163,8 +167,8 @@ pub fn map_if<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 /// assert_eq!(result1, Some("1234".to_owned()));
 /// ```
 #[inline]
-pub fn into_type<I: SliceLike, O: Into<T>, T, S>(p: impl Parser<I, O, S>) -> impl Parser<I, T, S> {
-    map(p, O::into)
+pub const fn into_type<I: SliceLike, O: Into<T>, T, S>(p: impl Parser<I, O, S>) -> impl Parser<I, T, S> {
+    map!(O::into, p)
 }
 
 /// Accept or reject the parse based on the predicate `f`.
@@ -190,8 +194,8 @@ pub fn into_type<I: SliceLike, O: Into<T>, T, S>(p: impl Parser<I, O, S>) -> imp
 /// assert_eq!(parse(parse_even, input2).result, Some(2));
 /// ```
 #[inline]
-pub fn filter<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
-                                  f: impl FnOnce(&O) -> bool + Copy
+pub const fn filter<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
+                                        f: impl FnOnce(&O) -> bool + Copy
 ) -> impl Parser<I, O, S> {
     create_parser!(s, p(s).filter(f))
 }
@@ -218,7 +222,7 @@ pub fn filter<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
 /// assert_eq!(parse(parse_optional_int, input2).result, Some(None));
 /// ```
 #[inline]
-pub fn succeed<I:SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, Option<O>, S> {
+pub const fn succeed<I:SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, Option<O>, S> {
     create_parser!(s, {
         Some(p(s))
     })
@@ -245,7 +249,7 @@ pub fn succeed<I:SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, Opt
 /// assert_eq!(result.state, input);
 /// ```
 #[inline]
-pub fn peek<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
+pub const fn peek<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
     create_parser!(s, {
         let pos = s.input;
         let res = p(s);
@@ -274,7 +278,7 @@ pub fn peek<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S>
 /// assert_eq!(parse(parse_digits, input2).result, None);
 /// ```
 #[inline]
-pub fn not_empty<I: SliceLike, O: SliceLike, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
+pub const fn not_empty<I: SliceLike, O: SliceLike, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
     filter(p, |r| !r.slice_is_empty())
 }
 
@@ -304,7 +308,7 @@ pub fn not_empty<I: SliceLike, O: SliceLike, S>(p: impl Parser<I, O, S>) -> impl
 /// assert_eq!(result2.state, "4321");
 /// ```
 #[inline]
-pub fn attempt<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
+pub const fn attempt<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
     create_parser!(s, {
         let pos = s.input;
         let res = p(s);
@@ -336,7 +340,7 @@ pub fn attempt<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O,
 /// assert_eq!(parse(parse_int, input).result, Some((4, 1234)));
 /// ```
 #[inline]
-pub fn count_consumed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, (I::Idx, O), S> {
+pub const fn count_consumed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, (I::Idx, O), S> {
     create_parser!(s, {
         let old = s.input.slice_len();
         let res = p(s)?;
@@ -364,7 +368,7 @@ pub fn count_consumed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parse
 /// assert_eq!(parse(parse_int, input).result, Some((input, 1234)));
 /// ```
 #[inline]
-pub fn and_parsed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, (I, O), S> {
+pub const fn and_parsed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, (I, O), S> {
     create_parser!(s, {
         let old_input = s.input;
         let res = p(s)?;
@@ -392,7 +396,7 @@ pub fn and_parsed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I,
 /// assert_eq!(parse(parse_abc_then_123, input).result, Some(input));
 /// ```
 #[inline]
-pub fn get_parsed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, I, S> {
+pub const fn get_parsed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I, I, S> {
     create_parser!(s, {
         let old_input = s.input;
         p(s)?;
@@ -422,13 +426,13 @@ pub fn get_parsed<I: SliceLike, O, S>(p: impl Parser<I, O, S>) -> impl Parser<I,
 /// assert_eq!(parse(parse_4_digits, input2).result, None);
 /// ```
 #[inline]
-pub fn times<I: SliceLike, O, S>(times: u32, p: impl Parser<I, O, S>) -> impl Parser<I, I, S> {
+pub const fn times<I: SliceLike, O, S>(times: u32, p: impl Parser<I, O, S>) -> impl Parser<I, I, S> {
     create_parser!(s, {
         let old_input = s.input;
-        for _ in 0..times {
-            p(s)?;
-        }
-        Some(old_input.slice_to(old_input.slice_len() - s.input.slice_len()))
+
+        (0..times).all(|_| p(s).is_some()).then(|| {
+            old_input.slice_to(old_input.slice_len() - s.input.slice_len())
+        })
     })
 }
 
@@ -454,8 +458,8 @@ pub fn times<I: SliceLike, O, S>(times: u32, p: impl Parser<I, O, S>) -> impl Pa
 /// assert_eq!(parse(parse_abc_then_123, input).result, Some("123"));
 /// ```
 #[inline]
-pub fn right<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
-                                      p2: impl Parser<I, O2, S>
+pub const fn right<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
+                                            p2: impl Parser<I, O2, S>
 ) ->  impl Parser<I, O2, S> {
     create_parser!(s, {
         p1(s).and_then(|_| p2(s))
@@ -484,8 +488,8 @@ pub fn right<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
 /// assert_eq!(parse(parse_abc_then_123, input).result, Some("abc"));
 /// ```
 #[inline]
-pub fn left<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
-                                     p2: impl Parser<I, O2, S>
+pub const fn left<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
+                                           p2: impl Parser<I, O2, S>
 ) ->  impl Parser<I, O1, S> {
     create_parser!(s, {
         p1(s).and_then(|res| p2(s).map(|_| res))
@@ -512,9 +516,9 @@ pub fn left<I: SliceLike, S, O1, O2>(p1: impl Parser<I, O1, S>,
 /// assert_eq!(parse(parse_middle, input).result, Some("123"));
 /// ```
 #[inline]
-pub fn middle<I: SliceLike, S, O1, O2, O3>(p1: impl Parser<I, O1, S>,
-                                           p2: impl Parser<I, O2, S>,
-                                           p3: impl Parser<I, O3, S>
+pub const fn middle<I: SliceLike, S, O1, O2, O3>(p1: impl Parser<I, O1, S>,
+                                                 p2: impl Parser<I, O2, S>,
+                                                 p3: impl Parser<I, O3, S>
 ) ->  impl Parser<I, O2, S> {
     right(p1, left(p2, p3))
 }
@@ -551,8 +555,8 @@ macro_rules! internal_or {
         /// assert_eq!(parse(parse_abc_or_123, input3).result, None);
         /// ```
         #[inline]
-        pub fn $id<I: SliceLike, O, S>(p1: impl Parser<I, O, S>,
-                                       p2: impl Parser<I, O, S>
+        pub const fn $id<I: SliceLike, O, S>(p1: impl Parser<I, O, S>,
+                                             p2: impl Parser<I, O, S>
         ) -> impl Parser<I, O, S> {
             create_parser!(s, {
                 let pos = s.input;
@@ -605,8 +609,8 @@ macro_rules! internal_or_diff {
         /// assert_eq!(parse(parse_int_or_abc, input3).result, None);
         /// ```
         #[inline]
-        pub fn $id<I: SliceLike, O1, O2, S>(p1: impl Parser<I, O1, S>,
-                                            p2: impl Parser<I, O2, S>
+        pub const fn $id<I: SliceLike, O1, O2, S>(p1: impl Parser<I, O1, S>,
+                                                  p2: impl Parser<I, O2, S>
         ) -> impl Parser<I, (), S> {
             create_parser!(s, {
                 let pos = s.input;
@@ -651,8 +655,8 @@ internal_or_diff!(or_diff_no_partial, false, "This differs from `or_diff` in tha
 /// assert_eq!(nums, vec![123]);
 /// ```
 #[inline]
-pub fn lift_to_state<I: SliceLike, S, O1, O2>(f: impl FnOnce(&mut S, O1) -> O2 + Copy,
-                                              p: impl Parser<I, O1, S>
+pub const fn lift_to_state<I: SliceLike, S, O1, O2>(f: impl FnOnce(&mut S, O1) -> O2 + Copy,
+                                                    p: impl Parser<I, O1, S>
 ) -> impl Parser<I, O2, S> {
     create_parser!(s, {
         p(s).map(|res| f(s.user_state, res))
@@ -666,18 +670,18 @@ pub fn lift_to_state<I: SliceLike, S, O1, O2>(f: impl FnOnce(&mut S, O1) -> O2 +
 /// * `p` - a parser for the separator
 /// * `allow_trailing` - whether a trailing separator is allowed.
 #[inline]
-pub fn separator<I, O, S>(p: impl Parser<I, O, S>, allow_trailing: bool) -> Option<(bool, impl Parser<I, O, S>)> {
+pub const fn separator<I, O, S>(p: impl Parser<I, O, S>, allow_trailing: bool) -> Option<(bool, impl Parser<I, O, S>)> {
     Some((allow_trailing, p))
 }
 
 /// Only for use with the `many` family of combinators. Use this function to create the separator
 /// argument when no separator should be present.
-#[allow(unreachable_code)]
 #[inline]
-pub fn no_separator<I: SliceLike, S>() -> Option<(bool, impl Parser<I, (), S>)> {
+pub const fn no_separator<I: SliceLike, S>() -> Option<(bool, impl Parser<I, (), S>)> {
     return None;
 
     // Unreachable, but provides type/size information about the return value
+    #[allow(unreachable_code)]
     Some((false, success()))
 }
 
@@ -685,33 +689,32 @@ pub fn no_separator<I: SliceLike, S>() -> Option<(bool, impl Parser<I, (), S>)> 
 fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
     s: &mut AnpaState<I, S>,
     p: impl Parser<I, O, S>,
-    mut f: impl FnMut(O) -> F,
+    mut f: impl FnMut(&mut S, O) -> F,
     allow_empty: bool,
     separator: Option<(bool, impl Parser<I, O2, S>)>
 ) -> bool {
-    let mut successes = false;
-    let mut has_trailing_sep = false;
+    let mut successful = allow_empty;
+    let mut trailing_ok = true;
 
     while let Some(res) = p(s) {
-        has_trailing_sep = false;
-        successes = true;
-
-        match f(res).into() {
+        match f(s.user_state, res).into() {
             FlowControl::Pass => {},
             FlowControl::Stop => break,
             FlowControl::Fail => return false,
         }
 
-        if let Some((_, sep)) = separator {
+        successful = true;
+
+        if let Some((allow_trailing, sep)) = separator {
             if sep(s).is_none() {
+                trailing_ok = true;
                 break;
             }
-            has_trailing_sep = true;
+            trailing_ok = allow_trailing;
         }
     }
 
-    !separator.is_some_and(|(allow_trailing, _)| !allow_trailing && has_trailing_sep)
-        && (allow_empty || successes)
+    trailing_ok && successful
 }
 
 /// Apply a parser until it fails and return the parsed input.
@@ -719,7 +722,7 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
 /// ### Arguments
 /// * `p` - the parser
 /// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
 ///                 functions to construct this parameter.
 ///
 /// ### Example
@@ -739,13 +742,13 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
 /// assert_eq!(parse(parse_nums, input).result, Some("1,2,3"));
 /// ```
 #[inline]
-pub fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
-                                    allow_empty: bool,
-                                    separator: Option<(bool, impl Parser<I, O2, S>)>,
+pub const fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
+                                          allow_empty: bool,
+                                          separator: Option<(bool, impl Parser<I, O2, S>)>,
 ) -> impl Parser<I, I, S> {
     create_parser!(s, {
         let old_input = s.input;
-        many_internal(s, p, |_| {}, allow_empty, separator)
+        many_internal(s, p, |_, _| {}, allow_empty, separator)
             .then_some(old_input.slice_to(old_input.slice_len() - s.input.slice_len()))
     })
 }
@@ -760,7 +763,7 @@ pub fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 ///         will proceed. Returning nothing, i.e. `()` will always cause each parsed
 ///         element to succeed.
 /// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
 ///                 functions to construct this parameter.
 ///
 /// ### Example
@@ -782,7 +785,7 @@ pub fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 /// assert_eq!(parse(parse_nums, input).result, Some(6));
 /// ```
 #[inline]
-pub fn fold<I: SliceLike, O, O2, S, R, F: Into<FlowControl>>(
+pub const fn fold<I: SliceLike, O, O2, S, R, F: Into<FlowControl>>(
     p: impl Parser<I, O, S>,
     init: impl FnOnce() -> R + Copy,
     f: impl FnOnce(&mut R, O) -> F + Copy,
@@ -791,8 +794,56 @@ pub fn fold<I: SliceLike, O, O2, S, R, F: Into<FlowControl>>(
 ) -> impl Parser<I, R, S> {
     create_parser!(s, {
         let mut res = init();
-        many_internal(s, p, |x| f(&mut res, x), allow_empty, separator)
+        many_internal(s, p, |_, x| f(&mut res, x), allow_empty, separator)
             .then_some(res)
+    })
+}
+
+/// Apply a parser repeatedly and accumulate a result in the spirit of fold.
+///
+/// This version uses the user provided state instead of a provided accumulator.
+/// This allows for the parser to be used for modifying values in the outer scope.
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `f` - a function taking the user state as `&mut` along with the result of each
+///         successful parse. Return `FlowControl` if you want to affect how the parse
+///         will proceed. Returning nothing, i.e. `()` will always cause each parsed
+///         element to succeed.
+/// * `allow_empty` - whether no parse should be considered successful.
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
+///                 functions to construct this parameter.
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::combinators::{fold_state, separator};
+/// use anpa::number::integer;
+/// use anpa::parsers::skip;
+///
+/// let mut state = 0;
+///
+/// let parse_nums = fold_state(
+///     integer().map(|n: u32| n),
+///     |acc, n| *acc += n,
+///     false,
+///     separator(skip(','), false));
+///
+/// let input = "1,2,3";
+///
+/// assert_eq!(parse_state(parse_nums, input, &mut state).result, Some(()));
+/// assert_eq!(state, 6);
+/// ```
+#[inline]
+pub const fn fold_state<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
+    p: impl Parser<I, O, S>,
+    f: impl FnOnce(&mut S, O) -> F + Copy,
+    allow_empty: bool,
+    separator: Option<(bool, impl Parser<I, O2, S>)>,
+) -> impl Parser<I, (), S> {
+    create_parser!(s, {
+        many_internal(s, p, |state, x| f(state, x), allow_empty, separator)
+            .then_some(())
     })
 }
 
@@ -808,7 +859,7 @@ pub fn fold<I: SliceLike, O, O2, S, R, F: Into<FlowControl>>(
 /// * `constructor` - a constructor for generating the initial state. It shall
 ///                   be a function returning a tuple `(the_array, start_index)`.
 /// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
 ///                 functions to construct this parameter.
 ///
 /// ### Example
@@ -836,30 +887,32 @@ pub fn fold<I: SliceLike, O, O2, S, R, F: Into<FlowControl>>(
 /// assert_eq!(parse(parse_nums, input).result, None);
 /// ```
 #[inline]
-pub fn many_to_array<I: SliceLike, O, O2, S, const N: usize>(
+pub const fn many_to_array<I: SliceLike, O, O2, S, const N: usize, A: BorrowMut<[O; N]>>(
     p: impl Parser<I, O, S>,
-    constructor: impl FnOnce() -> ([O; N], usize) + Copy,
+    constructor: impl FnOnce() -> (A, usize) + Copy,
     allow_empty: bool,
     separator: Option<(bool, impl Parser<I, O2, S>)>
-) -> impl Parser<I, ([O; N], usize), S> {
+) -> impl Parser<I, (A, usize), S> {
     fold(p, constructor, |(arr, n), x| {
         if *n >= N {
             return FlowControl::Fail
         }
 
-        arr[*n] = x;
+        arr.borrow_mut()[*n] = x;
         *n += 1;
         FlowControl::Pass
     }, allow_empty, separator)
 }
 
-#[cfg(feature = "std")]
+#[cfg(feature = "alloc")]
 /// Apply a parser until it fails and store the results in a `Vec`.
+///
+/// Requires feature "alloc".
 ///
 /// ### Arguments
 /// * `p` - the parser
 /// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
 ///                 functions to construct this parameter.
 ///
 /// ### Example
@@ -879,21 +932,50 @@ pub fn many_to_array<I: SliceLike, O, O2, S, const N: usize>(
 /// assert_eq!(parse(parse_nums, input).result, Some(vec![1,2,3]));
 /// ```
 #[inline]
-pub fn many_to_vec<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
-                                           allow_empty: bool,
-                                           separator: Option<(bool, impl Parser<I, O2, S>)>
+pub const fn many_to_vec<I: SliceLike, O, O2, S>(
+    p: impl Parser<I, O, S>,
+    allow_empty: bool,
+    separator: Option<(bool, impl Parser<I, O2, S>)>
 ) -> impl Parser<I, Vec<O>, S> {
     fold(p, Vec::new, |v, x| v.push(x), allow_empty, separator)
+}
+
+#[cfg(feature = "alloc")]
+/// Apply a parser until it fails and store the results in a `BTreeMap`.
+/// The parser `p` must have a result type `(K, V)`, where the key `K: Ord`.
+/// This might give better performance than `many_to_map` in some use cases.
+///
+/// Requires feature "alloc".
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `allow_empty` - whether no parse should be considered successful.
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
+///                 functions to construct this parameter.
+///
+/// ### Example
+/// See [`many_to_map`]
+#[inline]
+pub const fn many_to_map_ordered<I: SliceLike, K: Ord, V, O2, S>(
+    p: impl Parser<I, (K, V), S>,
+    allow_empty: bool,
+    separator: Option<(bool, impl Parser<I, O2, S>)>,
+) -> impl Parser<I, BTreeMap<K, V>, S> {
+    fold(p, BTreeMap::new, |m, (k, v)| { m.insert(k, v); }, allow_empty, separator)
 }
 
 #[cfg(feature = "std")]
 /// Apply a parser until it fails and store the results in a `HashMap`.
 /// The parser `p` must have a result type `(K, V)`, where the key `K: Hash + Eq`.
 ///
+/// Requires feature "std".
+///
+/// [`many_to_map_ordered`] is an alternative that only requires the feature "alloc".
+///
 /// ### Arguments
 /// * `p` - the parser
 /// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
+/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
 ///                 functions to construct this parameter.
 ///
 /// ### Example
@@ -921,32 +1003,12 @@ pub fn many_to_vec<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 /// assert_eq!(parse(parse_nums, input).result, Some(expected));
 /// ```
 #[inline]
-pub fn many_to_map<I: SliceLike, K: Hash + Eq, V, O2, S>(p: impl Parser<I, (K, V), S>,
-                                                         allow_empty: bool,
-                                                         separator: Option<(bool, impl Parser<I, O2, S>)>,
+pub const fn many_to_map<I: SliceLike, K: Hash + Eq, V, O2, S>(
+    p: impl Parser<I, (K, V), S>,
+    allow_empty: bool,
+    separator: Option<(bool, impl Parser<I, O2, S>)>,
 ) -> impl Parser<I, HashMap<K, V>, S> {
     fold(p, HashMap::new, |m, (k, v)| { m.insert(k, v); }, allow_empty, separator)
-}
-
-#[cfg(feature = "std")]
-/// Apply a parser until it fails and store the results in a `BTreeMap`.
-/// The parser `p` must have a result type `(K, V)`, where the key `K: Ord`.
-/// This might give better performance than `many_to_map`.
-///
-/// ### Arguments
-/// * `p` - the parser
-/// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the `no_separator`/`separator`
-///                 functions to construct this parameter.
-///
-/// ### Example
-/// See [`many_to_map`]
-#[inline]
-pub fn many_to_map_ordered<I: SliceLike, K: Ord, V, O2, S>(p: impl Parser<I, (K, V), S>,
-                                                           allow_empty: bool,
-                                                           separator: Option<(bool, impl Parser<I, O2, S>)>,
-) -> impl Parser<I, BTreeMap<K, V>, S> {
-    fold(p, BTreeMap::new, |m, (k, v)| { m.insert(k, v); }, allow_empty, separator)
 }
 
 /// Combine two parsers into a parser that returns the result of the parser
@@ -981,8 +1043,8 @@ pub fn many_to_map_ordered<I: SliceLike, K: Ord, V, O2, S>(p: impl Parser<I, (K,
 /// assert_eq!(parse(parse_greedy, input2).result, Some(0));
 /// ```
 #[inline]
-pub fn greedy_or<I: SliceLike, S, O>(p1: impl Parser<I, O, S>,
-                                     p2: impl Parser<I, O, S>
+pub const fn greedy_or<I: SliceLike, S, O>(p1: impl Parser<I, O, S>,
+                                           p2: impl Parser<I, O, S>
 ) ->  impl Parser<I, O, S> {
     create_parser!(s, {
         let pos = s.input;
@@ -1074,8 +1136,8 @@ pub fn greedy_or<I: SliceLike, S, O>(p1: impl Parser<I, O, S>,
 /// assert_eq!(parse(expr(), input5).result, Some(-25));
 /// ```
 #[inline]
-pub fn chain<I: SliceLike, S, O, F>(p: impl Parser<I, O, S>,
-                                    op: impl Parser<I, F, S>
+pub const fn chain<I: SliceLike, S, O, F>(p: impl Parser<I, O, S>,
+                                          op: impl Parser<I, F, S>
 ) ->  impl Parser<I, O, S> where F: FnOnce(O, O) -> O {
     create_parser!(s, {
         let mut res = p(s)?;

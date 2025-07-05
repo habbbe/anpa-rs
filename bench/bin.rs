@@ -54,17 +54,16 @@ fn bench_fun<T>(mut n: usize, mut f: impl FnMut() -> T) -> (Duration, T) {
 }
 
 fn bench_hubb() {
-    let parse_name = until('=');
+    let parse_name = until!('=');
     let parse_cmd = not_empty(rest());
-    let parse_action = right!(skip!("Com:"), map!(action, parse_name, parse_cmd));
-    let parse_info = right!(skip!("Info:"), map!(info, parse_name, parse_cmd));
+    let parse_action = right(skip!("Com:"), map!(action, parse_name, parse_cmd));
+    let parse_info = right(skip!("Info:"), map!(info, parse_name, parse_cmd));
     let parse_separator = skip!("Separator").map(|_| Item::Separator);
     let parse_space = skip!("Space").map(|_| Item::Space);
-    let parse_error = map!(syntax_error, rest());
-    let parse_item = or!(parse_action, parse_info, parse_separator, parse_space, parse_error);
-    let item_to_state = lift_to_state(|x: &mut Vec<_>, y| x.push(y), parse_item);
-    let ignore = or_diff!(empty(), skip!('#'));
-    let state_parser = or_diff!(ignore, item_to_state);
+    let ignore = or_diff(skip!('#'), empty()).map(|_| Item::Ignore);
+    let parse_error = rest().map(syntax_error);
+    let parse_item = or!(parse_action, parse_info, parse_separator, parse_space, ignore, parse_error);
+    let parser = lift_to_state(|x: &mut Vec<_>, y| if !matches!(y, Item::Ignore) { x.push(y) }, parse_item);
 
     let lines: Vec<String> = read_file("hubb").lines().map(Result::unwrap).collect();
     let mut vec: Vec<Item> = Vec::with_capacity(lines.len());
@@ -73,7 +72,7 @@ fn bench_hubb() {
         for _ in 0..50 {
             vec.clear();
             for l in &lines {
-                let r = parse_state(state_parser, l, &mut vec);
+                let r = parser.parse_state(l, &mut vec);
                 if r.result.is_none() {
                     println!("No parse");
                     break
@@ -116,7 +115,7 @@ fn bench_json() {
 
     let (d, _) = bench_fun(10000, || {
         for _ in 0..10 {
-            parse(p, &string).result.unwrap();
+            p.parse(&string).result.unwrap();
         }
     });
 
@@ -148,7 +147,7 @@ fn syntax_error(description: &str) -> Item<'_> {
     Item::SyntaxError {description}
 }
 
-fn parse_handrolled(input: &str) -> Option<Item> {
+fn parse_handrolled(input: &'_ str) -> Option<Item<'_>> {
     fn parse_command_tuple(input: &str) -> Option<(&str, &str)> {
         let equal_pos = input.find('=')?;
         if equal_pos == input.len() - 1 { return None }

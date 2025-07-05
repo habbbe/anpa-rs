@@ -3,6 +3,9 @@
 #[cfg(feature = "std")]
 extern crate std;
 
+#[cfg(feature = "alloc")]
+extern crate alloc;
+
 #[macro_use]
 pub mod macros;
 pub mod parsers;

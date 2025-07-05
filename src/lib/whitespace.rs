@@ -18,13 +18,21 @@ impl<A: CharLike> TrimmableAscii for &[A] {
     }
 }
 
+impl<A: CharLike> TrimmableUtf8 for &[A] {
+    fn prefix() -> impl Prefix<Self, Self> {
+        Utf8Whitespace()
+    }
+}
+
 impl TrimmableAscii for &str {
+    #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
         AsciiWhitespace()
     }
 }
 
 impl TrimmableUtf8 for &str {
+    #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
         Utf8Whitespace()
     }
@@ -32,25 +40,25 @@ impl TrimmableUtf8 for &str {
 
 /// Create a parser that parses and returns ASCII whitespace.
 #[inline]
-pub fn ascii_whitespace<I: TrimmableAscii, S>() -> impl Parser<I, I, S> {
+pub const fn ascii_whitespace<I: TrimmableAscii, S>() -> impl Parser<I, I, S> {
     take!(I::prefix())
 }
 
 /// Create a parser that parses and ignores ASCII whitespace.
 #[inline]
-pub fn skip_ascii_whitespace<I: TrimmableAscii, S>() -> impl Parser<I, (), S> {
+pub const fn skip_ascii_whitespace<I: TrimmableAscii, S>() -> impl Parser<I, (), S> {
     skip!(I::prefix())
 }
 
 /// Create a parser that parses and returns UTF-8 whitespace.
 #[inline]
-pub fn whitespace<I: TrimmableUtf8, S>() -> impl Parser<I, I, S> {
+pub const fn whitespace<I: TrimmableUtf8, S>() -> impl Parser<I, I, S> {
     take!(I::prefix())
 }
 
 /// Create a parser that parses and ignores UTF-8 whitespace.
 #[inline]
-pub fn skip_whitespace<I: TrimmableUtf8, S>() -> impl Parser<I, (), S> {
+pub const fn skip_whitespace<I: TrimmableUtf8, S>() -> impl Parser<I, (), S> {
     skip!(I::prefix())
 }
 
@@ -62,22 +70,29 @@ pub struct AsciiWhitespace();
 #[derive(Clone, Copy)]
 pub struct Utf8Whitespace();
 
-impl AsciiWhitespace {
-    fn count_whitespace<A: CharLike>(slice: &[A]) -> usize {
-        slice.iter().position(|a| !a.as_char().is_ascii_whitespace()).unwrap_or(slice.len())
-    }
+macro_rules! impl_whitespace_prefix_array {
+    ($id:ident, $count:ident) => {
+        impl $id {
+            fn count_whitespace<A: CharLike>(slice: &[A]) -> usize {
+                slice.iter().position(|a| !a.as_char().$count()).unwrap_or(slice.len())
+            }
+        }
+
+        impl<'a, A: CharLike> Prefix<&'a [A], &'a [A]> for $id {
+            fn take_prefix(&self, haystack: &'a [A]) -> Option<(&'a [A], &'a [A])> {
+                let idx = $id::count_whitespace(haystack);
+                Some(haystack.split_at(idx))
+            }
+
+            fn skip_prefix(&self, haystack: &'a [A]) -> Option<&'a [A]> {
+                Some(&haystack[$id::count_whitespace(haystack)..])
+            }
+        }
+    };
 }
 
-impl<'a, A: CharLike> Prefix<&'a [A], &'a [A]> for AsciiWhitespace {
-    fn take_prefix(&self, haystack: &'a [A]) -> Option<(&'a [A], &'a [A])> {
-        let idx = Self::count_whitespace(haystack);
-        Some(haystack.split_at(idx))
-    }
-
-    fn skip_prefix(&self, haystack: &'a [A]) -> Option<&'a [A]> {
-        Some(&haystack[Self::count_whitespace(haystack)..])
-    }
-}
+impl_whitespace_prefix_array!(AsciiWhitespace, is_ascii_whitespace);
+impl_whitespace_prefix_array!(Utf8Whitespace, is_whitespace);
 
 macro_rules! impl_whitespace_prefix_str {
     ($id:ident, $trim_fn:ident) => {

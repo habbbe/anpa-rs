@@ -1,6 +1,6 @@
 use core::{convert::TryInto, ops};
 
-use crate::{core::Parser, slicelike::{ContiguousBytes, SliceLike}};
+use crate::{core::Parser, number::NumLike, slicelike::{ContiguousBytes, SliceLike}};
 
 /// One unit of "work". In this case `usize` will process 8 bytes
 /// at a time on a 64-bit CPU (or 4 bytes on 32-bit).
@@ -29,22 +29,19 @@ pub trait ByteFinder: Copy {
 
 /// A wrapper for combining two [`ByteFinder`] via logic OR.
 #[derive(Clone, Copy)]
-pub struct OrByte<A: ByteFinder, B: ByteFinder> {
-    pub a: A,
-    pub b: B
-}
+pub struct OrByte<A: ByteFinder, B: ByteFinder>(pub A, pub B);
 
 macro_rules! impl_finder_for_combinator {
     ($id:ident, $bit_op:tt, $logic_op:tt) => {
         impl<A: ByteFinder, B: ByteFinder> ByteFinder for $id<A, B> {
             #[inline]
             fn intermediate(self, haystack: Work) -> Work {
-                self.a.intermediate(haystack) $bit_op self.b.intermediate(haystack)
+                self.0.intermediate(haystack) $bit_op self.1.intermediate(haystack)
             }
 
             #[inline]
             fn slow_cmp(self, haystack: u8) -> bool {
-                self.a.slow_cmp(haystack) $logic_op self.b.slow_cmp(haystack)
+                self.0.slow_cmp(haystack) $logic_op self.1.slow_cmp(haystack)
             }
         }
     };
@@ -59,7 +56,7 @@ macro_rules! impl_or_for_finder {
 
             #[inline(always)]
             fn bitor(self, rhs: A) -> Self::Output {
-                OrByte { a: self, b: rhs }
+                OrByte(self, rhs)
             }
         }
     };
@@ -75,48 +72,40 @@ impl<A: ByteFinder, B: ByteFinder, C: ByteFinder> ops::BitOr<C> for OrByte<A, B>
 
     #[inline(always)]
     fn bitor(self, rhs: C) -> Self::Output {
-        OrByte { a: self.a, b: OrByte { a: self.b, b: rhs } }
+        OrByte(self.0, OrByte(self.1, rhs))
     }
 }
 
 /// A wrapper used for finding a byte that is equal to
 /// the wrappee.
 #[derive(Clone, Copy)]
-pub struct EqByte {
-    pub b: u8
-}
+pub struct EqByte(pub u8);
 
 /// A wrapper used for finding a byte that is smaller than
 /// the wrappee.
 #[derive(Clone, Copy)]
-pub struct LtByte {
-    pub b: u8
-}
+pub struct LtByte(pub u8);
 
 /// A wrapper used for finding a byte that is greater than
 /// the wrappee.
 #[derive(Clone, Copy)]
-pub struct GtByte {
-    pub b: u8
-}
+pub struct GtByte(pub u8);
 
 /// A wrapper used for finding a byte that is not equal to
 /// the wrappee.
 #[derive(Clone, Copy)]
-pub struct NeByte {
-    pub b: u8
-}
+pub struct NeByte(pub u8);
 
 impl ByteFinder for EqByte {
     #[inline]
     fn intermediate(self, haystack: Work) -> Work {
-        let to_find = haystack ^ (self.b as Work * LOW_BITS);
+        let to_find = haystack ^ (self.0 as Work * LOW_BITS);
         to_find.wrapping_sub(LOW_BITS) & !to_find
     }
 
     #[inline(always)]
     fn slow_cmp(self, other: u8) -> bool {
-        other == self.b
+        other == self.0
     }
 }
 
@@ -125,62 +114,62 @@ impl ByteFinder for NeByte {
     fn intermediate(self, haystack: Work) -> Work {
         // Non-equality is obtained by toggling the high bits of
         // equality.
-        EqByte { b: self.b }.intermediate(haystack) ^ HIGH_BITS
+        EqByte(self.0).intermediate(haystack) ^ HIGH_BITS
     }
 
     #[inline(always)]
     fn slow_cmp(self, other: u8) -> bool {
-        other != self.b
+        other != self.0
     }
 }
 
 impl ByteFinder for LtByte {
     #[inline]
     fn intermediate(self, haystack: Work) -> Work {
-        haystack.wrapping_sub(LOW_BITS * self.b as Work) & !haystack
+        haystack.wrapping_sub(LOW_BITS * self.0 as Work) & !haystack
     }
 
     #[inline(always)]
     fn slow_cmp(self, other: u8) -> bool {
-        other < self.b
+        other < self.0
     }
 }
 
 impl ByteFinder for GtByte {
     #[inline]
     fn intermediate(self, haystack: Work) -> Work {
-        let mask = LOW_BITS * self.b as Work;
+        let mask = LOW_BITS * self.0 as Work;
         mask.wrapping_sub(haystack) & !mask
     }
 
     #[inline(always)]
     fn slow_cmp(self, other: u8) -> bool {
-        other > self.b
+        other > self.0
     }
 }
 
 /// Return a byte finder representing `== b`.
 #[inline(always)]
 pub const fn eq(b: u8) -> EqByte {
-    EqByte { b }
+    EqByte(b)
 }
 
 /// Return a byte finder representing `!= b`.
 #[inline(always)]
 pub const fn ne(b: u8) -> NeByte {
-    NeByte { b }
+    NeByte(b)
 }
 
 /// Return a byte finder representing `< b`.
 #[inline(always)]
 pub const fn lt(b: u8) -> LtByte {
-    LtByte { b }
+    LtByte(b)
 }
 
 /// Return a byte finder representing `> b`.
 #[inline(always)]
 pub const fn gt(b: u8) -> GtByte {
-    GtByte { b }
+    GtByte(b)
 }
 
 /// Helper function for performing the byte search and returning the
@@ -189,33 +178,26 @@ pub const fn gt(b: u8) -> GtByte {
 fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
     where I: SliceLike + ContiguousBytes, B: ByteFinder {
     let mut pos = 0;
-    let res;
+    let bytes = input.to_u8_slice();
 
-    {
-        const CHUNK_SIZE: usize = (Work::BITS / u8::BITS) as usize;
-        let bytes = input.to_u8_slice();
+    let mut chunks = bytes.chunks_exact(Work::SIZE);
+    for chunk in chunks.by_ref() {
+        let val = Work::from_le_bytes(chunk.try_into().unwrap());
+        let present = finder.intermediate(val) & HIGH_BITS;
 
-        'outer: {
-            let mut chunks = bytes.chunks_exact(CHUNK_SIZE);
-            for chunk in chunks.by_ref() {
-                let val = Work::from_le_bytes(chunk.try_into().unwrap());
-                let present = finder.intermediate(val) & HIGH_BITS;
+        if present != 0 {
+            pos += (present.trailing_zeros() / u8::BITS) as usize;
 
-                if present != 0 {
-                    pos += (present.trailing_zeros() / u8::BITS) as usize;
-                    break 'outer
-                }
-
-                pos += CHUNK_SIZE;
-            }
-
-            pos += chunks.remainder().iter().position(|x| finder.slow_cmp(*x))?;
+            // Inlining this rather than using a labeled break yields slightly
+            // better performance.
+            return Some((bytes[pos], input.slice_idx_from_offset(pos)))
         }
 
-        res = bytes[pos];
+        pos += Work::SIZE;
     }
 
-    Some((res, input.slice_idx_from_offset(pos)))
+    pos += chunks.remainder().iter().position(|x| finder.slow_cmp(*x))?;
+    Some((bytes[pos], input.slice_idx_from_offset(pos)))
 }
 
 /// Find a single byte in an input that can be represented as a
@@ -269,7 +251,7 @@ fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
 /// assert_eq!(parse(p, input3).result, Some(b'\n'));
 /// ```
 #[inline]
-pub fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> impl Parser<I, u8, S>
+pub const fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> impl Parser<I, u8, S>
     where I: SliceLike + ContiguousBytes {
     create_parser!(s, {
         let (res, pos) = get_byte_pos(s.input, finder)?;
@@ -316,9 +298,9 @@ pub fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> impl Pa
 /// assert_eq!(parse(p, input3).result, Some("a"));
 /// ```
 #[inline]
-pub fn until_byte<I, S>(finder: impl ByteFinder,
-                        include_result: bool,
-                        consume_result: bool) -> impl Parser<I, I, S>
+pub const fn until_byte<I, S>(finder: impl ByteFinder,
+                              include_result: bool,
+                              consume_result: bool) -> impl Parser<I, I, S>
     where I: SliceLike + ContiguousBytes {
     create_parser!(s, {
         let (_, pos) = get_byte_pos(s.input, finder)?;
