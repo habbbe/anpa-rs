@@ -8,7 +8,7 @@ All parsers and combinators, with the exceptions below, are allocation free and
 can be used with `no_std` when disabling the default features of this crate.
 
 Allocating parsers:
-- `many_to_vec`, `many_to_map_ordered`: Requires feature "alloc"
+- `many_to_vec`, `many_to_map_ordered`: Require feature "alloc"
 - `many_to_map`: Requires feature "std"
 
 
