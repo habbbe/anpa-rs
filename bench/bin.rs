@@ -147,7 +147,7 @@ fn syntax_error(description: &str) -> Item<'_> {
     Item::SyntaxError {description}
 }
 
-fn parse_handrolled(input: &str) -> Option<Item> {
+fn parse_handrolled(input: &'_ str) -> Option<Item<'_>> {
     fn parse_command_tuple(input: &str) -> Option<(&str, &str)> {
         let equal_pos = input.find('=')?;
         if equal_pos == input.len() - 1 { return None }

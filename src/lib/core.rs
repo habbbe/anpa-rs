@@ -61,7 +61,7 @@ pub trait ParserExt<I: SliceLike, O, S>: Parser<I, O, S> {
 
     /// Perform a parse with provided user state.
     /// See [`crate::core::parse_state`].
-    fn parse_state(self, input: I, user_state: &mut S) -> AnpaResult<AnpaState<I, S>, O>;
+    fn parse_state(self, input: I, user_state: &'_ mut S) -> AnpaResult<AnpaState<'_, I, S>, O>;
 
     #[cfg(feature = "std")]
     /// Add some simple debug information to this parser.
@@ -128,7 +128,7 @@ impl<I: SliceLike, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
     }
 
     #[inline(always)]
-    fn parse_state(self, input: I, user_state: &mut S) -> AnpaResult<AnpaState<I, S>, O> {
+    fn parse_state(self, input: I, user_state: &'_ mut S) -> AnpaResult<AnpaState<'_, I, S>, O> {
         parse_state(self, input, user_state)
     }
 
@@ -139,8 +139,8 @@ impl<I: SliceLike, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
         create_parser!(s, {
             let res = self(s);
             match res {
-                Some(_) => println!("{}: Succeeded", name),
-                None => println!("{}: Failed", name),
+                Some(_) => println!("{name}: Succeeded"),
+                None => println!("{name}: Failed"),
             }
             res
         })
@@ -158,7 +158,7 @@ impl<I: SliceLike, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
 #[inline]
 pub fn parse_state<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
                                        input: I,
-                                       user_state: &mut S) -> AnpaResult<AnpaState<I, S>, O> {
+                                       user_state: &'_ mut S) -> AnpaResult<AnpaState<'_, I, S>, O> {
     let mut parser_state = AnpaState { input, user_state };
     let result = p(&mut parser_state);
     AnpaResult { state: parser_state, result }
