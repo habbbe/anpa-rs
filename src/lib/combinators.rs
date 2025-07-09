@@ -694,7 +694,6 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
     separator: Option<(bool, impl Parser<I, O2, S>)>
 ) -> bool {
     let mut successful = allow_empty;
-    let mut trailing_ok = true;
 
     while let Some(res) = p(s) {
         match f(s.user_state, res).into() {
@@ -706,15 +705,14 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
         successful = true;
 
         if let Some((allow_trailing, sep)) = separator {
-            if sep(s).is_none() {
-                trailing_ok = true;
-                break;
+            match sep(s) {
+                None => break,
+                _    => successful = allow_trailing
             }
-            trailing_ok = allow_trailing;
         }
     }
 
-    trailing_ok && successful
+    successful
 }
 
 /// Apply a parser until it fails and return the parsed input.
@@ -1156,37 +1154,54 @@ pub const fn chain<I: SliceLike, S, O, F>(p: impl Parser<I, O, S>,
 
 #[cfg(test)]
 mod tests {
-    use crate::{combinators::{greedy_or, many, middle, no_separator, not_empty, times}, core::*, number::integer, parsers::{take, empty, item_while}};
+    use crate::{combinators::{greedy_or, many, middle, no_separator, not_empty, separator, times}, core::*, number::integer, parsers::{empty, item_while, skip, take}};
 
     use super::{fold, or, left};
 
     fn num_parser() -> impl StrParser<'static, u32> {
-        let num = integer();
-        or(left(num, take(',')), left(num, empty()))
+        integer()
     }
 
-    #[cfg(feature = "std")]
+    fn comma_sep(allow_trailing: bool) -> Option<(bool, impl StrParser<'static, ()>)> {
+        return separator(skip(','), allow_trailing)
+    }
+
+    #[cfg(feature = "alloc")]
     #[test]
     fn many_nums_vec() {
         use std::vec;
         use crate::combinators::many_to_vec;
-        let p = many_to_vec(num_parser(), true, no_separator());
+        let p = many_to_vec(num_parser(), true, comma_sep(false));
         let res = parse(p, "1,2,3,4").result.unwrap();
+        assert_eq!(res, vec![1,2,3,4]);
+
+        let res = parse(p, "1,2,3,4,").result;
+        assert!(res.is_none());
+
+        let p = many_to_vec(num_parser(), true, comma_sep(true));
+        let res = parse(p, "1,2,3,4,").result.unwrap();
         assert_eq!(res, vec![1,2,3,4]);
 
         let res = parse(p, "").result.unwrap();
         assert_eq!(res, vec![]);
 
-        let p = many_to_vec(num_parser(), false, no_separator());
+        let p = many_to_vec(num_parser(), false, comma_sep(false));
         let res = parse(p, "").result;
         assert!(res.is_none());
     }
 
     #[test]
     fn many_nums() {
-        let p = many(num_parser(), true, no_separator());
+        let p = many(num_parser(), true, comma_sep(false));
         let res = parse(p, "1,2,3,4").result.unwrap();
         assert_eq!(res, "1,2,3,4");
+
+        let res = parse(p, "1,2,3,4,").result;
+        assert!(res.is_none());
+
+        let p = many(num_parser(), true, comma_sep(true));
+        let res = parse(p, "1,2,3,4,").result.unwrap();
+        assert_eq!(res, "1,2,3,4,");
 
         let res = parse(p, "").result.unwrap();
         assert_eq!(res, "");
@@ -1198,9 +1213,13 @@ mod tests {
 
     #[test]
     fn fold_add() {
-        let p = fold(num_parser(), || 0, |acc, x| *acc += x, false, no_separator());
+        let p = fold(num_parser(), || 0, |acc, x| *acc += x, false, comma_sep(true));
         let res = parse(p, "1,2,3,4,").result.unwrap();
         assert_eq!(res, 10);
+
+        let p = fold(num_parser(), || 0, |acc, x| *acc += x, false, comma_sep(false));
+        let res = parse(p, "1,2,3,4,").result;
+        assert!(res.is_none());
     }
 
     #[test]
