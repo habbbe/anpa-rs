@@ -685,7 +685,7 @@ pub const fn no_separator<I: SliceLike, S>() -> Option<(bool, impl Parser<I, (),
     Some((false, success()))
 }
 
-#[inline(always)]
+#[inline(never)]
 fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
     s: &mut AnpaState<I, S>,
     p: impl Parser<I, O, S>,
