@@ -13,12 +13,14 @@ pub trait TrimmableUtf8: SliceLike {
 }
 
 impl<A: CharLike> TrimmableAscii for &[A] {
+    #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
         AsciiWhitespace()
     }
 }
 
 impl<A: CharLike> TrimmableUtf8 for &[A] {
+    #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
         Utf8Whitespace()
     }

@@ -1154,7 +1154,7 @@ pub const fn chain<I: SliceLike, S, O, F>(p: impl Parser<I, O, S>,
 
 #[cfg(test)]
 mod tests {
-    use crate::{combinators::{greedy_or, many, middle, no_separator, not_empty, separator, times}, core::*, number::integer, parsers::{empty, item_while, skip, take}};
+    use crate::{combinators::{greedy_or, many, middle, no_separator, not_empty, separator, times}, core::*, number::integer, parsers::{item_while, skip, take}};
 
     use super::{fold, or, left};
 

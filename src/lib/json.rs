@@ -1,6 +1,6 @@
 use alloc::{collections::BTreeMap, vec::Vec};
 
-use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::skip_ascii_whitespace};
+use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::AsciiWhitespace};
 
 #[derive(Debug)]
 pub enum JsonValue<StringType> {
@@ -13,7 +13,9 @@ pub enum JsonValue<StringType> {
 }
 
 const fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
-    right(skip_ascii_whitespace(), p)
+    // For unknown reasons, this gives better performance than `skip_ascii_whitespace()`.
+    // Possibly a random optimization quirk, since it ideally shouldn't happen.
+    right(skip!(AsciiWhitespace()), p)
 }
 
 const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
@@ -44,10 +46,10 @@ const fn null_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
 /// Get a JSON parser that parses any JSON value. The type used for strings will be inferred
 /// from the context via `From<&str>`. For examples, see `object_parser`.
 pub const fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
-    defer_parser! {
-        eat(or!(json_string_parser(), number_parser(), object_parser(),
-                array_parser(), bool_parser(), null_parser()))
-    }
+    eat(defer_parser! {
+        or!(json_string_parser(), number_parser(), object_parser(),
+            array_parser(), bool_parser(), null_parser())
+    })
 }
 
 /// Get a JSON parser that parses a JSON object. The type used for strings will be inferred
