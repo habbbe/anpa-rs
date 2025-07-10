@@ -23,8 +23,8 @@ const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
     let escaped = right(item(), or_diff(item_matches!('"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't'),
                                         unicode));
     let parse_until = choose!(find_byte(eq(b'"') | eq(b'\\') | lt(0x20), false);
-                                        b'\\' => escaped);
-    into_type(middle(skip!('"'), many(parse_until, true, no_separator()), skip!('"')))
+                              b'\\' => escaped);
+    into_type(middle(skip!('"'), many(many_arg(parse_until)), skip!('"')))
 }
 
 const fn json_string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, JsonValue<T>> {
@@ -71,7 +71,7 @@ pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, J
         value_parser());
     map(middle(
         skip!('{'),
-        many_to_map_ordered(pair_parser, true, separator(eat(skip!(',')), false)),
+        many_to_map_ordered(many_arg(pair_parser).sep_by(eat(skip!(',')), false)),
         eat(skip!('}'))), JsonValue::Dic)
 }
 
@@ -80,6 +80,6 @@ pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, J
 pub const fn array_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
     map(middle(
         skip!('['),
-        many_to_vec(value_parser(), true, separator(eat(skip!(',')), false)),
+        many_to_vec(many_arg(value_parser()).sep_by(eat(skip!(',')), false)),
         eat(skip!(']'))), JsonValue::Arr)
 }

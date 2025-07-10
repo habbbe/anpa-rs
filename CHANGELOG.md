@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.0
+
+### Breaking changes
+
+- All the many* parsers now use a builder based argument to simplify future additions.
+
 ## 0.10.0
 
 ### New features

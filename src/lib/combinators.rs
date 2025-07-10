@@ -4,7 +4,7 @@ use std::{collections::HashMap, hash::Hash};
 #[cfg(feature = "alloc")]
 use alloc::{vec::Vec, collections::BTreeMap};
 
-use core::borrow::BorrowMut;
+use core::{borrow::BorrowMut, marker::PhantomData};
 use crate::{core::{AnpaState, Parser}, parsers::success, slicelike::SliceLike};
 
 /// An instrution for how to proceed with a parse.
@@ -32,6 +32,59 @@ impl From<bool> for FlowControl {
     #[inline(always)]
     fn from(value: bool) -> Self {
         if value { FlowControl::Pass } else { FlowControl::Fail }
+    }
+}
+
+/// Struct containing a configuration for the many* parsers.
+pub struct ManyArg<I, O, O2, S, P: Parser<I, O, S>, Sep: Parser<I, O2, S>> {
+    p: P,
+    allow_empty: bool,
+    sep: Option<(bool, Sep)>,
+    _marker: PhantomData<fn(I, O, O2, S)>,
+}
+
+impl<I, O, O2, S, P: Parser<I, O, S>, Sep: Parser<I, O2, S>> Clone for ManyArg<I, O, O2, S, P, Sep> {
+    fn clone(&self) -> Self {
+        Self { _marker: PhantomData, ..*self }
+    }
+}
+
+impl<I, O, O2, S, P: Parser<I, O, S>, Sep: Parser<I, O2, S>> Copy for ManyArg<I, O, O2, S, P, Sep> {}
+
+/// Construct an argument ([`ManyArg`]`) taken by the many* parsers.
+/// 
+/// This argument follows a builder pattern, and can be further configured via:
+/// 
+/// - [`ManyArg::non_empty`]
+/// - [`ManyArg::sep_by`]
+/// 
+/// ### Arguments
+/// * `p` - the parser
+#[inline(always)]
+pub const fn many_arg<I: SliceLike, O, S, P: Parser<I, O, S>>(p: P) -> ManyArg<I, O, (), S, P, impl Parser<I, (), S>> {
+    return ManyArg { p, allow_empty: true, sep: None, _marker: PhantomData };
+
+    #[allow(unreachable_code)]
+    ManyArg { p: unreachable!(), allow_empty: unreachable!(), sep: Some((unreachable!(), success())), _marker: unreachable!() }
+}
+
+impl<I, O, O2, S, P: Parser<I, O, S>, Sep: Parser<I, O2, S>>  ManyArg<I, O, O2, S, P, Sep> {
+    /// Add a separator to a [`ManyArg`]
+    ///
+    /// ### Arguments
+    /// * `sep` - the separator parser
+    /// * `allow_trailing` - if a trailing separator should be allowed
+    #[inline(always)]
+    pub const fn sep_by<O3, Sep2: Parser<I, O3, S>>(self, sep: Sep2, allow_trailing: bool) -> ManyArg<I, O, O3, S, P, Sep2> {
+        ManyArg { p: self.p, allow_empty: self.allow_empty, sep: Some((allow_trailing, sep)), _marker: PhantomData }
+    }
+
+    /// Add a constraint for non-empty to a [`ManyArg`]
+    /// 
+    /// This will cause the parse to fail if the main parser doesn't succeed a single time.
+    #[inline(always)]
+    pub const fn non_empty(self) -> ManyArg<I, O, O2, S, P, Sep> {
+        ManyArg { allow_empty: false, _marker: PhantomData, ..self }
     }
 }
 
@@ -663,39 +716,15 @@ pub const fn lift_to_state<I: SliceLike, S, O1, O2>(f: impl FnOnce(&mut S, O1) -
     })
 }
 
-/// Only for use with the `many` family of combinators. Use this function to create the separator
-/// argument when parsing multiple elements.
-///
-/// ### Arguments
-/// * `p` - a parser for the separator
-/// * `allow_trailing` - whether a trailing separator is allowed.
-#[inline]
-pub const fn separator<I, O, S>(p: impl Parser<I, O, S>, allow_trailing: bool) -> Option<(bool, impl Parser<I, O, S>)> {
-    Some((allow_trailing, p))
-}
-
-/// Only for use with the `many` family of combinators. Use this function to create the separator
-/// argument when no separator should be present.
-#[inline]
-pub const fn no_separator<I: SliceLike, S>() -> Option<(bool, impl Parser<I, (), S>)> {
-    return None;
-
-    // Unreachable, but provides type/size information about the return value
-    #[allow(unreachable_code)]
-    Some((false, success()))
-}
-
 #[inline(never)]
 fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
     s: &mut AnpaState<I, S>,
-    p: impl Parser<I, O, S>,
+    m: ManyArg<I, O, O2, S, impl Parser<I, O, S>, impl Parser<I, O2, S>>,
     mut f: impl FnMut(&mut S, O) -> F,
-    allow_empty: bool,
-    separator: Option<(bool, impl Parser<I, O2, S>)>
 ) -> bool {
-    let mut successful = allow_empty;
+    let mut successful = m.allow_empty;
 
-    while let Some(res) = p(s) {
+    while let Some(res) = (m.p)(s) {
         match f(s.user_state, res).into() {
             FlowControl::Pass => {},
             FlowControl::Stop => break,
@@ -704,7 +733,7 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
 
         successful = true;
 
-        if let Some((allow_trailing, sep)) = separator {
+        if let Some((allow_trailing, sep)) = m.sep {
             match sep(s) {
                 None => break,
                 _    => successful = allow_trailing
@@ -718,35 +747,30 @@ fn many_internal<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
 /// Apply a parser until it fails and return the parsed input.
 ///
 /// ### Arguments
-/// * `p` - the parser
-/// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
-///                 functions to construct this parameter.
+/// * `m` - the [`ManyArg`] constructed via ([`many_arg`])
 ///
 /// ### Example
 /// ```
 /// use anpa::core::*;
-/// use anpa::combinators::{many, separator};
+/// use anpa::combinators::{many, many_arg};
 /// use anpa::number::integer;
 /// use anpa::parsers::skip;
 ///
 /// let parse_nums = many(
-///     integer().map(|n: u32| n),
-///     false,
-///     separator(skip(','), false));
+///     many_arg(integer().map(|n:u32| n))
+///         .sep_by(skip(','), false));
 ///
 /// let input = "1,2,3";
 ///
 /// assert_eq!(parse(parse_nums, input).result, Some("1,2,3"));
 /// ```
 #[inline]
-pub const fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
-                                          allow_empty: bool,
-                                          separator: Option<(bool, impl Parser<I, O2, S>)>,
+pub const fn many<I: SliceLike, O, O2, S>(
+    m: ManyArg<I, O, O2, S, impl Parser<I, O, S>, impl Parser<I, O2, S>>
 ) -> impl Parser<I, I, S> {
     create_parser!(s, {
         let old_input = s.input;
-        many_internal(s, p, |_, _| {}, allow_empty, separator)
+        many_internal(s, m, |_, _| {})
             .then_some(old_input.slice_to(old_input.slice_len() - s.input.slice_len()))
     })
 }
@@ -754,29 +778,25 @@ pub const fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 /// Apply a parser repeatedly and accumulate a result in the spirit of fold.
 ///
 /// ### Arguments
-/// * `p` - the parser
+/// * `m` - the [`ManyArg`] constructed via ([`many_arg`])
 /// * `init` - a function producing the initial result
 /// * `f` - a function taking the accumulator as `&mut` along with the result of each
 ///         successful parse. Return `FlowControl` if you want to affect how the parse
 ///         will proceed. Returning nothing, i.e. `()` will always cause each parsed
 ///         element to succeed.
-/// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
-///                 functions to construct this parameter.
 ///
 /// ### Example
 /// ```
 /// use anpa::core::*;
-/// use anpa::combinators::{fold, separator};
+/// use anpa::combinators::{fold, many_arg};
 /// use anpa::number::integer;
 /// use anpa::parsers::skip;
 ///
 /// let parse_nums = fold(
-///     integer().map(|n: u32| n),
+///     many_arg(integer().map(|n: u32| n))
+///         .sep_by(skip(','), false),
 ///     || 0,
-///     |acc, n: u32| *acc += n,
-///     false,
-///     separator(skip(','), false));
+///     |acc, n: u32| *acc += n);
 ///
 /// let input = "1,2,3";
 ///
@@ -784,15 +804,13 @@ pub const fn many<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
 /// ```
 #[inline]
 pub const fn fold<I: SliceLike, O, O2, S, R, F: Into<FlowControl>>(
-    p: impl Parser<I, O, S>,
+    m: ManyArg<I, O, O2, S, impl Parser<I, O, S>, impl Parser<I, O2, S>>,
     init: impl FnOnce() -> R + Copy,
     f: impl FnOnce(&mut R, O) -> F + Copy,
-    allow_empty: bool,
-    separator: Option<(bool, impl Parser<I, O2, S>)>,
 ) -> impl Parser<I, R, S> {
     create_parser!(s, {
         let mut res = init();
-        many_internal(s, p, |_, x| f(&mut res, x), allow_empty, separator)
+        many_internal(s, m, |_, x| f(&mut res, x))
             .then_some(res)
     })
 }
@@ -803,29 +821,25 @@ pub const fn fold<I: SliceLike, O, O2, S, R, F: Into<FlowControl>>(
 /// This allows for the parser to be used for modifying values in the outer scope.
 ///
 /// ### Arguments
-/// * `p` - the parser
+/// * `m` - the [`ManyArg`] constructed via ([`many_arg`])
 /// * `f` - a function taking the user state as `&mut` along with the result of each
 ///         successful parse. Return `FlowControl` if you want to affect how the parse
 ///         will proceed. Returning nothing, i.e. `()` will always cause each parsed
 ///         element to succeed.
-/// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
-///                 functions to construct this parameter.
 ///
 /// ### Example
 /// ```
 /// use anpa::core::*;
-/// use anpa::combinators::{fold_state, separator};
+/// use anpa::combinators::{fold_state, many_arg};
 /// use anpa::number::integer;
 /// use anpa::parsers::skip;
 ///
 /// let mut state = 0;
 ///
 /// let parse_nums = fold_state(
-///     integer().map(|n: u32| n),
-///     |acc, n| *acc += n,
-///     false,
-///     separator(skip(','), false));
+///     many_arg(integer().map(|n: u32| n)).sep_by(skip(','), false),
+///     |acc, n| *acc += n
+/// );
 ///
 /// let input = "1,2,3";
 ///
@@ -834,13 +848,11 @@ pub const fn fold<I: SliceLike, O, O2, S, R, F: Into<FlowControl>>(
 /// ```
 #[inline]
 pub const fn fold_state<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
-    p: impl Parser<I, O, S>,
+    m: ManyArg<I, O, O2, S, impl Parser<I, O, S>, impl Parser<I, O2, S>>,
     f: impl FnOnce(&mut S, O) -> F + Copy,
-    allow_empty: bool,
-    separator: Option<(bool, impl Parser<I, O2, S>)>,
 ) -> impl Parser<I, (), S> {
     create_parser!(s, {
-        many_internal(s, p, |state, x| f(state, x), allow_empty, separator)
+        many_internal(s, m, |state, x| f(state, x))
             .then_some(())
     })
 }
@@ -853,27 +865,25 @@ pub const fn fold_state<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
 /// the number of parsed results exceeds the size of the array.
 ///
 /// ### Arguments
-/// * `p` - the parser
+/// * `m` - the [`ManyArg`] constructed via ([`many_arg`])
 /// * `constructor` - a constructor for generating the initial state. It shall
 ///                   be a function returning a tuple `(the_array, start_index)`.
-/// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
-///                 functions to construct this parameter.
 ///
 /// ### Example
 /// ```
 /// use anpa::core::*;
-/// use anpa::combinators::{many_to_array, separator};
+/// use anpa::combinators::{many_arg, many_to_array};
 /// use anpa::number::integer;
 /// use anpa::parsers::skip;
 ///
 /// let constructor = || ([0_i32; 4], 0);
 ///
 /// let parse_nums = many_to_array(
-///     integer(),
+///     many_arg(integer())
+///         .non_empty()
+///         .sep_by(skip(','), false),
 ///     constructor,
-///     false,
-///     separator(skip(','), false));
+/// );
 ///
 /// let input = "1,2,3";
 /// assert_eq!(parse(parse_nums, input).result, Some(([1,2,3,0], 3)));
@@ -886,12 +896,10 @@ pub const fn fold_state<I: SliceLike, O, O2, S, F: Into<FlowControl>>(
 /// ```
 #[inline]
 pub const fn many_to_array<I: SliceLike, O, O2, S, const N: usize, A: BorrowMut<[O; N]>>(
-    p: impl Parser<I, O, S>,
-    constructor: impl FnOnce() -> (A, usize) + Copy,
-    allow_empty: bool,
-    separator: Option<(bool, impl Parser<I, O2, S>)>
+    m: ManyArg<I, O, O2, S, impl Parser<I, O, S>, impl Parser<I, O2, S>>,
+    constructor: impl FnOnce() -> (A, usize) + Copy
 ) -> impl Parser<I, (A, usize), S> {
-    fold(p, constructor, |(arr, n), x| {
+    fold(m, constructor, |(arr, n), x| {
         if *n >= N {
             return FlowControl::Fail
         }
@@ -899,7 +907,7 @@ pub const fn many_to_array<I: SliceLike, O, O2, S, const N: usize, A: BorrowMut<
         arr.borrow_mut()[*n] = x;
         *n += 1;
         FlowControl::Pass
-    }, allow_empty, separator)
+    })
 }
 
 #[cfg(feature = "alloc")]
@@ -908,22 +916,20 @@ pub const fn many_to_array<I: SliceLike, O, O2, S, const N: usize, A: BorrowMut<
 /// Requires feature "alloc".
 ///
 /// ### Arguments
-/// * `p` - the parser
-/// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
-///                 functions to construct this parameter.
+/// * `m` - the [`ManyArg`] constructed via ([`many_arg`])
 ///
 /// ### Example
 /// ```
 /// use anpa::core::*;
-/// use anpa::combinators::{many_to_vec, separator};
+/// use anpa::combinators::{many_arg, many_to_vec};
 /// use anpa::number::integer;
 /// use anpa::parsers::skip;
 ///
 /// let parse_nums = many_to_vec(
-///     integer(),
-///     false,
-///     separator(skip(','), false));
+///     many_arg(integer())
+///         .non_empty()
+///         .sep_by(skip(','), false)
+///     );
 ///
 /// let input = "1,2,3";
 ///
@@ -931,11 +937,9 @@ pub const fn many_to_array<I: SliceLike, O, O2, S, const N: usize, A: BorrowMut<
 /// ```
 #[inline]
 pub const fn many_to_vec<I: SliceLike, O, O2, S>(
-    p: impl Parser<I, O, S>,
-    allow_empty: bool,
-    separator: Option<(bool, impl Parser<I, O2, S>)>
+    m: ManyArg<I, O, O2, S, impl Parser<I, O, S>, impl Parser<I, O2, S>>,
 ) -> impl Parser<I, Vec<O>, S> {
-    fold(p, Vec::new, |v, x| v.push(x), allow_empty, separator)
+    fold(m, Vec::new, |v, x| v.push(x))
 }
 
 #[cfg(feature = "alloc")]
@@ -946,20 +950,15 @@ pub const fn many_to_vec<I: SliceLike, O, O2, S>(
 /// Requires feature "alloc".
 ///
 /// ### Arguments
-/// * `p` - the parser
-/// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
-///                 functions to construct this parameter.
+/// * `m` - the [`ManyArg`] constructed via ([`many_arg`])
 ///
 /// ### Example
 /// See [`many_to_map`]
 #[inline]
 pub const fn many_to_map_ordered<I: SliceLike, K: Ord, V, O2, S>(
-    p: impl Parser<I, (K, V), S>,
-    allow_empty: bool,
-    separator: Option<(bool, impl Parser<I, O2, S>)>,
+    m: ManyArg<I, (K, V), O2, S, impl Parser<I, (K, V), S>, impl Parser<I, O2, S>>,
 ) -> impl Parser<I, BTreeMap<K, V>, S> {
-    fold(p, BTreeMap::new, |m, (k, v)| { m.insert(k, v); }, allow_empty, separator)
+    fold(m, BTreeMap::new, |m, (k, v)| { m.insert(k, v); })
 }
 
 #[cfg(feature = "std")]
@@ -971,24 +970,20 @@ pub const fn many_to_map_ordered<I: SliceLike, K: Ord, V, O2, S>(
 /// [`many_to_map_ordered`] is an alternative that only requires the feature "alloc".
 ///
 /// ### Arguments
-/// * `p` - the parser
-/// * `allow_empty` - whether no parse should be considered successful.
-/// * `separator` - the separator to be used between parses. Use the [`no_separator`]/[`separator`]
-///                 functions to construct this parameter.
+/// * `m` - the [`ManyArg`] constructed via ([`many_arg`])
 ///
 /// ### Example
 /// ```
 /// use anpa::core::*;
-/// use anpa::combinators::{many_to_map, right, separator};
+/// use anpa::combinators::{many_arg, many_to_map, right};
 /// use anpa::number::{float, integer};
 /// use anpa::parsers::{item_while,skip};
 /// use anpa::tuplify;
 /// use std::collections::HashMap;
 ///
 /// let parse_nums = many_to_map(
-///     tuplify!(integer(), right(skip(':'), item_while(|c: char| c.is_alphanumeric()))),
-///     false,
-///     separator(skip(','), false));
+///     many_arg(tuplify!(integer(), right(skip(':'), item_while(|c: char| c.is_alphanumeric()))))
+///         .sep_by(skip(','), false));
 ///
 /// let input = "1:one,2:two,3:three";
 ///
@@ -1002,11 +997,9 @@ pub const fn many_to_map_ordered<I: SliceLike, K: Ord, V, O2, S>(
 /// ```
 #[inline]
 pub const fn many_to_map<I: SliceLike, K: Hash + Eq, V, O2, S>(
-    p: impl Parser<I, (K, V), S>,
-    allow_empty: bool,
-    separator: Option<(bool, impl Parser<I, O2, S>)>,
+    m: ManyArg<I, (K, V), O2, S, impl Parser<I, (K, V), S>, impl Parser<I, O2, S>>,
 ) -> impl Parser<I, HashMap<K, V>, S> {
-    fold(p, HashMap::new, |m, (k, v)| { m.insert(k, v); }, allow_empty, separator)
+    fold(m, HashMap::new, |m, (k, v)| { m.insert(k, v); })
 }
 
 /// Combine two parsers into a parser that returns the result of the parser
@@ -1154,7 +1147,7 @@ pub const fn chain<I: SliceLike, S, O, F>(p: impl Parser<I, O, S>,
 
 #[cfg(test)]
 mod tests {
-    use crate::{combinators::{greedy_or, many, middle, no_separator, not_empty, separator, times}, core::*, number::integer, parsers::{item_while, skip, take}};
+    use crate::{combinators::{greedy_or, many, many_arg, middle, not_empty, times}, core::*, number::integer, parsers::{item_while, skip, take}};
 
     use super::{fold, or, left};
 
@@ -1162,62 +1155,62 @@ mod tests {
         integer()
     }
 
-    fn comma_sep(allow_trailing: bool) -> Option<(bool, impl StrParser<'static, ()>)> {
-        return separator(skip(','), allow_trailing)
+    fn comma_sep() -> impl StrParser<'static, ()> {
+        skip(',')
     }
 
     #[cfg(feature = "alloc")]
     #[test]
     fn many_nums_vec() {
         use std::vec;
-        use crate::combinators::many_to_vec;
-        let p = many_to_vec(num_parser(), true, comma_sep(false));
+        use crate::combinators::{many_to_vec};
+        let p = many_to_vec(many_arg(num_parser()).sep_by(comma_sep(), false));
         let res = parse(p, "1,2,3,4").result.unwrap();
         assert_eq!(res, vec![1,2,3,4]);
 
         let res = parse(p, "1,2,3,4,").result;
         assert!(res.is_none());
 
-        let p = many_to_vec(num_parser(), true, comma_sep(true));
+        let p = many_to_vec(many_arg(num_parser()).sep_by(comma_sep(), true));
         let res = parse(p, "1,2,3,4,").result.unwrap();
         assert_eq!(res, vec![1,2,3,4]);
 
         let res = parse(p, "").result.unwrap();
         assert_eq!(res, vec![]);
 
-        let p = many_to_vec(num_parser(), false, comma_sep(false));
+        let p = many_to_vec(many_arg(num_parser()).non_empty().sep_by(comma_sep(), false));
         let res = parse(p, "").result;
         assert!(res.is_none());
     }
 
     #[test]
     fn many_nums() {
-        let p = many(num_parser(), true, comma_sep(false));
+        let p = many(many_arg(num_parser()).sep_by(comma_sep(), false));
         let res = parse(p, "1,2,3,4").result.unwrap();
         assert_eq!(res, "1,2,3,4");
 
         let res = parse(p, "1,2,3,4,").result;
         assert!(res.is_none());
 
-        let p = many(num_parser(), true, comma_sep(true));
+        let p = many(many_arg(num_parser()).sep_by(comma_sep(), true));
         let res = parse(p, "1,2,3,4,").result.unwrap();
         assert_eq!(res, "1,2,3,4,");
 
         let res = parse(p, "").result.unwrap();
         assert_eq!(res, "");
 
-        let p = many(num_parser(), false, no_separator());
+        let p = many(many_arg(num_parser()).non_empty());
         let res = parse(p, "").result;
         assert!(res.is_none());
     }
 
     #[test]
     fn fold_add() {
-        let p = fold(num_parser(), || 0, |acc, x| *acc += x, false, comma_sep(true));
+        let p = fold(many_arg(num_parser()).non_empty().sep_by(comma_sep(), true), || 0, |acc, x| *acc += x);
         let res = parse(p, "1,2,3,4,").result.unwrap();
         assert_eq!(res, 10);
 
-        let p = fold(num_parser(), || 0, |acc, x| *acc += x, false, comma_sep(false));
+        let p = fold(many_arg(num_parser()).non_empty().sep_by(comma_sep(), false), || 0, |acc, x| *acc += x);
         let res = parse(p, "1,2,3,4,").result;
         assert!(res.is_none());
     }

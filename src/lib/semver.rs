@@ -66,7 +66,7 @@ const fn build<'a>() -> impl StrParser<'a> {
 
 #[inline]
 const fn dot_separated<'a>(prefix: char, p: impl StrParser<'a>) -> impl StrParser<'a> {
-    attempt(right(skip(prefix), many(p, false, separator(skip('.'), false))))
+    attempt(right(skip(prefix), many(many_arg(p).non_empty().sep_by(skip('.'), false))))
 }
 
 #[inline]
