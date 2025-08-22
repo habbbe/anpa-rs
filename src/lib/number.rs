@@ -12,8 +12,12 @@ Add<Output = Self>
 + Copy {
     const MIN: Self;
     const MAX: Self;
+    const TEN: Self;
     const SIZE: usize;
     fn cast_u8(n: u8) -> Self;
+    fn checked_add(self, n: Self) -> Option<Self>;
+    fn checked_sub(self, n: Self) -> Option<Self>;
+    fn checked_mul(self, n: Self) -> Option<Self>;
 }
 
 /// Trait for types that act like floating point numbers.
@@ -30,11 +34,27 @@ macro_rules! impl_NumLike {
             impl NumLike for $type {
                 const MIN: $type = $type::MIN;
                 const MAX: $type = $type::MAX;
+                const TEN: $type = 10;
                 const SIZE: usize = core::mem::size_of::<$type>();
 
                 #[inline(always)]
                 fn cast_u8(n: u8) -> Self {
                     n as $type
+                }
+
+                #[inline(always)]
+                fn checked_add(self, n: Self) -> Option<Self> {
+                    self.checked_add(n)
+                }
+
+                #[inline(always)]
+                fn checked_sub(self, n: Self) -> Option<Self> {
+                    self.checked_sub(n)
+                }
+
+                #[inline(always)]
+                fn checked_mul(self, n: Self) -> Option<Self> {
+                    self.checked_mul(n)
                 }
             }
         )*
@@ -65,7 +85,6 @@ macro_rules! impl_FloatLike {
 impl_NumLike!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize);
 impl_FloatLike!(f32, f64);
 
-#[inline(always)]
 const fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: bool,
                           O: NumLike,
                           A: CharLike,
@@ -77,29 +96,33 @@ const fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISO
         let mut dec_divisor = 1;
 
         // The number 10 is guaranteed to fit into all our `NumLike` types
-        let ten = O::cast_u8(10);
         let mut iter = s.input.slice_iter();
         let mut consume = |digit: u32, is_negative: bool| -> Option<()> {
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit as u8);
 
-            if CHECKED && acc > (O::MAX / ten) {
-                return None
+            if CHECKED {
+                acc = acc.checked_mul(O::TEN)?;
+            } else {
+                acc = acc * O::TEN;
             }
-            acc = acc * ten;
 
             if is_negative {
-                if CHECKED && acc < O::MIN + digit {
-                    return None
+                if CHECKED {
+                    acc = acc.checked_sub(digit)?;
+                } else {
+                    acc = acc - digit;
                 }
-                acc = acc - digit;
             } else {
-                if CHECKED && acc > O::MAX - digit {
-                    return None
+                if CHECKED {
+                    acc = acc.checked_add(digit)?;
+                } else {
+                    acc = acc + digit;
                 }
-                acc = acc + digit;
             }
+
             idx += true.into();
+
             if DEC_DIVISOR {
                 dec_divisor *= 10;
             }
@@ -108,12 +131,12 @@ const fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISO
         };
 
         let is_negative = if NEG {
-            let c = iter.next()?;
-            if c.as_char() == '-' {
+            let c = iter.next()?.as_char();
+            if c == '-' {
                 true
             } else {
                 // We don't care about checking the result here, since a single digit can never fail.
-                consume(c.as_char().to_digit(10)?, false);
+                consume(c.to_digit(10)?, false);
                 false
             }
         } else {
@@ -178,11 +201,12 @@ const fn float_internal<const CHECKED: bool,
     // First parse a possibly negative signed integer
     bind(integer_internal::<CHECKED, true, false,_,_,_,_>(), |(n, _, is_neg)| {
         // Then parse a period followed by an unsigned integer.
+        let int = O::cast_isize(n);
         let dec = right(item_if(|c: I::RefItem| c.as_char() == '.'),
                                               integer_internal::<CHECKED, false, true,_,_,_,_>())
             .map(move |(dec, div, _)|
-                O::cast_isize(n) + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));
-        or(dec, pure!(O::cast_isize(n)))
+                int + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));
+        or(dec, pure!(int))
     })
 }
 
