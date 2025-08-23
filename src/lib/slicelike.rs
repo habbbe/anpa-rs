@@ -28,8 +28,26 @@ pub trait SliceLike: Copy {
     /// Create a slice from the start of the input until `to` (exclusive).
     fn slice_to(self, to: Self::Idx) -> Self;
 
+    /// Create a slice from index `from` until the end of the input.
+    ///
+    /// # Safety
+    /// Only to be used if the bounds have been validated
+    unsafe fn slice_from_unchecked(self, from: Self::Idx) -> Self;
+
+    /// Create a slice from the start of the input until `to` (exclusive).
+    ///
+    /// # Safety
+    /// Only to be used if the bounds have been validated
+    unsafe fn slice_to_unchecked(self, to: Self::Idx) -> Self;
+
     /// Split the input at index `at`.
     fn slice_split_at(self, at: Self::Idx) -> (Self, Self);
+
+    /// Split the input at index `at`.
+    ///
+    /// # Safety
+    /// Only to be used if the bounds have been validated
+    unsafe fn slice_split_at_unchecked(self, at: Self::Idx) -> (Self, Self);
 
     /// Check if the input is empty.
     fn slice_is_empty(&self) -> bool;
@@ -69,8 +87,20 @@ impl<'a, A> SliceLike for &'a [A] {
         &self[..to]
     }
 
+    unsafe fn slice_from_unchecked(self, from: Self::Idx) -> Self {
+        self.get_unchecked(from..)
+    }
+
+    unsafe fn slice_to_unchecked(self, to: Self::Idx) -> Self {
+        self.get_unchecked(..to)
+    }
+
     fn slice_split_at(self, at: usize) -> (Self, Self) {
         self.split_at(at)
+    }
+
+    unsafe fn slice_split_at_unchecked(self, at: Self::Idx) -> (Self, Self) {
+        self.split_at_unchecked(at)
     }
 
     fn slice_is_empty(&self) -> bool {
@@ -114,8 +144,20 @@ impl<'a> SliceLike for &'a str {
         &self[..to]
     }
 
+    unsafe fn slice_from_unchecked(self, from: Self::Idx) -> Self {
+        self.get_unchecked(from..)
+    }
+
+    unsafe fn slice_to_unchecked(self, to: Self::Idx) -> Self {
+        self.get_unchecked(..to)
+    }
+
     fn slice_split_at(self, at: usize) -> (Self, Self) {
         self.split_at(at)
+    }
+
+    unsafe fn slice_split_at_unchecked(self, at: Self::Idx) -> (Self, Self) {
+        (self.get_unchecked(..at), self.get_unchecked(at..))
     }
 
     fn slice_is_empty(&self) -> bool {

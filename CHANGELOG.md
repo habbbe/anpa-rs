@@ -2,6 +2,7 @@
 
 ## 0.11.0
 
+- Move to unchecked slicing where bounds are guaranteed for better performance
 - Remove `ContiguousBytes` in favor of `AsRef<[u8]>`
 
 ## 0.10.0

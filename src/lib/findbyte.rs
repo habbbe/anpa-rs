@@ -222,7 +222,7 @@ fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
 /// Arguments can be combined with '|' to search for muliple bytes
 /// simultaneously.
 ///
-/// Note: When searching in an UTF-8 string, it is not safe to search
+/// NOTE: When searching in an UTF-8 string, it is not safe to search
 /// for non-ASCII bytes,
 ///
 /// ### Consuming
@@ -255,7 +255,9 @@ pub const fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> i
     where I: SliceLike + AsRef<[u8]> {
     create_parser!(s, {
         let (res, pos) = get_byte_pos(s.input, finder)?;
-        s.input = s.input.slice_from(pos + consume_result.into());
+
+        // SAFETY: Bounds validated by search
+        s.input = unsafe { s.input.slice_from_unchecked(pos + consume_result.into()) };
         Some(res)
     })
 }
@@ -267,7 +269,7 @@ pub const fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> i
 /// When searching for multiple individual bytes, this is likely faster
 /// than using [`until`](crate::parsers::until).
 ///
-/// Note: When searching in an UTF-8 string, it is not safe to search
+/// NOTE: When searching in an UTF-8 string, it is not safe to search
 /// for non-ASCII bytes,
 ///
 /// ### Consuming
@@ -304,9 +306,12 @@ pub const fn until_byte<I, S>(finder: impl ByteFinder,
     where I: SliceLike + AsRef<[u8]> {
     create_parser!(s, {
         let (_, pos) = get_byte_pos(s.input, finder)?;
-        let res = s.input.slice_to(pos + include_result.into());
-        s.input = s.input.slice_from(pos + consume_result.into());
-        Some(res)
+        // SAFETY: Bounds validated by search
+        unsafe {
+            let res = s.input.slice_to_unchecked(pos + include_result.into());
+            s.input = s.input.slice_from_unchecked(pos + consume_result.into());
+            Some(res)
+        }
     })
 }
 

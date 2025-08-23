@@ -250,9 +250,12 @@ macro_rules! until {
     ($needle:expr) => {
         $crate::create_parser!(s, {
             let (size, index) = $crate::needle::Needle::find_in(&$needle, s.input)?;
-            let res = $crate::slicelike::SliceLike::slice_to(s.input, index);
-            s.input = $crate::slicelike::SliceLike::slice_from(s.input, index + size);
-            Some(res)
+            // SAFETY: Bounds validated by search
+            unsafe {
+                let res = $crate::slicelike::SliceLike::slice_to_unchecked(s.input, index);
+                s.input = $crate::slicelike::SliceLike::slice_from_unchecked(s.input, index + size);
+                Some(res)
+            }
         })
     }
 }

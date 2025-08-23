@@ -83,11 +83,13 @@ macro_rules! impl_whitespace_prefix_array {
         impl<'a, A: CharLike> Prefix<&'a [A], &'a [A]> for $id {
             fn take_prefix(&self, haystack: &'a [A]) -> Option<(&'a [A], &'a [A])> {
                 let idx = $id::count_whitespace(haystack);
-                Some(haystack.split_at(idx))
+                // SAFETY: Bounds validated by count
+                unsafe { Some(haystack.split_at_unchecked(idx)) }
             }
 
             fn skip_prefix(&self, haystack: &'a [A]) -> Option<&'a [A]> {
-                Some(&haystack[$id::count_whitespace(haystack)..])
+                // SAFETY: Bounds validated by count
+                unsafe { Some(haystack.get_unchecked($id::count_whitespace(haystack)..)) }
             }
         }
     };
@@ -101,7 +103,8 @@ macro_rules! impl_whitespace_prefix_str {
         impl<'a> Prefix<&'a str, &'a str> for $id {
             fn take_prefix(&self, haystack: &'a str) -> Option<(&'a str, &'a str)> {
                 let trimmed = haystack.$trim_fn();
-                Some((&haystack[..haystack.len() - trimmed.len()], trimmed))
+                // SAFETY: Trimmed elements are guaranteed to be on byte boundary
+                unsafe { Some((haystack.get_unchecked(..haystack.len() - trimmed.len()), trimmed)) }
             }
 
             fn skip_prefix(&self, haystack: &'a str) -> Option<&'a str> {

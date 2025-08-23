@@ -145,8 +145,9 @@ const fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISO
             consume(digit, is_negative)?;
         }
 
-        (idx != Default::default()).then(|| {
-            s.input = s.input.slice_from(idx + is_negative.into());
+        (idx != I::Idx::default()).then(|| {
+            // SAFETY: Bounds validated by traversal
+            s.input = unsafe { s.input.slice_from_unchecked(idx + is_negative.into()) };
             (acc, dec_divisor, is_negative)
         })
     })

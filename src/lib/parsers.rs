@@ -155,7 +155,8 @@ pub const fn item_while<I: SliceLike, S>(pred: impl FnOnce(I::RefItem) -> bool +
             .unwrap_or(s.input.slice_len());
 
         let res;
-        (res, s.input) = s.input.slice_split_at(idx);
+        // SAFETY: Bounds validated by search
+        (res, s.input) = unsafe { s.input.slice_split_at_unchecked(idx) };
         Some(res)
     })
 }
@@ -208,7 +209,8 @@ pub const fn until<O, I: SliceLike, N: Needle<I, O>, S>(needle: N) -> impl Parse
 pub const fn rest<I: SliceLike, S>() -> impl Parser<I, I, S> {
     create_parser!(s, {
         let all;
-        (all, s.input) = s.input.slice_split_at(s.input.slice_len());
+        // SAFETY: Bounds guaranteed by taking whole slice
+        (all, s.input) = unsafe { s.input.slice_split_at_unchecked(s.input.slice_len()) };
         Some(all)
     })
 }
