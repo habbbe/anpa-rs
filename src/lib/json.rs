@@ -1,6 +1,6 @@
 use alloc::{collections::BTreeMap, vec::Vec};
 
-use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::{float, float_checked}, parsers::*, whitespace::AsciiWhitespace};
+use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::{float_checked}, parsers::*, whitespace::AsciiWhitespace};
 
 #[derive(Debug)]
 pub enum JsonValue<StringType> {
