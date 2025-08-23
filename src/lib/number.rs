@@ -91,7 +91,7 @@ const fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISO
                           I: SliceLike<RefItem = A>,
                           S>() -> impl Parser<I, (O, usize, bool), S> {
     create_parser!(s, {
-        let mut idx: I::Idx = Default::default();
+        let mut idx = I::Idx::default();
         let mut acc = O::cast_u8(0);
         let mut dec_divisor = 1;
 
@@ -113,12 +113,10 @@ const fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISO
                 } else {
                     acc = acc - digit;
                 }
+            } else if CHECKED {
+                acc = acc.checked_add(digit)?;
             } else {
-                if CHECKED {
-                    acc = acc.checked_add(digit)?;
-                } else {
-                    acc = acc + digit;
-                }
+                acc = acc + digit;
             }
 
             idx += true.into();

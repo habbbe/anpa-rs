@@ -1,6 +1,6 @@
 use core::{convert::TryInto, ops};
 
-use crate::{core::Parser, number::NumLike, slicelike::{ContiguousBytes, SliceLike}};
+use crate::{core::Parser, number::NumLike, slicelike::SliceLike};
 
 /// One unit of "work". In this case `usize` will process 8 bytes
 /// at a time on a 64-bit CPU (or 4 bytes on 32-bit).
@@ -176,9 +176,9 @@ pub const fn gt(b: u8) -> GtByte {
 /// result along with its position.
 #[inline]
 fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
-    where I: SliceLike + ContiguousBytes, B: ByteFinder {
+    where I: SliceLike + AsRef<[u8]>, B: ByteFinder {
     let mut pos = 0;
-    let bytes = input.to_u8_slice();
+    let bytes = input.as_ref();
 
     let mut chunks = bytes.chunks_exact(Work::SIZE);
     for chunk in chunks.by_ref() {
@@ -252,7 +252,7 @@ fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
 /// ```
 #[inline]
 pub const fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> impl Parser<I, u8, S>
-    where I: SliceLike + ContiguousBytes {
+    where I: SliceLike + AsRef<[u8]> {
     create_parser!(s, {
         let (res, pos) = get_byte_pos(s.input, finder)?;
         s.input = s.input.slice_from(pos + consume_result.into());
@@ -301,7 +301,7 @@ pub const fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> i
 pub const fn until_byte<I, S>(finder: impl ByteFinder,
                               include_result: bool,
                               consume_result: bool) -> impl Parser<I, I, S>
-    where I: SliceLike + ContiguousBytes {
+    where I: SliceLike + AsRef<[u8]> {
     create_parser!(s, {
         let (_, pos) = get_byte_pos(s.input, finder)?;
         let res = s.input.slice_to(pos + include_result.into());

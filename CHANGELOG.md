@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.11.0
+
+- Remove `ContiguousBytes` in favor of `AsRef<[u8]>`
+
 ## 0.10.0
 
 ### New features

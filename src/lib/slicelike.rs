@@ -122,22 +122,3 @@ impl<'a> SliceLike for &'a str {
         self.is_empty()
     }
 }
-
-/// A trait for types that can be converted to `&[u8]`.
-pub trait ContiguousBytes {
-    fn to_u8_slice(&self) -> &[u8];
-}
-
-impl ContiguousBytes for &str {
-    #[inline(always)]
-    fn to_u8_slice(&self) -> &[u8] {
-        self.as_bytes()
-    }
-}
-
-impl ContiguousBytes for &[u8] {
-    #[inline(always)]
-    fn to_u8_slice(&self) -> &[u8] {
-        self
-    }
-}

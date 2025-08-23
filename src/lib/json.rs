@@ -1,6 +1,6 @@
 use alloc::{collections::BTreeMap, vec::Vec};
 
-use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::{float_checked}, parsers::*, whitespace::AsciiWhitespace};
+use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::AsciiWhitespace};
 
 #[derive(Debug)]
 pub enum JsonValue<StringType> {
@@ -32,7 +32,7 @@ const fn json_string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, JsonVa
 }
 
 const fn number_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
-    map(float_checked(), JsonValue::Num)
+    map(float(), JsonValue::Num)
 }
 
 const fn bool_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
