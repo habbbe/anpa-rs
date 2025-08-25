@@ -211,7 +211,7 @@ fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
 ///
 /// Available finders are:
 /// - [`eq(x)`](eq): Search for a byte via equality, i.e. `eq(10)`
-///             will search for a byte not equal to 10.
+///             will search for a byte equal to 10.
 /// - [`ne(x)`](ne): Search for a byte via inequality, i.e. `ne(10)`
 ///             will search for a byte not equal to 10.
 /// - [`lt(x)`](lt): Search for a byte via "less than", i.e. `lt(10)`
