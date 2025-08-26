@@ -67,7 +67,7 @@ impl From<bool> for FlowControl {
 pub const fn bind<I:SliceLike, O1, O2, P, S>(p: impl Parser<I, O1, S>,
                                              f: impl FnOnce(O1) -> P + Copy
 ) -> impl Parser<I, O2, S> where P: Parser<I, O2, S> {
-    create_parser!(s, f(p(s)?)(s))
+    bind!(f, p)
 }
 
 /// Create a new parser by applying a transformation `f` to the result of `p`.
@@ -99,7 +99,7 @@ pub const fn bind<I:SliceLike, O1, O2, P, S>(p: impl Parser<I, O1, S>,
 /// ```
 #[inline]
 pub const fn map<I: SliceLike, O, O2, S>(p: impl Parser<I, O, S>,
-                                   f: impl FnOnce(O) -> O2 + Copy
+                                         f: impl FnOnce(O) -> O2 + Copy
 ) -> impl Parser<I, O2, S> {
     map!(f, p)
 }

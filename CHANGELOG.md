@@ -4,6 +4,9 @@
 
 - Remove `ContiguousBytes` in favor of `AsRef<[u8]>`
 
+### New features
+- New variadic parser `bind!`
+
 ## 0.10.0
 
 ### New features

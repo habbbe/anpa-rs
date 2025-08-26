@@ -45,7 +45,19 @@ macro_rules! defer_parser {
     }
 }
 
-/// Variadic version of `map`, where all provided parsers must succeed.
+/// Variadic version of [`combinators::bind`](crate::combinators::bind), where all provided parsers must succeed.
+/// ### Arguments
+/// * `f` - the transformation function. Its arguments must match the result types of `p...` in
+///         both type and number.
+/// * `p...` - any number of parsers.
+#[macro_export]
+macro_rules! bind {
+    ($f:expr, $($p:expr),* $(,)?) => {
+        $crate::create_parser!(s, $f($($p(s)?),*)(s))
+    };
+}
+
+/// Variadic version of [`combinators::map`](crate::combinators::map), where all provided parsers must succeed.
 /// ### Arguments
 /// * `f` - the transformation function. Its arguments must match the result types of `p...` in
 ///         both type and number.
@@ -57,7 +69,7 @@ macro_rules! map {
     };
 }
 
-/// Variadic version of `map_if`, where all provided parsers must succeed.
+/// Variadic version of [`combinators::map_if`](crate::combinators::map_if), where all provided parsers must succeed.
 /// ### Arguments
 /// * `f` - the transformation function. Its arguments must match the result types of `p...` in
 ///         both type and number.
@@ -109,7 +121,7 @@ macro_rules! variadic {
     };
 }
 
-/// Variadic version of `or`.
+/// Variadic version of [`combinators::or`](crate::combinators::or).
 ///
 /// ### Arguments
 /// * `p...` - any number of parsers.
@@ -120,7 +132,7 @@ macro_rules! or {
     };
 }
 
-/// Variadic version of `or_no_partial`.
+/// Variadic version of [`or_no_partial`](crate::combinators::or_no_partial).
 ///
 /// ### Arguments
 /// * `p...` - any number of parsers.
@@ -131,7 +143,7 @@ macro_rules! or_no_partial {
     };
 }
 
-/// Variadic version of `or_diff`.
+/// Variadic version of [`combinators::or_diff`](crate::combinators::or_diff).
 ///
 /// ### Arguments
 /// * `p...` - any number of parsers.
@@ -142,7 +154,7 @@ macro_rules! or_diff {
     };
 }
 
-/// Variadic version of `or_diff_no_partial`.
+/// Variadic version of [`or_diff_no_partial`](crate::combinators::or_diff_no_partial).
 ///
 /// ### Arguments
 /// * `p...` - any number of parsers.
@@ -153,7 +165,20 @@ macro_rules! or_diff_no_partial {
     };
 }
 
-/// Variadic version of `left`, where only the leftmost parser's result will be returned.
+/// Variadic version of [`combinators::greedy_or`](crate::combinators::greedy_or), where
+/// the result of the parser with the most consumed input will be returned.
+///
+/// ### Arguments
+/// * `p...` - any number of parsers.
+#[macro_export]
+macro_rules! greedy_or {
+    ($($p:expr),* $(,)?) => {
+        $crate::variadic!($crate::combinators::greedy_or, $($p),*)
+    };
+}
+
+/// Variadic version of [`combinators::left`](crate::combinators::left), where
+/// only the leftmost parser's result will be returned.
 ///
 /// ### Arguments
 /// * `p...` - any number of parsers.
@@ -164,7 +189,8 @@ macro_rules! left {
     };
 }
 
-/// Variadic version of `right`, where only the rightmost parser's result will be returned.
+/// Variadic version of [`combinators::right`](crate::combinators::right), where
+/// only the rightmost parser's result will be returned.
 ///
 /// ### Arguments
 /// * `p...` - any number of parsers.
@@ -205,7 +231,8 @@ macro_rules! item_matches {
     };
 }
 
-/// Alternative to the `take` parser that inlines the argument into the parser.
+/// Alternative to the [`parsers::take`](crate::parsers::take) parser that
+/// inlines the argument into the parser.
 ///
 /// This can give better performance and/or smaller binary size, or the opposite.
 /// Try it and don't forget to measure!
@@ -226,7 +253,8 @@ macro_rules! take {
     }
 }
 
-/// Alternative to the `skip` parser that inlines the argument into the parser.
+/// Alternative to the [`parsers::skip`](crate::parsers::skip) parser that
+/// inlines the argument into the parser.
 ///
 /// This can give better performance and/or smaller binary size, or the opposite.
 /// Try it and don't forget to measure!
@@ -244,7 +272,8 @@ macro_rules! skip {
         })
     }
 }
-/// Alternative to the `until` parser that inlines the argument into the parser.
+/// Alternative to the [`parsers::until`](crate::parsers::until) parser that
+/// inlines the argument into the parser.
 ///
 /// This can give better performance and/or smaller binary size, or the opposite.
 /// Try it and don't forget to measure!
@@ -263,18 +292,6 @@ macro_rules! until {
             Some(res)
         })
     }
-}
-
-/// Variadic version of `greedy_or`, where the result of the parser with the most consumed
-/// input will be returned.
-///
-/// ### Arguments
-/// * `p...` - any number of parsers.
-#[macro_export]
-macro_rules! greedy_or {
-    ($($p:expr),* $(,)?) => {
-        $crate::variadic!($crate::combinators::greedy_or, $($p),*)
-    };
 }
 
 /// Create a parser that takes the result of a parser, and returns different
