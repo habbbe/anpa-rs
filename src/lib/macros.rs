@@ -1,7 +1,15 @@
-/// Shorthand for creating a parser.
+/// Shorthand for creating a parser. All parsers shall return `Option<T>`
 /// ### Example:
-/// ```ignore
-/// let p = create_parser!(s, { /* Define parser behavior using state `s` */ })
+/// ```
+/// use anpa::create_parser;
+/// # use anpa::core::parse;
+///
+/// let p = create_parser!(s, {
+///     /* Define parser behavior using state `s` */
+///     # Some(())
+/// });
+///
+/// # parse(p, "test");
 /// ```
 #[macro_export]
 macro_rules! create_parser {
