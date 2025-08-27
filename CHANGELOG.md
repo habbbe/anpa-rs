@@ -6,6 +6,7 @@
 
 ### New features
 - New variadic parser `bind!`
+- Add posibility to use & to combine `ByteFinder`s
 
 ## 0.10.0
 

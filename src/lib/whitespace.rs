@@ -120,13 +120,13 @@ mod tests {
 
     #[test]
     fn test_whitespace_u8() {
-        let input = &[b' ', b' ', 1, 2];
+        let input = &[b' ', b'\t', 1, 2];
         let res = parse(skip_ascii_whitespace(), input.as_slice());
         assert_eq!(res.result, Some(()));
         assert_eq!(res.state, &[1, 2]);
 
         let res = parse(ascii_whitespace(), input.as_slice());
-        assert_eq!(res.result, Some([b' ', b' '].as_slice()));
+        assert_eq!(res.result, Some([b' ', b'\t'].as_slice()));
         assert_eq!(res.state, &[1, 2]);
     }
 
