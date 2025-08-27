@@ -1,4 +1,4 @@
-use core::{convert::TryInto, ops::{self, BitAnd, BitOr}};
+use core::{convert::TryInto, ops::{BitAnd, BitOr}};
 
 use crate::{core::Parser, number::NumLike, slicelike::SliceLike};
 
