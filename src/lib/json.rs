@@ -130,7 +130,10 @@ macro_rules! internal_json_field {
     };
 }
 
-/// Macro to generate a JSON parser for a specific structure.
+/// Macro to generate a JSON parser for a specific structure. This parser
+/// expects the exact structure given, i.e. no out-of-order fields, missing
+/// fields, or additional fields. It will provide slightly better performance
+/// than [`json_parser_gen_ng`].
 ///
 /// ### Arguments
 /// * `f` - A function returning the structure from the arguments parsed by the
@@ -188,7 +191,7 @@ macro_rules! const_if {
 #[macro_export]
 macro_rules! type_if_optional {
     (true, $t:ty) => {
-        $t
+        Option<$t>
     };
     (false, $t:ty) => {
         $t

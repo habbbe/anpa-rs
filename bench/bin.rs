@@ -126,11 +126,14 @@ fn bench_json() {
     println!("anpa::json: in {}us", d.as_nanos() as f64 / 1000.0);
 }
 
+
+#[allow(dead_code)]
 struct Address {
     street: String,
     zip: String
 }
 
+#[allow(dead_code)]
 struct Person {
     name: String,
     middle_name: Option<String>,
@@ -140,10 +143,11 @@ struct Person {
     escape: String,
     member: bool,
     favorite_emojis: String,
-    hasPaid: bool,
+    has_paid: bool,
     address: Address
 }
 
+#[allow(dead_code)]
 struct Db {
     db: Vec<Person>
 }
@@ -158,13 +162,13 @@ fn address_parser<'a>() -> impl StrParser<'a, Address> {
 fn person_parser<'a>() -> impl StrParser<'a, Person> {
     json_parser_gen_ng!(Person,
                     ("name", name, String, false, string_parser()),
-                    ("middlename", middle_name, Option<String>, true, string_parser()),
+                    ("middlename", middle_name, String, true, string_parser()),
                     ("age", age, u8, false, integer()),
                     ("score", score, f64, false, float()),
                     ("escape\\n", escape, String, false, string_parser()),
                     ("member", member, bool, false, bool_parse()),
                     ("favorite_emojis", favorite_emojis, String, false, string_parser()),
-                    ("hasPaid", hasPaid, bool, false, bool_parse()),
+                    ("hasPaid", has_paid, bool, false, bool_parse()),
                     ("address", address, Address, false, address_parser())
     )
 }
@@ -182,8 +186,8 @@ fn bench_json_derive() {
                                          );
 
     let person_parser =
-    json_parser_gen!(|name, middle_name, age, score, escape, member, favorite_emojis, hasPaid, address|
-                     Person { name, middle_name, age, score, escape, member, favorite_emojis, hasPaid, address},
+    json_parser_gen!(|name, middle_name, age, score, escape, member, favorite_emojis, has_paid, address|
+                     Person { name, middle_name, age, score, escape, member, favorite_emojis, has_paid, address},
                     ("name", string_parser()),
                     ("middlename", option_parser(string_parser())),
                     ("age", integer()),
