@@ -111,11 +111,11 @@ pub const fn colon_parser<'a>() -> impl StrParser<'a, ()> {
 
 #[inline]
 pub const fn option_parser<'a, T>(p: impl StrParser<'a, T>) -> impl StrParser<'a, Option<T>> {
-    or(map(skip!("null"), |_ | None), map(p, Some))
+    or(map(skip!("null"), |_| None), map(p, Some))
 }
 
 #[inline]
-pub fn bool_parse<'a>() -> impl StrParser<'a, bool> {
+pub const fn bool_parse<'a>() -> impl StrParser<'a, bool> {
     or(map(skip!("true"), |_| true), map(skip!("false"), |_| false))
 }
 
