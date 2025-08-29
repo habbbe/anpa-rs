@@ -1,3 +1,5 @@
+use std::string::String;
+
 use alloc::{collections::BTreeMap, vec::Vec};
 
 use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::AsciiWhitespace};
@@ -12,13 +14,13 @@ pub enum JsonValue<StringType> {
     Arr(Vec<JsonValue<StringType>>)
 }
 
-pub const fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
+pub const fn eat<'a, O>(p: impl StrParser<'a, O, String>) -> impl StrParser<'a, O, String> {
     // For unknown reasons, this gives better performance than `skip_ascii_whitespace()`.
     // Possibly a random optimization quirk, since it ideally shouldn't happen.
     right(skip!(AsciiWhitespace), p)
 }
 
-pub const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
+pub const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T, String> {
     let unicode = right(skip!('u'), times(4, item_if(|c: char| c.is_ascii_hexdigit())));
     let escaped = right(item(), or_diff(item_matches!('"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't'),
                                         unicode));
@@ -27,25 +29,25 @@ pub const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
     into_type(middle(skip!('"'), many(parse_until, true, no_separator()), skip!('"')))
 }
 
-const fn json_string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, JsonValue<T>> {
+const fn json_string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, JsonValue<T>, String> {
     map(string_parser(), JsonValue::Str)
 }
 
-const fn number_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
+const fn number_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>, String> {
     map(float(), JsonValue::Num)
 }
 
-const fn bool_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
+const fn bool_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>, String> {
     or(map(skip!("true"), |_| JsonValue::Bool(true)), map(skip!("false"), |_| JsonValue::Bool(false)))
 }
 
-const fn null_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
+const fn null_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>, String> {
     map(skip!("null"), |_| JsonValue::Null)
 }
 
 /// Get a JSON parser that parses any JSON value. The type used for strings will be inferred
 /// from the context via `From<&str>`. For examples, see `object_parser`.
-pub const fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
+pub const fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>, String> {
     eat(defer_parser! {
         or!(json_string_parser(), number_parser(), object_parser(),
             array_parser(), bool_parser(), null_parser())
@@ -65,7 +67,7 @@ pub const fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, Js
 /// // Stores strings as custom type implementing `From<&str>`.
 /// // let p3 = json::object_parser::<MyString>();
 /// ```
-pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
+pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>, String> {
     let pair_parser = tuplify!(
         left(eat(string_parser()), colon_parser()),
         value_parser());
@@ -77,12 +79,12 @@ pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, J
 
 /// Get a JSON parser that parses a JSON array. The type used for strings will be inferred
 /// from the context via `From<&str>`. For examples, see `object_parser`.
-pub const fn array_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
+pub const fn array_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>, String> {
     map(vec_parser(value_parser()), JsonValue::Arr)
 }
 
 /// Get a JSON parser that parses an array.
-pub const fn vec_parser<'a, T>(p: impl StrParser<'a, T>) -> impl StrParser<'a, Vec<T>> {
+pub const fn vec_parser<'a, T>(p: impl StrParser<'a, T, String>) -> impl StrParser<'a, Vec<T>, String> {
     middle(
         skip!('['),
         many_to_vec(p, true, separator(comma_parser(), false)),
@@ -90,32 +92,32 @@ pub const fn vec_parser<'a, T>(p: impl StrParser<'a, T>) -> impl StrParser<'a, V
 }
 
 #[inline]
-pub fn open_brace_parser<'a>() -> impl StrParser<'a, ()> {
+pub fn open_brace_parser<'a>() -> impl StrParser<'a, (), String> {
     eat(skip!('{'))
 }
 
 #[inline]
-pub const fn close_brace_parser<'a>() -> impl StrParser<'a, ()> {
+pub const fn close_brace_parser<'a>() -> impl StrParser<'a, (), String> {
     eat(skip!('}'))
 }
 
 #[inline]
-pub const fn comma_parser<'a>() -> impl StrParser<'a, ()> {
+pub const fn comma_parser<'a>() -> impl StrParser<'a, (), String> {
     eat(skip!(','))
 }
 
 #[inline]
-pub const fn colon_parser<'a>() -> impl StrParser<'a, ()> {
+pub const fn colon_parser<'a>() -> impl StrParser<'a, (), String> {
     eat(skip!(':'))
 }
 
 #[inline]
-pub const fn option_parser<'a, T>(p: impl StrParser<'a, T>) -> impl StrParser<'a, Option<T>> {
+pub const fn option_parser<'a, T>(p: impl StrParser<'a, T, String>) -> impl StrParser<'a, Option<T>, String> {
     or(map(skip!("null"), |_| None), map(p, Some))
 }
 
 #[inline]
-pub const fn bool_parse<'a>() -> impl StrParser<'a, bool> {
+pub const fn bool_parse<'a>() -> impl StrParser<'a, bool, String> {
     or(map(skip!("true"), |_| true), map(skip!("false"), |_| false))
 }
 
@@ -184,6 +186,9 @@ macro_rules! const_if {
         $e1
     };
     (false, $e1:expr, $e2:expr) => {
+        const_if!($e1, $e2)
+    };
+    ($e1:expr, $e2:expr) => {
         $e2
     };
 }
@@ -194,20 +199,25 @@ macro_rules! type_if_optional {
         Option<$t>
     };
     (false, $t:ty) => {
+        type_if_optional!($t)
+    };
+    ($t:ty) => {
         $t
     };
 }
 
 /// Macro to generate a JSON parser for a specific structure. Allows fields out of order.
+/// 
+/// The `optional` field can be omitted, and the field will then be considered mandatory.
 ///
 /// ### Arguments
 /// * `t` - The type to be parsed.
-/// * `(name, id, id_ty, optional, parser)` - a variadic list of the elements to parse.
+/// * `(name, id, id_ty, parser, optional: opt)` - a variadic list of the elements to parse.
 ///   `name`: the field to parse
 ///   `id`: the field name in the result type
 ///   `id_ty`: The type of the field
-///   `optional`: If the field is optional
 ///   `parser`: The parser for the field
+///   `opt`: If the field is optional
 ///
 /// ### Example
 /// ```
@@ -220,7 +230,7 @@ macro_rules! type_if_optional {
 /// // The below will parse a `Person` object from a JSON string of the form:
 /// // `{"name": "John Doe", "age": 27}`
 /// let person_parser = json_parser_gen_ng!(Person,
-///     ("name", name, String, false, json::string_parser()),
+///     ("name", name, String, false, json::string_parser(), optional: false),
 ///     ("age", age, u8, false, number::integer())
 /// );
 ///
@@ -230,11 +240,11 @@ macro_rules! type_if_optional {
 /// ```
 #[macro_export]
 macro_rules! json_parser_gen_ng {
-    ($t:ident, $(($name:literal, $id:ident, $id_ty:ty, $optional:ident, $parser:expr)),* $(,)?) => {
+    ($t:ident, $(($name:literal, $id:ident, $id_ty:ty, $parser:expr $(, optional: $optional:tt)?)),* $(,)?) => {
         $crate::create_parser!(s, {
             #[allow(non_camel_case_types)]
             enum Variant {
-                $($id($crate::type_if_optional!($optional, $id_ty)),)*
+                $($id($crate::type_if_optional!($($optional,)? $id_ty)),)*
                 Other
             }
 
@@ -243,7 +253,7 @@ macro_rules! json_parser_gen_ng {
                     $crate::right!(
                         $crate::skip!(concat!('\"', $name, '\"')),
                         $crate::json::eat($crate::skip!(':')),
-                        $crate::json::eat($crate::const_if!($optional, $crate::json::option_parser($parser), $parser))), Variant::$id
+                        $crate::json::eat($crate::const_if!($($optional,)? $crate::json::option_parser($parser), $parser))), Variant::$id
                 );
             )*
 
@@ -259,7 +269,8 @@ macro_rules! json_parser_gen_ng {
             let all_parser = $crate::or!($($id),*, other);
 
             $(
-                let mut $id: Option<$crate::type_if_optional!($optional, $id_ty)> = $crate::const_if!($optional, Some(None), None);
+                let mut $id: Option<$crate::type_if_optional!($($optional,)? $id_ty)> =
+                    $crate::const_if!($($optional,)? Some(None), None);
             )*
 
             loop {
@@ -282,17 +293,34 @@ macro_rules! json_parser_gen_ng {
             $crate::json::eat($crate::skip!('}'))(s)?;
 
             #[allow(unused)]
-            fn unwrap<X>(o: Option<X>, n: &'static str) -> Option<X> {
+            fn unwrap<I: $crate::slicelike::SliceLike, X>(s: &mut AnpaState<I, String>, o: Option<X>, n: &'static str) -> Option<X> {
                 match o {
                     a@Some(_) => a,
                     None => {
-                        // Here some message could be returned
+                        if s.user_state.is_empty() {
+                            *s.user_state = format!("Field {} missing", n);
+                        }
                         None
                     }
                 }
             }
 
-            Some($t { $($id: unwrap($id, $name)?),* })
+            let mut abort = false;
+
+            $(
+                if $id.is_none() {
+                    s.user_state.push_str(
+                        concat!("Field \"", $name, "\" missing or invalid in ", stringify!($t) ,"\n"));
+                    abort = true;
+                }
+            )*
+
+            if abort {
+                None
+            } else {
+                // SAFETY: All elements are checked above
+                Some($t { $($id: unsafe { $id.unwrap_unchecked() }),* })
+            }
         })
     };
 }

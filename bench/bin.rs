@@ -119,7 +119,8 @@ fn bench_json() {
 
     let (d, _) = bench_fun(10000, || {
         for _ in 0..10 {
-            p.parse(&string).result.unwrap();
+            let mut msg: String = "".to_string();
+            p.parse_state(&string, &mut msg).result.unwrap();
         }
     });
 
@@ -152,62 +153,63 @@ struct Db {
     db: Vec<Person>
 }
 
-fn address_parser<'a>() -> impl StrParser<'a, Address> {
+fn address_parser<'a>() -> impl StrParser<'a, Address, String> {
     json_parser_gen_ng!(Address,
-                     ("street", street, String, false, string_parser()),
-                     ("zip", zip, String, false, string_parser()),
+        ("street", street, String, string_parser()),
+        ("zip", zip, String, string_parser()),
     )
 }
 
-fn person_parser<'a>() -> impl StrParser<'a, Person> {
+fn person_parser<'a>() -> impl StrParser<'a, Person, String> {
     json_parser_gen_ng!(Person,
-                    ("name", name, String, false, string_parser()),
-                    ("middlename", middle_name, String, true, string_parser()),
-                    ("age", age, u8, false, integer()),
-                    ("score", score, f64, false, float()),
-                    ("escape\\n", escape, String, false, string_parser()),
-                    ("member", member, bool, false, bool_parse()),
-                    ("favorite_emojis", favorite_emojis, String, false, string_parser()),
-                    ("hasPaid", has_paid, bool, false, bool_parse()),
-                    ("address", address, Address, false, address_parser())
+        ("name", name, String, string_parser()),
+        ("middlename", middle_name, String, string_parser(), optional: true),
+        ("age", age, u8, integer()),
+        ("score", score, f64, float()),
+        ("escape\\n", escape, String, string_parser()),
+        ("member", member, bool, bool_parse()),
+        ("favorite_emojis", favorite_emojis, String, string_parser()),
+        ("hasPaid", has_paid, bool, bool_parse()),
+        ("address", address, Address, address_parser())
     )
 }
 
-fn db_parser<'a>() -> impl StrParser<'a, Db> {
+fn db_parser<'a>() -> impl StrParser<'a, Db, String> {
     json_parser_gen_ng!(Db,
-                     ("db", db, Vec<Person>, false, vec_parser(person_parser())),
+        ("db", db, Vec<Person>, vec_parser(person_parser())),
     )
 }
 
 fn bench_json_derive() {
     let address_parser = json_parser_gen!(|street, zip| Address { street, zip },
-                                          ("street", string_parser()),
-                                          ("zip", string_parser())
-                                         );
+        ("street", string_parser()),
+        ("zip", string_parser())
+    );
 
     let person_parser =
     json_parser_gen!(|name, middle_name, age, score, escape, member, favorite_emojis, has_paid, address|
                      Person { name, middle_name, age, score, escape, member, favorite_emojis, has_paid, address},
-                    ("name", string_parser()),
-                    ("middlename", option_parser(string_parser())),
-                    ("age", integer()),
-                    ("score", float()),
-                    ("escape\\n", string_parser()),
-                    ("member", bool_parse()),
-                    ("favorite_emojis", string_parser()),
-                    ("hasPaid", bool_parse()),
-                    ("address", address_parser)
+        ("name", string_parser()),
+        ("middlename", option_parser(string_parser())),
+        ("age", integer()),
+        ("score", float()),
+        ("escape\\n", string_parser()),
+        ("member", bool_parse()),
+        ("favorite_emojis", string_parser()),
+        ("hasPaid", bool_parse()),
+        ("address", address_parser)
                 );
 
     let db_parser = json_parser_gen!(|db| Db { db },
-                    ("db", vec_parser(person_parser)),);
+        ("db", vec_parser(person_parser)),);
 
     let mut string = black_box(String::new());
     let _ = read_file("test.json").read_to_string(&mut string);
 
     let (d, _) = bench_fun(10000, || {
         for _ in 0..10 {
-            parse(db_parser, &string).result.unwrap();
+            let mut msg: String = "".to_string();
+            parse_state(db_parser, &string, &mut msg).result.unwrap();
         }
     });
 
@@ -220,7 +222,11 @@ fn bench_json_derive2() {
 
     let (d, _) = bench_fun(10000, || {
         for _ in 0..10 {
-            db_parser().parse(&string).result.unwrap();
+            let mut msg: String = "".to_string();
+            let res = db_parser().parse_state(&string, &mut msg);
+            if res.result.is_none() {
+                println!("{}", res.state.user_state)
+            }
         }
     });
 
