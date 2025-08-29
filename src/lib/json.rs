@@ -2,7 +2,9 @@ use std::string::String;
 
 use alloc::{collections::BTreeMap, vec::Vec};
 
-use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::AsciiWhitespace};
+use crate::{combinators::*, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::AsciiWhitespace};
+
+create_parser_trait!(JsonParser, str, String, "Trait for a parser intended for JSON parsing");
 
 #[derive(Debug)]
 pub enum JsonValue<StringType> {
@@ -14,13 +16,13 @@ pub enum JsonValue<StringType> {
     Arr(Vec<JsonValue<StringType>>)
 }
 
-pub const fn eat<'a, O>(p: impl StrParser<'a, O, String>) -> impl StrParser<'a, O, String> {
+pub const fn eat<'a, O>(p: impl JsonParser<'a, O>) -> impl JsonParser<'a, O> {
     // For unknown reasons, this gives better performance than `skip_ascii_whitespace()`.
     // Possibly a random optimization quirk, since it ideally shouldn't happen.
     right(skip!(AsciiWhitespace), p)
 }
 
-pub const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T, String> {
+pub const fn string_parser<'a, T: From<&'a str>>() -> impl JsonParser<'a, T> {
     let unicode = right(skip!('u'), times(4, item_if(|c: char| c.is_ascii_hexdigit())));
     let escaped = right(item(), or_diff(item_matches!('"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't'),
                                         unicode));
@@ -29,25 +31,25 @@ pub const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T, Stri
     into_type(middle(skip!('"'), many(parse_until, true, no_separator()), skip!('"')))
 }
 
-const fn json_string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, JsonValue<T>, String> {
+const fn json_string_parser<'a, T: From<&'a str>>() -> impl JsonParser<'a, JsonValue<T>> {
     map(string_parser(), JsonValue::Str)
 }
 
-const fn number_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>, String> {
+const fn number_parser<'a, T>() -> impl JsonParser<'a, JsonValue<T>> {
     map(float(), JsonValue::Num)
 }
 
-const fn bool_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>, String> {
+const fn bool_parser<'a, T>() -> impl JsonParser<'a, JsonValue<T>> {
     or(map(skip!("true"), |_| JsonValue::Bool(true)), map(skip!("false"), |_| JsonValue::Bool(false)))
 }
 
-const fn null_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>, String> {
+const fn null_parser<'a, T>() -> impl JsonParser<'a, JsonValue<T>> {
     map(skip!("null"), |_| JsonValue::Null)
 }
 
 /// Get a JSON parser that parses any JSON value. The type used for strings will be inferred
 /// from the context via `From<&str>`. For examples, see `object_parser`.
-pub const fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>, String> {
+pub const fn value_parser<'a, T: From<&'a str> + Ord>() -> impl JsonParser<'a, JsonValue<T>> {
     eat(defer_parser! {
         or!(json_string_parser(), number_parser(), object_parser(),
             array_parser(), bool_parser(), null_parser())
@@ -67,7 +69,7 @@ pub const fn value_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, Js
 /// // Stores strings as custom type implementing `From<&str>`.
 /// // let p3 = json::object_parser::<MyString>();
 /// ```
-pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>, String> {
+pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl JsonParser<'a, JsonValue<T>> {
     let pair_parser = tuplify!(
         left(eat(string_parser()), colon_parser()),
         value_parser());
@@ -79,12 +81,12 @@ pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, J
 
 /// Get a JSON parser that parses a JSON array. The type used for strings will be inferred
 /// from the context via `From<&str>`. For examples, see `object_parser`.
-pub const fn array_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>, String> {
+pub const fn array_parser<'a, T: From<&'a str> + Ord>() -> impl JsonParser<'a, JsonValue<T>> {
     map(vec_parser(value_parser()), JsonValue::Arr)
 }
 
 /// Get a JSON parser that parses an array.
-pub const fn vec_parser<'a, T>(p: impl StrParser<'a, T, String>) -> impl StrParser<'a, Vec<T>, String> {
+pub const fn vec_parser<'a, T>(p: impl JsonParser<'a, T>) -> impl JsonParser<'a, Vec<T>> {
     middle(
         skip!('['),
         many_to_vec(p, true, separator(comma_parser(), false)),
@@ -92,32 +94,32 @@ pub const fn vec_parser<'a, T>(p: impl StrParser<'a, T, String>) -> impl StrPars
 }
 
 #[inline]
-pub fn open_brace_parser<'a>() -> impl StrParser<'a, (), String> {
+pub fn open_brace_parser<'a>() -> impl JsonParser<'a, ()> {
     eat(skip!('{'))
 }
 
 #[inline]
-pub const fn close_brace_parser<'a>() -> impl StrParser<'a, (), String> {
+pub const fn close_brace_parser<'a>() -> impl JsonParser<'a, ()> {
     eat(skip!('}'))
 }
 
 #[inline]
-pub const fn comma_parser<'a>() -> impl StrParser<'a, (), String> {
+pub const fn comma_parser<'a>() -> impl JsonParser<'a, ()> {
     eat(skip!(','))
 }
 
 #[inline]
-pub const fn colon_parser<'a>() -> impl StrParser<'a, (), String> {
+pub const fn colon_parser<'a>() -> impl JsonParser<'a, ()> {
     eat(skip!(':'))
 }
 
 #[inline]
-pub const fn option_parser<'a, T>(p: impl StrParser<'a, T, String>) -> impl StrParser<'a, Option<T>, String> {
+pub const fn option_parser<'a, T>(p: impl JsonParser<'a, T>) -> impl JsonParser<'a, Option<T>> {
     or(map(skip!("null"), |_| None), map(p, Some))
 }
 
 #[inline]
-pub const fn bool_parse<'a>() -> impl StrParser<'a, bool, String> {
+pub const fn bool_parse<'a>() -> impl JsonParser<'a, bool> {
     or(map(skip!("true"), |_| true), map(skip!("false"), |_| false))
 }
 

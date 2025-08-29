@@ -422,6 +422,7 @@ macro_rules! choose_pure {
 /// ### Arguments
 /// * `id` - The identifier of the new trait
 /// * `input` - The type of the input. Do not include lifetime or reference.
+/// * `state` (optional) - The state type to default to if not provided.
 /// * `comment` - The doc comment to be generated for the trait
 ///
 /// ### Example
@@ -431,9 +432,13 @@ macro_rules! choose_pure {
 /// ```
 #[macro_export]
 macro_rules! create_parser_trait {
-    ($id:ident, $input:ty, $comment:expr) => {
+    ($id:ident, $input:ty, $state:ty, $comment:expr) => {
         #[doc=$comment]
-        pub trait $id<'a, O = &'a $input, S = ()>: $crate::core::Parser<&'a $input, O, S> {}
+        pub trait $id<'a, O = &'a $input, S = $state>: $crate::core::Parser<&'a $input, O, S> {}
         impl<'a, O, S, P: $crate::core::Parser<&'a $input, O, S>> $id<'a, O, S> for P {}
+    };
+
+    ($id:ident, $input:ty, $comment:expr) => {
+        create_parser_trait!($id, $input, (), $comment);
     };
 }
