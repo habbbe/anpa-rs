@@ -2,9 +2,9 @@ use std::string::String;
 
 use alloc::{collections::BTreeMap, vec::Vec};
 
-use crate::{combinators::*, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::AsciiWhitespace};
+use crate::{combinators::*, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::skip_ascii_whitespace};
 
-create_parser_trait!(JsonParser, str, String, "Trait for a parser intended for JSON parsing");
+create_parser_trait!(JsonParser, str, String, "Trait for a parser intended for JSON parsing, using a String user state to accumulate error messages.");
 
 #[derive(Debug)]
 pub enum JsonValue<StringType> {
@@ -17,9 +17,7 @@ pub enum JsonValue<StringType> {
 }
 
 pub const fn eat<'a, O>(p: impl JsonParser<'a, O>) -> impl JsonParser<'a, O> {
-    // For unknown reasons, this gives better performance than `skip_ascii_whitespace()`.
-    // Possibly a random optimization quirk, since it ideally shouldn't happen.
-    right(skip!(AsciiWhitespace), p)
+    right(skip_ascii_whitespace(), p)
 }
 
 pub const fn string_parser<'a, T: From<&'a str>>() -> impl JsonParser<'a, T> {
@@ -75,12 +73,13 @@ pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl JsonParser<'a, 
         value_parser());
     map(middle(
         skip!('{'),
-        many_to_map_ordered(pair_parser, true, separator(eat(skip!(',')), false)),
-        eat(skip!('}'))), JsonValue::Dic)
+        many_to_map_ordered(pair_parser, true, separator(comma_parser(), false)),
+        close_brace_parser()), JsonValue::Dic)
 }
 
 /// Get a JSON parser that parses a JSON array. The type used for strings will be inferred
 /// from the context via `From<&str>`. For examples, see `object_parser`.
+#[inline]
 pub const fn array_parser<'a, T: From<&'a str> + Ord>() -> impl JsonParser<'a, JsonValue<T>> {
     map(vec_parser(value_parser()), JsonValue::Arr)
 }
@@ -254,7 +253,7 @@ macro_rules! json_parser_gen_ng {
                 let $id = $crate::combinators::map(
                     $crate::right!(
                         $crate::skip!(concat!('\"', $name, '\"')),
-                        $crate::json::eat($crate::skip!(':')),
+                        $crate::json::colon_parser(),
                         $crate::json::eat($crate::const_if!($($optional,)? $crate::json::option_parser($parser), $parser))), Variant::$id
                 );
             )*
@@ -263,10 +262,10 @@ macro_rules! json_parser_gen_ng {
             let other = $crate::combinators::map(
                 $crate::right!(
                     $crate::json::string_parser::<&str>(),
-                    $crate::json::eat($crate::skip!(':')),
+                    $crate::json::colon_parser(),
                     $crate::json::eat($crate::json::value_parser::<&str>())), |_| Variant::Other);
 
-            $crate::json::eat($crate::skip!('{'))(s)?;
+            $crate::json::open_brace_parser()(s)?;
 
             let all_parser = $crate::or!($($id),*, other);
 
@@ -287,12 +286,12 @@ macro_rules! json_parser_gen_ng {
                     Variant::Other => {}
                 }
 
-                if $crate::json::eat($crate::skip!(','))(s).is_none() {
+                if $crate::json::comma_parser()(s).is_none() {
                     break;
                 }
             }
 
-            $crate::json::eat($crate::skip!('}'))(s)?;
+            $crate::json::close_brace_parser()(s)?;
 
             #[allow(unused)]
             fn unwrap<I: $crate::slicelike::SliceLike, X>(s: &mut AnpaState<I, String>, o: Option<X>, n: &'static str) -> Option<X> {
