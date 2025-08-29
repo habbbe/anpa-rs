@@ -1,16 +1,13 @@
 use anpa::core::{*};
-use anpa::prefix::Prefix;
-use anpa::whitespace::skip_ascii_whitespace;
 use anpa::{*};
 use anpa::combinators::{*};
 use anpa::parsers::{*};
-use json::{arr_parser, array_parser, bool_parse, close_brace_parser, colon_parser, comma_parser, eat, open_brace_parser, option_parser, string_parser, value_parser};
+use json::{vec_parser, bool_parse, option_parser, string_parser};
 use number::{float, integer};
 
 use std::fs::File;
 use std::hint::black_box;
 use std::io::{self, BufRead, Read};
-use std::ops::Add;
 use std::process::exit;
 use std::time::{Duration, Instant};
 
@@ -151,87 +148,15 @@ struct Db {
     db: Vec<Person>
 }
 
-macro_rules! const_if {
-    (true, $e1:expr, $e2:expr) => {
-        $e1
-    };
-    (false, $e1:expr, $e2:expr) => {
-        $e2
-    };
-}
-
-#[macro_export]
-macro_rules! json_parser_gen2 {
-    ($t:ident, $(($name:expr, $id:ident, $id_ty:ty, $optional:ident, $parser:expr)),* $(,)?) => {
-        $crate::create_parser!(s, {
-            #[allow(non_camel_case_types)]
-            enum Variants {
-                $($id($id_ty),)*
-            }
-
-            $(
-                let $id = map(
-                    right!(
-                        skip!(concat!('\"', $name, '\"')),
-                        eat(skip!(':')),
-                        eat(const_if!($optional, option_parser($parser), $parser))), Variants::$id
-                );
-            )*
-
-            eat(skip!('{'))(s)?;
-
-            let _all_parser = or!($($id),*);
-
-            $(
-                let mut $id: Option<$id_ty> = const_if!($optional, Some(None), None);
-            )*
-
-            loop {
-                skip_ascii_whitespace()(s);
-
-                let Some(res) = _all_parser(s) else {
-                    break;
-                };
-
-                match res {
-                    $(Variants::$id(inner) => $id = Some(inner),)*
-                }
-
-                skip_ascii_whitespace()(s);
-                if let Some(()) = skip!(',')(s) {
-                    continue;
-                } else {
-                    break;
-                }
-            }
-
-            eat(skip!('}'))(s)?;
-
-            #[allow(unused)]
-            fn unwrap<X>(o: Option<X>, n: &'static str) -> Option<X> {
-                match o {
-                    a@Some(_) => a,
-                    None => {
-                        // Here some message could be returned
-                        None
-                    }
-                }
-            }
-
-            Some($t { $($id: unwrap($id, $name)?),* })
-        })
-    };
-}
-
 fn address_parser<'a>() -> impl StrParser<'a, Address> {
-    json_parser_gen2!(Address,
+    json_parser_gen_ng!(Address,
                      ("street", street, String, false, string_parser()),
                      ("zip", zip, String, false, string_parser()),
     )
 }
 
 fn person_parser<'a>() -> impl StrParser<'a, Person> {
-    json_parser_gen2!(Person,
+    json_parser_gen_ng!(Person,
                     ("name", name, String, false, string_parser()),
                     ("middlename", middle_name, Option<String>, true, string_parser()),
                     ("age", age, u8, false, integer()),
@@ -245,8 +170,8 @@ fn person_parser<'a>() -> impl StrParser<'a, Person> {
 }
 
 fn db_parser<'a>() -> impl StrParser<'a, Db> {
-    json_parser_gen2!(Db,
-                     ("db", db, Vec<Person>, false, arr_parser(person_parser())),
+    json_parser_gen_ng!(Db,
+                     ("db", db, Vec<Person>, false, vec_parser(person_parser())),
     )
 }
 
@@ -271,7 +196,7 @@ fn bench_json_derive() {
                 );
 
     let db_parser = json_parser_gen!(|db| Db { db },
-                    ("db", arr_parser(person_parser)),);
+                    ("db", vec_parser(person_parser)),);
 
     let mut string = black_box(String::new());
     let _ = read_file("test.json").read_to_string(&mut string);
@@ -295,7 +220,7 @@ fn bench_json_derive2() {
         }
     });
 
-    println!("anpa::json_custom2: in {}us", d.as_nanos() as f64 / 1000.0);
+    println!("anpa::json_derive: in {}us", d.as_nanos() as f64 / 1000.0);
 }
 
 fn bench_semver() {

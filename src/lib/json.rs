@@ -78,11 +78,11 @@ pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, J
 /// Get a JSON parser that parses a JSON array. The type used for strings will be inferred
 /// from the context via `From<&str>`. For examples, see `object_parser`.
 pub const fn array_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, JsonValue<T>> {
-    map(arr_parser(value_parser()), JsonValue::Arr)
+    map(vec_parser(value_parser()), JsonValue::Arr)
 }
 
 /// Get a JSON parser that parses an array.
-pub const fn arr_parser<'a, T>(p: impl StrParser<'a, T>) -> impl StrParser<'a, Vec<T>> {
+pub const fn vec_parser<'a, T>(p: impl StrParser<'a, T>) -> impl StrParser<'a, Vec<T>> {
     middle(
         skip!('['),
         many_to_vec(p, true, separator(comma_parser(), false)),
@@ -141,7 +141,7 @@ macro_rules! internal_json_field {
 ///
 /// ### Example
 /// ```
-/// use anpa::{json_parser_gen, json, number};
+/// use anpa::{core::parse, json_parser_gen, json, number};
 /// struct Person {
 ///     name: String,
 ///     age: u8
@@ -153,6 +153,10 @@ macro_rules! internal_json_field {
 ///     ("name", json::string_parser()),
 ///     ("age", number::integer())
 /// );
+///
+/// let person = parse(person_parser, r#"{"name": "Anpa", "age": 28}"#).result.unwrap();
+/// assert_eq!(person.name, "Anpa");
+/// assert_eq!(person.age, 28);
 /// ```
 #[macro_export]
 macro_rules! json_parser_gen {
@@ -168,5 +172,124 @@ macro_rules! json_parser_gen {
             ),
             $crate::json::close_brace_parser()
         )
+    };
+}
+
+#[macro_export]
+macro_rules! const_if {
+    (true, $e1:expr, $e2:expr) => {
+        $e1
+    };
+    (false, $e1:expr, $e2:expr) => {
+        $e2
+    };
+}
+
+#[macro_export]
+macro_rules! type_if_optional {
+    (true, $t:ty) => {
+        $t
+    };
+    (false, $t:ty) => {
+        $t
+    };
+}
+
+/// Macro to generate a JSON parser for a specific structure. Allows fields out of order.
+///
+/// ### Arguments
+/// * `t` - The type to be parsed.
+/// * `(name, id, id_ty, optional, parser)` - a variadic list of the elements to parse.
+///   `name`: the field to parse
+///   `id`: the field name in the result type
+///   `id_ty`: The type of the field
+///   `optional`: If the field is optional
+///   `parser`: The parser for the field
+///
+/// ### Example
+/// ```
+/// use anpa::{core::parse, json_parser_gen_ng, json, number};
+/// struct Person {
+///     name: String,
+///     age: u8
+/// }
+///
+/// // The below will parse a `Person` object from a JSON string of the form:
+/// // `{"name": "John Doe", "age": 27}`
+/// let person_parser = json_parser_gen_ng!(Person,
+///     ("name", name, String, false, json::string_parser()),
+///     ("age", age, u8, false, number::integer())
+/// );
+///
+/// let person = parse(person_parser, r#"{"age": 28, "name": "Anpa"}"#).result.unwrap();
+/// assert_eq!(person.name, "Anpa");
+/// assert_eq!(person.age, 28);
+/// ```
+#[macro_export]
+macro_rules! json_parser_gen_ng {
+    ($t:ident, $(($name:literal, $id:ident, $id_ty:ty, $optional:ident, $parser:expr)),* $(,)?) => {
+        $crate::create_parser!(s, {
+            #[allow(non_camel_case_types)]
+            enum Variant {
+                $($id($crate::type_if_optional!($optional, $id_ty)),)*
+                Other
+            }
+
+            $(
+                let $id = $crate::combinators::map(
+                    $crate::right!(
+                        $crate::skip!(concat!('\"', $name, '\"')),
+                        $crate::json::eat($crate::skip!(':')),
+                        $crate::json::eat($crate::const_if!($optional, $crate::json::option_parser($parser), $parser))), Variant::$id
+                );
+            )*
+
+            // Parser used for fields not defined by the schema. Will be ignored
+            let other = $crate::combinators::map(
+                $crate::right!(
+                    $crate::json::string_parser::<&str>(),
+                    $crate::json::eat($crate::skip!(':')),
+                    $crate::json::eat($crate::json::value_parser::<&str>())), |_| Variant::Other);
+
+            $crate::json::eat($crate::skip!('{'))(s)?;
+
+            let all_parser = $crate::or!($($id),*, other);
+
+            $(
+                let mut $id: Option<$crate::type_if_optional!($optional, $id_ty)> = $crate::const_if!($optional, Some(None), None);
+            )*
+
+            loop {
+                $crate::whitespace::skip_ascii_whitespace()(s);
+
+                let Some(res) = all_parser(s) else {
+                    break;
+                };
+
+                match res {
+                    $(Variant::$id(inner) => $id = Some(inner),)*
+                    Variant::Other => {}
+                }
+
+                if $crate::json::eat($crate::skip!(','))(s).is_none() {
+                    break;
+                }
+            }
+
+            $crate::json::eat($crate::skip!('}'))(s)?;
+
+            #[allow(unused)]
+            fn unwrap<X>(o: Option<X>, n: &'static str) -> Option<X> {
+                match o {
+                    a@Some(_) => a,
+                    None => {
+                        // Here some message could be returned
+                        None
+                    }
+                }
+            }
+
+            Some($t { $($id: unwrap($id, $name)?),* })
+        })
     };
 }
