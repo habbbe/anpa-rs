@@ -147,7 +147,7 @@ macro_rules! internal_json_field {
 ///
 /// ### Example
 /// ```
-/// use anpa::{core::parse, json_parser_gen, json, number};
+/// use anpa::{core::parse_state, json_parser_gen, json, number};
 /// struct Person {
 ///     name: String,
 ///     age: u8
@@ -160,7 +160,8 @@ macro_rules! internal_json_field {
 ///     ("age", number::integer())
 /// );
 ///
-/// let person = parse(person_parser, r#"{"name": "Anpa", "age": 28}"#).result.unwrap();
+/// let mut errors = String::new();
+/// let person = parse_state(person_parser, r#"{"name": "Anpa", "age": 28}"#, &mut errors).result.unwrap();
 /// assert_eq!(person.name, "Anpa");
 /// assert_eq!(person.age, 28);
 /// ```
@@ -187,7 +188,7 @@ macro_rules! const_if {
         $e1
     };
     (false, $e1:expr, $e2:expr) => {
-        const_if!($e1, $e2)
+        $crate::const_if!($e1, $e2)
     };
     ($e1:expr, $e2:expr) => {
         $e2
@@ -200,7 +201,7 @@ macro_rules! type_if_optional {
         Option<$t>
     };
     (false, $t:ty) => {
-        type_if_optional!($t)
+        $crate::type_if_optional!($t)
     };
     ($t:ty) => {
         $t
@@ -222,7 +223,7 @@ macro_rules! type_if_optional {
 ///
 /// ### Example
 /// ```
-/// use anpa::{core::parse, json_parser_gen_ng, json, number};
+/// use anpa::{core::parse_state, json_parser_gen_ng, json, number};
 /// struct Person {
 ///     name: String,
 ///     age: u8
@@ -231,11 +232,12 @@ macro_rules! type_if_optional {
 /// // The below will parse a `Person` object from a JSON string of the form:
 /// // `{"name": "John Doe", "age": 27}`
 /// let person_parser = json_parser_gen_ng!(Person,
-///     ("name", name, String, false, json::string_parser(), optional: false),
-///     ("age", age, u8, false, number::integer())
+///     ("name", name, String, json::string_parser(), optional: false),
+///     ("age", age, u8, number::integer())
 /// );
 ///
-/// let person = parse(person_parser, r#"{"age": 28, "name": "Anpa"}"#).result.unwrap();
+/// let mut errors = String::new();
+/// let person = parse_state(person_parser, r#"{"age": 28, "name": "Anpa"}"#, &mut errors).result.unwrap();
 /// assert_eq!(person.name, "Anpa");
 /// assert_eq!(person.age, 28);
 /// ```
