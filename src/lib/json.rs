@@ -243,12 +243,20 @@ macro_rules! type_if_optional {
 macro_rules! json_parser_gen_ng {
     ($t:ident, $(($name:literal, $id:ident, $id_ty:ty, $parser:expr $(, optional: $optional:tt)?)),* $(,)?) => {
         $crate::create_parser!(s, {
+            // Internal enum that contains a variant for each field, plus a wildcard that arbitrary
+            // values can be parsed into.
+
+            // Simplify implementation by allowing the field ID to be reused as the variant name,
+            // even though it's likely not CamelCase.
             #[allow(non_camel_case_types)]
             enum Variant {
                 $($id($crate::type_if_optional!($($optional,)? $id_ty)),)*
                 Other
             }
 
+            // Create the parser for each field on the format `"field_name": type_parser`.
+            // For optional fields, the parser will be wrapped in an `option_parser`.
+            // Each parser will return successful results in its respective `Variant`.
             $(
                 let $id = $crate::combinators::map(
                     $crate::right!(
@@ -269,6 +277,9 @@ macro_rules! json_parser_gen_ng {
 
             let all_parser = $crate::or!($($id),*, other);
 
+            // Create a `Option<Type>` variable for all fields.
+            // If optional the type will instead be `Option<Option<Type>>`, and
+            // will be initialized as the successful status `Some(None)`.
             $(
                 let mut $id: Option<$crate::type_if_optional!($($optional,)? $id_ty)> =
                     $crate::const_if!($($optional,)? Some(None), None);
@@ -283,7 +294,7 @@ macro_rules! json_parser_gen_ng {
 
                 match res {
                     $(Variant::$id(inner) => $id = Some(inner),)*
-                    Variant::Other => {}
+                    _ => {}
                 }
 
                 if $crate::json::comma_parser()(s).is_none() {
@@ -293,35 +304,20 @@ macro_rules! json_parser_gen_ng {
 
             $crate::json::close_brace_parser()(s)?;
 
-            #[allow(unused)]
-            fn unwrap<I: $crate::slicelike::SliceLike, X>(s: &mut AnpaState<I, String>, o: Option<X>, n: &'static str) -> Option<X> {
-                match o {
-                    a@Some(_) => a,
-                    None => {
-                        if s.user_state.is_empty() {
-                            *s.user_state = format!("Field {} missing", n);
-                        }
-                        None
-                    }
-                }
-            }
-
-            let mut abort = false;
+            let mut success = true;
 
             $(
                 if $id.is_none() {
                     s.user_state.push_str(
                         concat!("Field \"", $name, "\" missing or invalid in ", stringify!($t) ,"\n"));
-                    abort = true;
+                    success = false;
                 }
             )*
 
-            if abort {
-                None
-            } else {
-                // SAFETY: All elements are checked above
-                Some($t { $($id: unsafe { $id.unwrap_unchecked() }),* })
-            }
+            success.then(|| {
+                // SAFETY: All fields are checked above.
+                $t { $($id: unsafe { $id.unwrap_unchecked() }),* }
+            })
         })
     };
 }
