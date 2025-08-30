@@ -147,7 +147,7 @@ macro_rules! internal_json_field {
 ///
 /// ### Example
 /// ```
-/// use anpa::{core::parse_state, json_parser_gen, json, number};
+/// use anpa::{core::parse_default, json_parser_gen, json, number};
 /// struct Person {
 ///     name: String,
 ///     age: u8
@@ -160,8 +160,7 @@ macro_rules! internal_json_field {
 ///     ("age", number::integer())
 /// );
 ///
-/// let mut errors = String::new();
-/// let person = parse_state(person_parser, r#"{"name": "Anpa", "age": 28}"#, &mut errors).result.unwrap();
+/// let person = parse_default(person_parser, r#"{"name": "Anpa", "age": 28}"#).result.unwrap();
 /// assert_eq!(person.name, "Anpa");
 /// assert_eq!(person.age, 28);
 /// ```
@@ -223,7 +222,7 @@ macro_rules! type_if_optional {
 ///
 /// ### Example
 /// ```
-/// use anpa::{core::parse_state, json_parser_gen_ng, json, number};
+/// use anpa::{core::parse_default, json_parser_gen_ng, json, number};
 /// struct Person {
 ///     name: String,
 ///     age: u8
@@ -236,8 +235,7 @@ macro_rules! type_if_optional {
 ///     ("age", age, u8, number::integer())
 /// );
 ///
-/// let mut errors = String::new();
-/// let person = parse_state(person_parser, r#"{"age": 28, "name": "Anpa"}"#, &mut errors).result.unwrap();
+/// let person = parse_default(person_parser, r#"{"age": 28, "name": "Anpa"}"#).result.unwrap();
 /// assert_eq!(person.name, "Anpa");
 /// assert_eq!(person.age, 28);
 /// ```

@@ -119,8 +119,7 @@ fn bench_json() {
 
     let (d, _) = bench_fun(10000, || {
         for _ in 0..10 {
-            let mut msg: String = "".to_string();
-            p.parse_state(&string, &mut msg).result.unwrap();
+            p.parse_default(&string).result.unwrap();
         }
     });
 
@@ -208,8 +207,7 @@ fn bench_json_derive() {
 
     let (d, _) = bench_fun(10000, || {
         for _ in 0..10 {
-            let mut msg: String = "".to_string();
-            parse_state(db_parser, &string, &mut msg).result.unwrap();
+            parse_default(db_parser, &string).result.unwrap();
         }
     });
 
@@ -222,8 +220,7 @@ fn bench_json_derive2() {
 
     let (d, _) = bench_fun(10000, || {
         for _ in 0..10 {
-            let mut msg: String = "".to_string();
-            let res = db_parser().parse_state(&string, &mut msg);
+            let res = db_parser().parse_default(&string);
             if res.result.is_none() {
                 println!("{}", res.state.user_state)
             }
