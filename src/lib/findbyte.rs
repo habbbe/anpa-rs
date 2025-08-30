@@ -318,13 +318,13 @@ pub const fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> i
 #[inline]
 pub const fn until_byte<I, S>(finder: impl ByteFinder,
                               include_result: bool,
-                              consume_result: bool) -> impl Parser<I, I, S>
+                              consume_result: bool) -> impl Parser<I, (u8, I), S>
     where I: SliceLike + AsRef<[u8]> {
     create_parser!(s, {
-        let (_, pos) = get_byte_pos(s.input, finder)?;
+        let (byte, pos) = get_byte_pos(s.input, finder)?;
         let res = s.input.slice_to(pos + include_result.into());
         s.input = s.input.slice_from(pos + consume_result.into());
-        Some(res)
+        Some((byte, res))
     })
 }
 
