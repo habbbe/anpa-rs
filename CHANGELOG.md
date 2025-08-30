@@ -7,6 +7,10 @@
 ### New features
 - New variadic parser `bind!`
 - Add posibility to use & to combine `ByteFinder`s
+- Added new parse function `parse_state_owned` that takes ownership
+  of the user state while parsing.
+- Added new parse function `parse_default` that performs a parse using
+  an owned default (via `Default`) user state.
 
 ## 0.10.0
 

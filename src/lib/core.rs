@@ -9,6 +9,15 @@ pub struct AnpaState<'a, I: SliceLike, S> {
     pub user_state: &'a mut S,
 }
 
+/// A convenience state for owned user states.
+pub struct AnpaStateOwned<I: SliceLike, S> {
+    /// The current state of the input under parse.
+    pub input: I,
+
+    /// The provided user state (if any).
+    pub user_state: S,
+}
+
 /// The final result of a parse.
 pub struct AnpaResult<T, O> {
     /// The final state of the parse.
@@ -63,6 +72,10 @@ pub trait ParserExt<I: SliceLike, O, S>: Parser<I, O, S> {
     /// See [`crate::core::parse_state`].
     fn parse_state(self, input: I, user_state: &'_ mut S) -> AnpaResult<AnpaState<'_, I, S>, O>;
 
+    /// Perform a parse with provided user state. Moves ownership of the state to the parser.
+    /// See [`crate::core::parse_state`].
+    fn parse_state_owned(self, input: I, user_state: S) -> AnpaResult<AnpaStateOwned<I, S>, O>;
+
     #[cfg(feature = "std")]
     /// Add some simple debug information to this parser.
     fn debug(self, name: &'static str) -> impl Parser<I, O, S>;
@@ -79,6 +92,20 @@ impl<I: SliceLike, O, P: Parser<I, O, ()>> ParserExtNoState<I, O> for P {
     #[inline(always)]
     fn parse(self, input: I) -> AnpaResult<I, O> {
         parse(self, input)
+    }
+}
+
+/// Conveience extension trait for starting a parse with a default state.
+pub trait ParserExtDefaultState<I: SliceLike, O, S: Default>: Parser<I, O, S> {
+    /// Perform a parse.
+    /// See [`crate::core::parse`].
+    fn parse_default(self, input: I) -> AnpaResult<AnpaStateOwned<I, S>, O>;
+}
+
+impl<I: SliceLike, O, S: Default, P: Parser<I, O, S>> ParserExtDefaultState<I, O, S> for P {
+    #[inline(always)]
+    fn parse_default(self, input: I) -> AnpaResult<AnpaStateOwned<I, S>, O> {
+        parse_default(self, input)
     }
 }
 
@@ -132,6 +159,11 @@ impl<I: SliceLike, O, S, P: Parser<I, O, S>> ParserExt<I, O ,S> for P {
         parse_state(self, input, user_state)
     }
 
+    #[inline(always)]
+    fn parse_state_owned(self, input: I, user_state: S) -> AnpaResult<AnpaStateOwned<I, S>, O> {
+        parse_state_owned(self, input, user_state)
+    }
+
     #[cfg(feature = "std")]
     fn debug(self, name: &'static str) -> impl Parser<I, O, S> {
         use std::println;
@@ -162,6 +194,38 @@ pub fn parse_state<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
     let mut parser_state = AnpaState { input, user_state };
     let result = p(&mut parser_state);
     AnpaResult { state: parser_state, result }
+}
+
+/// Perform a parse with provided user state.
+///
+/// This version takes ownership of the state and returns it.
+///
+/// Also available as an extension function: [`parse_state_owned`](crate::core::ParserExt::parse_state_owned)
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `input` - the input to be parsed
+/// * `user_state` - the user state
+#[inline]
+pub fn parse_state_owned<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
+                                             input: I,
+                                             mut user_state: S) -> AnpaResult<AnpaStateOwned<I, S>, O> {
+    let mut parser_state = AnpaState { input, user_state: &mut user_state };
+    let result = p(&mut parser_state);
+    AnpaResult { state: AnpaStateOwned { input: parser_state.input, user_state: user_state }, result }
+}
+
+/// Perform a parse with a default user state.
+///
+/// Also available as an extension function: [`parse_default`](crate::core::ParserExtDefaultState::parse_default)
+///
+/// ### Arguments
+/// * `p` - the parser
+/// * `input` - the input to be parsed
+#[inline(always)]
+pub fn parse_default<I: SliceLike, O, S: Default>(p: impl Parser<I, O, S>,
+                                                  input: I) -> AnpaResult<AnpaStateOwned<I, S>, O> {
+    parse_state_owned(p, input, S::default())
 }
 
 /// Perform a parse.
