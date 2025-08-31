@@ -2,7 +2,7 @@ use anpa::core::{*};
 use anpa::{*};
 use anpa::combinators::{*};
 use anpa::parsers::{*};
-use json::{vec_parser, bool_parse, option_parser, string_parser};
+use json::{vec_parser, bool_parse, option_parser, string_parser, escaped_string_parser};
 use number::{float, integer};
 
 use std::fs::File;
@@ -154,20 +154,20 @@ struct Db {
 
 fn address_parser<'a>() -> impl StrParser<'a, Address, String> {
     json_parser_gen_ng!(Address,
-        ("street", street, String, string_parser()),
-        ("zip", zip, String, string_parser()),
+        ("street", street, String, escaped_string_parser()),
+        ("zip", zip, String, escaped_string_parser()),
     )
 }
 
 fn person_parser<'a>() -> impl StrParser<'a, Person, String> {
     json_parser_gen_ng!(Person,
-        ("name", name, String, string_parser()),
-        ("middlename", middle_name, String, string_parser(), optional: true),
+        ("name", name, String, escaped_string_parser()),
+        ("middlename", middle_name, String, escaped_string_parser(), optional: true),
         ("age", age, u8, integer()),
         ("score", score, f64, float()),
-        ("escape\\n", escape, String, string_parser()),
+        ("escape\\n", escape, String, escaped_string_parser()),
         ("member", member, bool, bool_parse()),
-        ("favorite_emojis", favorite_emojis, String, string_parser()),
+        ("favorite_emojis", favorite_emojis, String, escaped_string_parser()),
         ("hasPaid", has_paid, bool, bool_parse()),
         ("address", address, Address, address_parser())
     )

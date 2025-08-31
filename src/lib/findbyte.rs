@@ -193,7 +193,7 @@ pub const fn gt(b: u8) -> GtByte {
 /// Helper function for performing the byte search and returning the
 /// result along with its position.
 #[inline]
-fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
+pub fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
     where I: SliceLike + AsRef<[u8]>, B: ByteFinder {
     let mut pos = 0;
     let bytes = input.as_ref();
@@ -311,9 +311,9 @@ pub const fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> i
 /// let input2 = "ab\\cd";
 /// let input3 = "a\nbcd";
 ///
-/// assert_eq!(parse(p, input1).result, Some("abcd"));
-/// assert_eq!(parse(p, input2).result, Some("ab"));
-/// assert_eq!(parse(p, input3).result, Some("a"));
+/// assert_eq!(parse(p, input1).result, Some((b'\"', "abcd")));
+/// assert_eq!(parse(p, input2).result, Some((b'\\', "ab")));
+/// assert_eq!(parse(p, input3).result, Some((b'\n', "a")));
 /// ```
 #[inline]
 pub const fn until_byte<I, S>(finder: impl ByteFinder,
