@@ -94,8 +94,9 @@ impl<'a> SliceLike for &'a str {
 
     fn slice_first_if(self, pred: impl FnOnce(Self::RefItem) -> bool + Copy) -> Option<(Self::RefItem, Self)> {
         let mut chars = self.chars();
-        let first = chars.next()?;
-        pred(first).then_some((first, chars.as_str()))
+        chars.next()
+            .filter(|c| pred(*c))
+            .map(|c| (c, chars.as_str()))
     }
 
     fn slice_find_pred(self, pred: impl FnMut(Self::RefItem) -> bool + Copy) -> Option<usize> {
