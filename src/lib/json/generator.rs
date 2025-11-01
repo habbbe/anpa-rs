@@ -181,20 +181,18 @@ macro_rules! json_parser_gen_ng {
 
             $crate::json::close_brace_parser()(s)?;
 
-            let mut success = true;
-
-            $(
-                if $id.is_none() {
-                    s.user_state.push_str(
-                        concat!("Field \"", $name, "\" missing or invalid in ", stringify!($t) ,"\n"));
-                    success = false;
+            match ($($id),*) {
+                ($(Some($id)),*) => Some($t { $($id: $id),* }),
+                ($($id),*) => {
+                    $(
+                        if $id.is_none() {
+                            s.user_state.push_str(
+                                concat!("Field \"", $name, "\" missing or invalid in ", stringify!($t) ,"\n"));
+                        }
+                    )*
+                    None
                 }
-            )*
-
-            success.then(|| {
-                // SAFETY: All fields are checked above.
-                $t { $($id: unsafe { $id.unwrap_unchecked() }),* }
-            })
+            }
         })
     };
 }

@@ -1,6 +1,6 @@
 use std::string::String;
 
-use crate::{core::{Parser, StrParser}, findbyte::get_byte_pos, json::{string_element_finder, JsonParser}, slicelike::SliceLike};
+use crate::{core::StrParser, findbyte::get_byte_pos, json::string_element_finder, slicelike::SliceLike};
 
 fn parse_escaped(mut input: &str) -> Option<(String, &str)> {
     let mut result = String::new();
