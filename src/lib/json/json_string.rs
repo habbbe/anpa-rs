@@ -1,15 +1,56 @@
 use std::string::String;
 
-use crate::{core::StrParser, findbyte::get_byte_pos, json::string_element_finder, slicelike::SliceLike};
+use crate::{charlike::CharLike, core::StrParser, findbyte::get_byte_pos, json::string_element_finder, prefix::Prefix, slicelike::SliceLike};
 
-fn parse_escaped(mut input: &str) -> Option<(String, &str)> {
+trait ToJsonString: SliceLike<RefItem: CharLike> + AsRef<[u8]> {
+    fn skip_quote(&self) -> Option<Self>;
+    fn to_str(&self) -> Option<&str>;
+    fn four_chars(&self) -> Option<(&str, Self)>;
+}
+
+impl ToJsonString for &str {
+    #[inline]
+    fn skip_quote(&self) -> Option<Self> {
+        self.strip_prefix('"')
+    }
+
+    #[inline]
+    fn to_str(&self) -> Option<&str> {
+        Some(self)
+    }
+
+    #[inline]
+    fn four_chars(&self) -> Option<(&str, Self)> {
+        self.split_at_checked(4)
+    }
+}
+
+impl ToJsonString for &[u8] {
+    #[inline]
+    fn skip_quote(&self) -> Option<Self> {
+        b'"'.skip_prefix(self)
+    }
+
+    #[inline]
+    fn to_str(&self) -> Option<&str> {
+        str::from_utf8(self).ok()
+    }
+
+    #[inline]
+    fn four_chars(&self) -> Option<(&str, Self)> {
+        let (unicode, rest) = self.split_at_checked(4)?;
+        Some((str::from_utf8(unicode).ok()?, rest))
+    }
+}
+
+fn parse_escaped<I: ToJsonString>(mut input: I) -> Option<(String, I)> {
     let mut result = String::new();
-    input = input.strip_prefix('"')?;
+    input = input.skip_quote()?;
 
     loop {
         let (b, pos) = get_byte_pos(input, string_element_finder())?;
-        result.push_str(&input[..pos]);
-        input = &input[pos + 1..];
+        result.push_str(input.slice_to(pos).to_str()?);
+        input = input.slice_from(pos + true.into());
 
         match b {
             b'"' => {
@@ -19,6 +60,7 @@ fn parse_escaped(mut input: &str) -> Option<(String, &str)> {
             b'\\' => {
                 // Parse escaped
                 let (first, mut rest) = input.slice_first_if(|_| true)?;
+                let first = first.as_char();
                 match first {
                     '\\' | '"' | '/' => result.push(first),
                     'b' => result.push('\x08'),
@@ -28,26 +70,23 @@ fn parse_escaped(mut input: &str) -> Option<(String, &str)> {
                     't' => result.push('\t'),
                     'u' => {
                         // Unicode routine
-                        let unicode;
-                        (unicode, rest) = rest.split_at_checked(4)?;
+                        let (unicode, new_rest) = rest.four_chars()?;
                         let scalar = u16::from_str_radix(unicode, 16).ok()?;
                         let character = char::from_u32(scalar as u32)?;
                         result.push(character);
-
+                        rest = new_rest;
                     }
-                    _ => {
-                        return None
-                    }
+                    _ => break
                 }
 
                 input = rest;
             }
 
-            _ => {
-                return None;
-            }
+            _ => break
         }
     }
+
+    None
 }
 
 /// A parser for JSON strings with escaped characters translated to their
