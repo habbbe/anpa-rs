@@ -1,42 +1,45 @@
 use std::string::String;
 
-use crate::{charlike::CharLike, core::StrParser, findbyte::get_byte_pos, json::string_element_finder, prefix::Prefix, slicelike::SliceLike};
+use crate::{charlike::CharLike, core::Parser, findbyte::get_byte_pos, json::string_element_finder, prefix::Prefix, slicelike::SliceLike};
 
-trait ToJsonString: SliceLike<RefItem: CharLike> + AsRef<[u8]> {
+pub trait ToJsonString: SliceLike<RefItem: CharLike> + AsRef<[u8]> {
+    fn parse(input: Self) -> Option<(String, Self)>;
     fn skip_quote(&self) -> Option<Self>;
     fn to_str(&self) -> Option<&str>;
     fn four_chars(&self) -> Option<(&str, Self)>;
 }
 
 impl ToJsonString for &str {
-    #[inline]
-    fn skip_quote(&self) -> Option<Self> {
-        self.strip_prefix('"')
+    fn parse(input: Self) -> Option<(String, Self)> {
+        parse_escaped(input)
     }
 
-    #[inline]
+    fn skip_quote(&self) -> Option<Self> {
+        '"'.skip_prefix(self)
+    }
+
     fn to_str(&self) -> Option<&str> {
         Some(self)
     }
 
-    #[inline]
     fn four_chars(&self) -> Option<(&str, Self)> {
         self.split_at_checked(4)
     }
 }
 
 impl ToJsonString for &[u8] {
-    #[inline]
+    fn parse(input: Self) -> Option<(String, Self)> {
+        parse_escaped(input)
+    }
+
     fn skip_quote(&self) -> Option<Self> {
         b'"'.skip_prefix(self)
     }
 
-    #[inline]
     fn to_str(&self) -> Option<&str> {
         str::from_utf8(self).ok()
     }
 
-    #[inline]
     fn four_chars(&self) -> Option<(&str, Self)> {
         let (unicode, rest) = self.split_at_checked(4)?;
         Some((str::from_utf8(unicode).ok()?, rest))
@@ -91,10 +94,10 @@ fn parse_escaped<I: ToJsonString>(mut input: I) -> Option<(String, I)> {
 
 /// A parser for JSON strings with escaped characters translated to their
 /// corresponding UTF-8 characters.
-pub const fn escaped_string_parser<'a, S>() -> impl StrParser<'a, String, S> {
+pub const fn escaped_string_parser<I: ToJsonString, S>() -> impl Parser<I, String, S> {
     create_parser!(s, {
         let res;
-        (res, s.input) = parse_escaped(s.input)?;
+        (res, s.input) = I::parse(s.input)?;
         Some(res)
     })
 }
@@ -105,12 +108,18 @@ mod tests {
 
     use crate::{core::ParserExtNoState, json::escaped_string_parser};
 
+    const RAW_STRING: &str = r#""some text \"in quotes\"\nnext tab\t and euro \u20AC""#;
+    const RESULT_STRING: &str = "some text \"in quotes\"\nnext tab\t and euro €";
 
     #[test]
     fn formatted_string() {
-        let input = r#""some text \"in quotes\"\nnext tab\t and euro \u20AC""#;
+        let res = escaped_string_parser().parse(RAW_STRING);
+        assert_eq!(res.result, Some(RESULT_STRING.to_string()));
+    }
 
-        let res = escaped_string_parser().parse(input);
-        assert_eq!(res.result, Some("some text \"in quotes\"\nnext tab\t and euro €".to_string()));
+    #[test]
+    fn formatted_bytes() {
+        let res = escaped_string_parser().parse(RAW_STRING.as_bytes());
+        assert_eq!(res.result, Some(RESULT_STRING.to_string()));
     }
 }
