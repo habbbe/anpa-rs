@@ -2,51 +2,51 @@ use std::string::String;
 
 use crate::{charlike::CharLike, core::Parser, findbyte::get_byte_pos, json::string_element_finder, prefix::Prefix, slicelike::SliceLike};
 
-pub trait ToJsonString: SliceLike<RefItem: CharLike> + AsRef<[u8]> {
+pub trait ToJsonString<'a>: SliceLike<RefItem: CharLike> + AsRef<[u8]> {
     fn parse(input: Self) -> Option<(String, Self)>;
-    fn skip_quote(&self) -> Option<Self>;
-    fn to_str(&self) -> Option<&str>;
-    fn four_chars(&self) -> Option<(&str, Self)>;
+    fn skip_quote(self) -> Option<Self>;
+    fn to_str(self) -> Option<&'a str>;
+    fn four_chars(self) -> Option<(&'a str, Self)>;
 }
 
-impl ToJsonString for &str {
+impl<'a> ToJsonString<'a> for &'a str {
     fn parse(input: Self) -> Option<(String, Self)> {
         parse_escaped(input)
     }
 
-    fn skip_quote(&self) -> Option<Self> {
+    fn skip_quote(self) -> Option<Self> {
         '"'.skip_prefix(self)
     }
 
-    fn to_str(&self) -> Option<&str> {
+    fn to_str(self) -> Option<&'a str> {
         Some(self)
     }
 
-    fn four_chars(&self) -> Option<(&str, Self)> {
+    fn four_chars(self) -> Option<(&'a str, Self)> {
         self.split_at_checked(4)
     }
 }
 
-impl ToJsonString for &[u8] {
+impl<'a> ToJsonString<'a> for &'a [u8] {
     fn parse(input: Self) -> Option<(String, Self)> {
         parse_escaped(input)
     }
 
-    fn skip_quote(&self) -> Option<Self> {
+    fn skip_quote(self) -> Option<Self> {
         b'"'.skip_prefix(self)
     }
 
-    fn to_str(&self) -> Option<&str> {
+    fn to_str(self) -> Option<&'a str> {
         str::from_utf8(self).ok()
     }
 
-    fn four_chars(&self) -> Option<(&str, Self)> {
+    fn four_chars(self) -> Option<(&'a str, Self)> {
         let (unicode, rest) = self.split_at_checked(4)?;
-        Some((str::from_utf8(unicode).ok()?, rest))
+        Some((unicode.to_str()?, rest))
     }
 }
 
-fn parse_escaped<I: ToJsonString>(mut input: I) -> Option<(String, I)> {
+fn parse_escaped<'a, I: ToJsonString<'a>>(mut input: I) -> Option<(String, I)> {
     let mut result = String::new();
     input = input.skip_quote()?;
 
@@ -73,11 +73,11 @@ fn parse_escaped<I: ToJsonString>(mut input: I) -> Option<(String, I)> {
                     't' => result.push('\t'),
                     'u' => {
                         // Unicode routine
-                        let (unicode, new_rest) = rest.four_chars()?;
+                        let unicode;
+                        (unicode, rest) = rest.four_chars()?;
                         let scalar = u16::from_str_radix(unicode, 16).ok()?;
                         let character = char::from_u32(scalar as u32)?;
                         result.push(character);
-                        rest = new_rest;
                     }
                     _ => break
                 }
@@ -94,7 +94,7 @@ fn parse_escaped<I: ToJsonString>(mut input: I) -> Option<(String, I)> {
 
 /// A parser for JSON strings with escaped characters translated to their
 /// corresponding UTF-8 characters.
-pub const fn escaped_string_parser<I: ToJsonString, S>() -> impl Parser<I, String, S> {
+pub const fn escaped_string_parser<'a, I: ToJsonString<'a>, S>() -> impl Parser<I, String, S> {
     create_parser!(s, {
         let res;
         (res, s.input) = I::parse(s.input)?;
