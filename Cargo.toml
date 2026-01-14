@@ -27,10 +27,14 @@ name = "anpa_bench"
 path = "bench/bin.rs"
 required-features = ["build_bench"]
 
+[dependencies]
+anpa_json_derive = { path = "./json_derive", optional = true }
+
 [features]
 alloc = []
 std = ["alloc"]
 json = ["alloc"]
 semver = []
+json_derive = ["anpa_json_derive"]
 default = ["std"]
-build_bench = ["std", "json", "semver"]
+build_bench = ["std", "json", "semver", "json_derive"]

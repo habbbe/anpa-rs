@@ -12,8 +12,8 @@ macro_rules! internal_json_field {
 
 /// Macro to generate a JSON parser for a specific structure. This parser
 /// expects the exact structure given, i.e. no out-of-order fields, missing
-/// fields, or additional fields. It will provide slightly better performance
-/// than [`json_parser_gen_ng`].
+/// fields, or additional fields. It will provide slightly better performance than
+/// [`json_parser_gen`].
 ///
 /// ### Arguments
 /// * `f` - A function returning the structure from the arguments parsed by the
@@ -24,7 +24,7 @@ macro_rules! internal_json_field {
 ///
 /// ### Example
 /// ```
-/// use anpa::{core::parse_default, json_parser_gen, json, number};
+/// use anpa::{core::parse_default, json_parser_gen_exact, json, number};
 /// struct Person {
 ///     name: String,
 ///     age: u8
@@ -32,7 +32,7 @@ macro_rules! internal_json_field {
 ///
 /// // The below will parse a `Person` object from a JSON string of the form:
 /// // `{"name": "John Doe", "age": 27}`
-/// let person_parser = json_parser_gen!(|name, age| Person { name, age },
+/// let person_parser = json_parser_gen_exact!(|name, age| Person { name, age },
 ///     ("name", json::string_parser()),
 ///     ("age", number::integer())
 /// );
@@ -42,8 +42,8 @@ macro_rules! internal_json_field {
 /// assert_eq!(person.age, 28);
 /// ```
 #[macro_export]
-macro_rules! json_parser_gen {
-    ($f:expr, ($id:expr, $parser:expr), $($rest:tt),*) => {
+macro_rules! json_parser_gen_exact {
+    ($f:expr, ($id:expr, $parser:expr) $(, $rest:tt)* $(,)?) => {
         $crate::combinators::middle(
             $crate::json::open_brace_parser(),
             $crate::map!($f,
@@ -85,7 +85,7 @@ macro_rules! type_if_optional {
 }
 
 /// Macro to generate a JSON parser for a specific structure. Allows fields out of order.
-/// 
+///
 /// The `optional` field can be omitted, and the field will then be considered mandatory.
 ///
 /// ### Arguments
@@ -99,7 +99,7 @@ macro_rules! type_if_optional {
 ///
 /// ### Example
 /// ```
-/// use anpa::{core::parse_default, json_parser_gen_ng, json, number};
+/// use anpa::{core::parse_default, json_parser_gen, json, number};
 /// struct Person {
 ///     name: String,
 ///     age: u8
@@ -107,7 +107,7 @@ macro_rules! type_if_optional {
 ///
 /// // The below will parse a `Person` object from a JSON string of the form:
 /// // `{"name": "John Doe", "age": 27}`
-/// let person_parser = json_parser_gen_ng!(Person,
+/// let person_parser = json_parser_gen!(Person,
 ///     ("name", name, String, json::string_parser(), optional: false),
 ///     ("age", age, u8, number::integer())
 /// );
@@ -117,8 +117,8 @@ macro_rules! type_if_optional {
 /// assert_eq!(person.age, 28);
 /// ```
 #[macro_export]
-macro_rules! json_parser_gen_ng {
-    ($t:ident, $(($name:literal, $id:ident, $id_ty:ty, $parser:expr $(, optional: $optional:tt)?)),* $(,)?) => {
+macro_rules! json_parser_gen {
+    ($($lt:lifetime,)? $t:ident, $(($name:literal, $id:ident, $id_ty:ty, $parser:expr $(, optional: $optional:tt)?)),* $(,)?) => {
         $crate::create_parser!(s, {
             // Internal enum that contains a variant for each field, plus a wildcard that arbitrary
             // values can be parsed into.
@@ -126,7 +126,7 @@ macro_rules! json_parser_gen_ng {
             // Simplify implementation by allowing the field ID to be reused as the variant name,
             // even though it's likely not CamelCase.
             #[allow(non_camel_case_types)]
-            enum Variant {
+            enum Variant$(<$lt>)? {
                 $($id($crate::type_if_optional!($($optional,)? $id_ty)),)*
                 Other
             }

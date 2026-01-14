@@ -5,9 +5,33 @@ pub mod json_string;
 use alloc::{collections::BTreeMap, vec::Vec};
 pub use json_string::escaped_string_parser;
 
-use crate::{combinators::*, findbyte::{eq, find_byte, lt, ByteFinder}, number::float, parsers::*, whitespace::skip_ascii_whitespace};
+use crate::{combinators::*, core::parse_default, findbyte::{ByteFinder, eq, find_byte, lt}, number::float, parsers::*, whitespace::skip_ascii_whitespace};
 
 create_parser_trait!(JsonParser, str, String, "Trait for a parser intended for JSON parsing, using a String user state to accumulate error messages.");
+
+pub trait JsonDeserializable<'a, T> {
+    fn json_parser() -> impl JsonParser<'a, T>;
+    fn json_parser_exact() -> impl JsonParser<'a, T>;
+}
+
+#[inline(always)]
+fn from_str_internal<'a, T>(p: impl JsonParser<'a, T>, input: &'a str) -> Result<T, String> {
+    let res = parse_default(p, input);
+    match res.result {
+        Some(v) => Ok(v),
+        None => Err(res.state.user_state)
+    }
+}
+
+#[inline]
+pub fn from_str<'a, T: JsonDeserializable<'a, T>>(input: &'a str) -> Result<T, String> {
+    from_str_internal(T::json_parser(), input)
+}
+
+#[inline(always)]
+pub fn from_str_exact<'a, T: JsonDeserializable<'a, T>>(input: &'a  str) -> Result<T, String> {
+    from_str_internal(T::json_parser_exact(), input)
+}
 
 #[derive(Debug)]
 pub enum JsonValue<StringType> {

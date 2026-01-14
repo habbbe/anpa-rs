@@ -2,22 +2,21 @@ use anpa::core::{*};
 use anpa::{*};
 use anpa::combinators::{*};
 use anpa::parsers::{*};
-use json::{vec_parser, bool_parse, option_parser, string_parser, escaped_string_parser};
-use number::{float, integer};
 
 use std::fs::File;
 use std::hint::black_box;
 use std::io::{self, BufRead, Read};
 use std::process::exit;
 use std::time::{Duration, Instant};
+use anpa_json_derive::{Deserialize};
 
 fn main() {
     bench_hubb();
     bench_hubb_handrolled();
     bench_semver();
     bench_json();
-    bench_json_derive();
-    bench_json_derive2();
+    bench_json_derive_default();
+    bench_json_derive_exact();
 }
 
 fn read_file(path: &str) -> io::BufReader<File> {
@@ -126,108 +125,68 @@ fn bench_json() {
     println!("anpa::json: in {}us", d.as_nanos() as f64 / 1000.0);
 }
 
-
 #[allow(dead_code)]
+#[derive(Deserialize)]
 struct Address {
     street: String,
     zip: String
 }
 
 #[allow(dead_code)]
+#[derive(Deserialize)]
 struct Person {
     name: String,
+    #[anpa(rename = "middlename")]
     middle_name: Option<String>,
     age: u8,
     score: f64,
 
+    #[anpa(rename = "escape\\n")]
     escape: String,
     member: bool,
     favorite_emojis: String,
+
+    #[anpa(rename = "hasPaid")]
     has_paid: bool,
     address: Address
 }
 
 #[allow(dead_code)]
+#[derive(Deserialize)]
 struct Db {
     db: Vec<Person>
 }
 
-fn address_parser<'a>() -> impl StrParser<'a, Address, String> {
-    json_parser_gen_ng!(Address,
-        ("street", street, String, escaped_string_parser()),
-        ("zip", zip, String, escaped_string_parser()),
-    )
-}
-
-fn person_parser<'a>() -> impl StrParser<'a, Person, String> {
-    json_parser_gen_ng!(Person,
-        ("name", name, String, escaped_string_parser()),
-        ("middlename", middle_name, String, escaped_string_parser(), optional: true),
-        ("age", age, u8, integer()),
-        ("score", score, f64, float()),
-        ("escape\\n", escape, String, escaped_string_parser()),
-        ("member", member, bool, bool_parse()),
-        ("favorite_emojis", favorite_emojis, String, escaped_string_parser()),
-        ("hasPaid", has_paid, bool, bool_parse()),
-        ("address", address, Address, address_parser())
-    )
-}
-
-fn db_parser<'a>() -> impl StrParser<'a, Db, String> {
-    json_parser_gen_ng!(Db,
-        ("db", db, Vec<Person>, vec_parser(person_parser())),
-    )
-}
-
-fn bench_json_derive() {
-    let address_parser = json_parser_gen!(|street, zip| Address { street, zip },
-        ("street", string_parser()),
-        ("zip", string_parser())
-    );
-
-    let person_parser =
-    json_parser_gen!(|name, middle_name, age, score, escape, member, favorite_emojis, has_paid, address|
-                     Person { name, middle_name, age, score, escape, member, favorite_emojis, has_paid, address},
-        ("name", string_parser()),
-        ("middlename", option_parser(string_parser())),
-        ("age", integer()),
-        ("score", float()),
-        ("escape\\n", string_parser()),
-        ("member", bool_parse()),
-        ("favorite_emojis", string_parser()),
-        ("hasPaid", bool_parse()),
-        ("address", address_parser)
-                );
-
-    let db_parser = json_parser_gen!(|db| Db { db },
-        ("db", vec_parser(person_parser)),);
-
+fn bench_json_derive_default() {
     let mut string = black_box(String::new());
     let _ = read_file("test.json").read_to_string(&mut string);
 
     let (d, _) = bench_fun(10000, || {
         for _ in 0..10 {
-            parse_default(db_parser, &string).result.unwrap();
-        }
-    });
-
-    println!("anpa::json_custom: in {}us", d.as_nanos() as f64 / 1000.0);
-}
-
-fn bench_json_derive2() {
-    let mut string = black_box(String::new());
-    let _ = read_file("test.json").read_to_string(&mut string);
-
-    let (d, _) = bench_fun(10000, || {
-        for _ in 0..10 {
-            let res = db_parser().parse_default(&string);
-            if res.result.is_none() {
-                println!("{}", res.state.user_state)
+            let res = anpa::json::from_str::<Db>(&string);
+            if let Err(err) = res {
+                println!("{}", err)
             }
         }
     });
 
-    println!("anpa::json_derive: in {}us", d.as_nanos() as f64 / 1000.0);
+    println!("anpa::json_derive_default: in {}us", d.as_nanos() as f64 / 1000.0);
+}
+
+fn bench_json_derive_exact() {
+    let mut string = black_box(String::new());
+    let _ = read_file("test.json").read_to_string(&mut string);
+
+    let (d, _) = bench_fun(10000, || {
+        for _ in 0..10 {
+            let res = anpa::json::from_str_exact::<Db>(&string);
+            if let Err(err) = res {
+                println!("{}", err)
+            }
+        }
+    });
+
+    println!("anpa::json_derive_exact: in {}us", d.as_nanos() as f64 / 1000.0);
 }
 
 fn bench_semver() {

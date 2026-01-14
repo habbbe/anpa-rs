@@ -24,3 +24,6 @@ pub mod json;
 
 #[cfg(feature = "semver")]
 pub mod semver;
+
+#[cfg(feature = "json_derive")]
+pub use anpa_json_derive::*;
