@@ -119,7 +119,7 @@ pub const fn array_parser<'a, T: From<&'a str> + Ord>() -> impl JsonParser<'a, J
 pub const fn vec_parser<'a, T>(p: impl JsonParser<'a, T>) -> impl JsonParser<'a, Vec<T>> {
     middle(
         skip!('['),
-        many_to_vec(p, true, separator(comma_parser(), false)),
+        many_to_vec(eat(p), true, separator(comma_parser(), false)),
         eat(skip!(']')))
 }
 
