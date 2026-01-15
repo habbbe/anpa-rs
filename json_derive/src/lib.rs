@@ -185,8 +185,8 @@ fn generate_parser_for_type(ty: &Type, exact: bool, unescaped_string: bool) -> p
             match type_name.as_str() {
                 "String" => if unescaped_string { quote! { ::anpa::json::string_parser() } }
                             else { quote! { ::anpa::json::escaped_string_parser() } },
-                "u8" | "u16" | "u32" | "u64" | "u128" | "usize" |
-                  "i8" | "i16" | "i32" | "i64" | "i128" | "isize" => quote! { ::anpa::number::integer() },
+                "u8" | "u16" | "u32" | "u64" | "u128" | "usize" => quote! { ::anpa::number::integer() },
+                "i8" | "i16" | "i32" | "i64" | "i128" | "isize" => quote! { ::anpa::number::integer_signed() },
                 "f32" | "f64" => quote! { ::anpa::number::float() },
                 "bool" => quote! { ::anpa::json::bool_parse() },
                 "Vec" => {
@@ -198,6 +198,17 @@ fn generate_parser_for_type(ty: &Type, exact: bool, unescaped_string: bool) -> p
                     };
                     let inner_parser = generate_parser_for_type(inner_ty, exact, unescaped_string);
                     quote! { ::anpa::json::vec_parser(#inner_parser) }
+                },
+                "Box" => {
+                    let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {
+                        panic!("Box type must have generic arguments");
+                    };
+                    let Some(syn::GenericArgument::Type(inner_ty)) = args.args.first() else {
+                        panic!("Box must have a type parameter");
+                    };
+                    let inner_parser = generate_parser_for_type(inner_ty, exact, unescaped_string);
+
+                    quote! { ::anpa::combinators::map(#inner_parser, Box::new) }
                 },
                 _ => self_parser
             }
