@@ -43,6 +43,19 @@ pub enum JsonValue<StringType> {
     Arr(Vec<JsonValue<StringType>>)
 }
 
+impl<'a, StringType> JsonDeserializable<'a, JsonValue<StringType>> for JsonValue<StringType>
+where
+    StringType: From<&'a str> + Ord,
+{
+    fn json_parser() -> impl JsonParser<'a, JsonValue<StringType>> {
+        value_parser()
+    }
+
+    fn json_parser_exact() -> impl JsonParser<'a, JsonValue<StringType>> {
+        value_parser()
+    }
+}
+
 pub const fn eat<'a, O>(p: impl JsonParser<'a, O>) -> impl JsonParser<'a, O> {
     right(skip_ascii_whitespace(), p)
 }
