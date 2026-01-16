@@ -122,7 +122,11 @@ const fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISO
             idx += true.into();
 
             if DEC_DIVISOR {
-                dec_divisor *= 10;
+                if CHECKED {
+                    dec_divisor = dec_divisor.checked_mul(10)?;
+                } else {
+                    dec_divisor *= 10;
+                }
             }
 
             Some(())
@@ -154,39 +158,39 @@ const fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISO
 
 /// Parse an unsigned integer. The type of the integer will be inferred from the context.
 #[inline]
-pub const fn integer<O: NumLike,
-                     A: CharLike,
-                     I: SliceLike<RefItem = A>,
-                     S>() -> impl Parser<I, O, S> {
+pub const fn integer_unchecked<O: NumLike,
+                               A: CharLike,
+                               I: SliceLike<RefItem = A>,
+                               S>() -> impl Parser<I, O, S> {
     map(integer_internal::<false, false, false,_,_,_,_>(), |(n, _, _)| n)
 }
 
 /// Parse an unsigned integer. The type of the integer will be inferred from the context.
 /// This parser will fail if the result does not fit in the inferred integer type.
 #[inline]
-pub const fn integer_checked<O: NumLike,
-                             A: CharLike,
-                             I: SliceLike<RefItem = A>,
-                             S>() -> impl Parser<I, O, S> {
+pub const fn integer<O: NumLike,
+                     A: CharLike,
+                     I: SliceLike<RefItem = A>,
+                     S>() -> impl Parser<I, O, S> {
     map(integer_internal::<true, false, false,_,_,_,_>(), |(n, _, _)| n)
 }
 
 /// Parse an signed integer. The type of the integer will be inferred from the context.
 #[inline]
-pub const fn integer_signed<O: NumLike,
-                            A: CharLike,
-                            I: SliceLike<RefItem = A>,
-                            S>() -> impl Parser<I, O, S> {
+pub const fn integer_signed_unchecked<O: NumLike,
+                                      A: CharLike,
+                                      I: SliceLike<RefItem = A>,
+                                      S>() -> impl Parser<I, O, S> {
     map(integer_internal::<false, true, false,_,_,_,_>(), |(n, _, _)| n)
 }
 
 /// Parse an signed integer. The type of the integer will be inferred from the context.
 /// This parser will fail if the result does not fit in the inferred integer type.
 #[inline]
-pub const fn integer_signed_checked<O: NumLike,
-                                    A: CharLike,
-                                    I: SliceLike<RefItem = A>,
-                                    S>() -> impl Parser<I, O, S> {
+pub const fn integer_signed<O: NumLike,
+                            A: CharLike,
+                            I: SliceLike<RefItem = A>,
+                            S>() -> impl Parser<I, O, S> {
     map(integer_internal::<true, true, false,_,_,_,_>(), |(n, _, _)| n)
 }
 
@@ -212,7 +216,7 @@ const fn float_internal<const CHECKED: bool,
 /// This parser is incomplete, in that it will attempt to parse the float as
 /// `isize.usize`, and if the parsed number does not fit within those types, it will panic.
 #[inline]
-pub const fn float<O: FloatLike, A: CharLike, I: SliceLike<RefItem = A>, S>() -> impl Parser<I, O, S> {
+pub const fn float_unchecked<O: FloatLike, A: CharLike, I: SliceLike<RefItem = A>, S>() -> impl Parser<I, O, S> {
     float_internal::<false,_,_,_,_>()
 }
 
@@ -220,7 +224,7 @@ pub const fn float<O: FloatLike, A: CharLike, I: SliceLike<RefItem = A>, S>() ->
 /// This parser is incomplete, in that it will attempt to parse the float as
 /// `isize.usize`, and if the parsed number does not fit within those types, it will fail.
 #[inline]
-pub const fn float_checked<O: FloatLike,
+pub const fn float<O: FloatLike,
                            A: CharLike,
                            I: SliceLike<RefItem = A>,
                            S>() -> impl Parser<I, O, S> {
@@ -229,7 +233,7 @@ pub const fn float_checked<O: FloatLike,
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::parse, number::{integer, integer_checked, float, integer_signed, integer_signed_checked}};
+    use crate::{core::parse, number::{integer, float, integer_signed}};
 
     #[test]
     fn unsigned_integer() {
@@ -238,7 +242,7 @@ mod tests {
         assert_eq!(255, parse(integer(), "255").result.unwrap());
 
         assert!((parse(integer(), "-1").result as Option<u8>).is_none());
-        assert!((parse(integer_checked(), "256").result as Option<u8>).is_none());
+        assert!((parse(integer(), "256").result as Option<u8>).is_none());
     }
 
     #[test]
@@ -250,8 +254,8 @@ mod tests {
 
         assert_eq!(128u8, parse(integer_signed(), "128").result.unwrap());
 
-        assert!((parse(integer_signed_checked(), "-129").result as Option<u8>).is_none());
-        assert!((parse(integer_signed_checked(), "128").result as Option<i8>).is_none());
+        assert!((parse(integer_signed(), "-129").result as Option<u8>).is_none());
+        assert!((parse(integer_signed(), "128").result as Option<i8>).is_none());
     }
 
     #[test]
@@ -266,5 +270,6 @@ mod tests {
         assert_eq!(1.123f32, parse(float(), "1.123").result.unwrap());
         assert_eq!(0.001f32, parse(float(), "0.001").result.unwrap());
         assert_eq!(-0.001f32, parse(float(), "-0.001").result.unwrap());
+        assert_eq!(-0.001f64, parse(float(), "-0.000000000000000000000000000000000000000000000000000000000000000000000000000001").result.unwrap());
     }
 }
