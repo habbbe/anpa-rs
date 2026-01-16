@@ -146,6 +146,10 @@ macro_rules! json_parser_gen {
                 Other
             }
 
+            let str_parser = $crate::json::string_parser::<&str>();
+            let any_parser = $crate::json::eat($crate::json::value_parser::<&str>());
+            let colon_parser = $crate::json::colon_parser();
+
             // Create the parser for each field on the format `"field_name": type_parser`.
             // For optional fields, the parser will be wrapped in an `option_parser`.
             // Each parser will return successful results in its respective `Variant`.
@@ -153,32 +157,34 @@ macro_rules! json_parser_gen {
             // Separate parsing strategies will be employed depending on the number of fields.
             let all_parser = $crate::if_more_than_10_fields!($($name),*;
                 $crate::choose!(
-                    $crate::left!($crate::json::string_parser::<&str>(), $crate::json::colon_parser());
-                    $($name => $crate::combinators::map(
-                            $crate::json::eat($crate::const_if!($($optional,)? $crate::json::option_parser($parser), $parser)),
+                    $crate::left!(str_parser, colon_parser);
+                    $($name => $crate::json::eat(
+                        $crate::combinators::map(
+                            $crate::const_if!($($optional,)? $crate::json::option_parser($parser), $parser),
                             Variant::$id
+                        )
                     ),)*
-                    _ => $crate::combinators::map(
-                            $crate::json::eat($crate::json::value_parser::<&str>()),
-                        |_| Variant::Other
-                    )
+                    _ => $crate::combinators::map(any_parser, |_| Variant::Other)
                 ),
                 ({
                     $(
-                        let $id = $crate::combinators::map(
+                        let $id =
                             $crate::right!(
                                 $crate::skip!(concat!('\"', $name, '\"')),
-                                $crate::json::colon_parser(),
-                                $crate::json::eat($crate::const_if!($($optional,)? $crate::json::option_parser($parser), $parser))), Variant::$id
-                        );
+                                colon_parser,
+                                $crate::json::eat(
+                                    $crate::combinators::map(
+                                        $crate::const_if!($($optional,)? $crate::json::option_parser($parser), $parser),
+                                        Variant::$id
+                                    )
+                                )
+                            );
+                        ;
                     )*
 
                     // Parser used for fields not defined by the schema. Will be ignored
-                    let other = $crate::combinators::map(
-                        $crate::right!(
-                            $crate::json::string_parser::<&str>(),
-                            $crate::json::colon_parser(),
-                            $crate::json::eat($crate::json::value_parser::<&str>())), |_| Variant::Other);
+                    let other = $crate::combinators::map($crate::right!(str_parser, colon_parser, any_parser),
+                                                         |_| Variant::Other);
 
                     $crate::or!($($id),*, other)
                 })
@@ -194,8 +200,11 @@ macro_rules! json_parser_gen {
                     $crate::const_if!($($optional,)? Some(None), None);
             )*
 
+            let whitespace_parser = $crate::whitespace::skip_ascii_whitespace();
+            let comma_parser = $crate::json::comma_parser();
+
             loop {
-                $crate::whitespace::skip_ascii_whitespace()(s);
+                whitespace_parser(s);
 
                 let Some(res) = all_parser(s) else {
                     break;
@@ -206,7 +215,7 @@ macro_rules! json_parser_gen {
                     _ => {}
                 }
 
-                if $crate::json::comma_parser()(s).is_none() {
+                if comma_parser(s).is_none() {
                     break;
                 }
             }
