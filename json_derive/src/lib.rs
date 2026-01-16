@@ -11,20 +11,18 @@ pub fn derive_deserialize(input: TokenStream) -> TokenStream {
 
     let unescaped_strings = uses_unescaped_string(&input.attrs);
 
-    #[allow(unused)]
-    let (mut impl_generics, mut ty_generics, where_clause) = input.generics.split_for_impl();
+    let (mut impl_generics, ty_generics, where_clause) = input.generics.split_for_impl();
 
     let lifetimes = input.generics.lifetimes().next();
 
     let mut generics = input.generics.clone();
-    let lifetime: syn::LifetimeParam = syn::parse_quote!('anpa_lifetime);
+    let mut lifetime: syn::LifetimeParam = syn::parse_quote!('anpa_lifetime);
 
     if lifetimes.is_none() {
         generics.params.insert(0, syn::GenericParam::Lifetime(lifetime.clone()));
         (impl_generics, _, _) = generics.split_for_impl();
     } else {
-        generics.params[0] = syn::GenericParam::Lifetime(lifetime.clone());
-        (impl_generics, ty_generics, _) = generics.split_for_impl();
+        lifetime = lifetimes.unwrap().clone();
     }
 
     let lifetime_macro = lifetimes
@@ -163,12 +161,6 @@ fn extract_inner_if_option(ty: &Type) -> Option<&Type> {
 }
 
 fn generate_parser_for_type(ty: &Type, exact: bool, unescaped_string: bool) -> proc_macro2::TokenStream {
-    let self_parser = if exact {
-        quote! { #ty::json_parser_exact() }
-    } else {
-        quote! { #ty::json_parser() }
-    };
-
     match ty {
         Type::Reference(type_ref) => {
             if let Type::Path(path) = &*type_ref.elem {
@@ -176,7 +168,7 @@ fn generate_parser_for_type(ty: &Type, exact: bool, unescaped_string: bool) -> p
                     return quote! { ::anpa::json::string_parser() };
                 }
             }
-            self_parser
+            panic!("Unsupported reference type for JSON deserialization, supported types are: &str");
         }
         Type::Path(path) => {
             let segment = path.path.segments.last().unwrap();
@@ -210,10 +202,20 @@ fn generate_parser_for_type(ty: &Type, exact: bool, unescaped_string: bool) -> p
 
                     quote! { ::anpa::combinators::map(#inner_parser, Box::new) }
                 },
-                _ => self_parser
+                _ => {
+                    // Strip generic arguments from the type name
+                    let mut segment = segment.clone();
+                    segment.arguments = syn::PathArguments::None;
+
+                    if exact {
+                        quote! { #segment::json_parser_exact() }
+                    } else {
+                        quote! { #segment::json_parser() }
+                    }
+                }
             }
         },
         // For non-path types, assume they implement JsonDeserializable
-        _ => self_parser
+        _ => panic!("Unsupported type for JSON deserialization")
     }
 }
