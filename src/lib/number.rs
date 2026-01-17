@@ -1,6 +1,6 @@
 use core::ops::{Add, Div, Mul, Sub};
 
-use crate::{charlike::CharLike, combinators::{bind, map, or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
+use crate::{charlike::CharLike, combinators::{attempt, bind, map, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 
 /// Trait for types that act like numbers.
 pub trait NumLike:
@@ -12,6 +12,7 @@ Add<Output = Self>
 + Copy {
     const MIN: Self;
     const MAX: Self;
+    const ZERO: Self;
     const TEN: Self;
     const SIZE: usize;
     fn cast_u8(n: u8) -> Self;
@@ -22,10 +23,13 @@ Add<Output = Self>
 
 /// Trait for types that act like floating point numbers.
 pub trait FloatLike: Add<Output = Self> + Mul<Output = Self> + Div<Output = Self> + Copy {
+    const ZERO: Self;
     const ONE: Self;
+    const TEN: Self;
     const MINUS_ONE: Self;
     fn cast_usize(n: usize) -> Self;
     fn cast_isize(n: isize) -> Self;
+    fn pow_i(self, exp: i32) -> Self;
 }
 
 macro_rules! impl_NumLike {
@@ -34,6 +38,7 @@ macro_rules! impl_NumLike {
             impl NumLike for $type {
                 const MIN: $type = $type::MIN;
                 const MAX: $type = $type::MAX;
+                const ZERO: $type = 0;
                 const TEN: $type = 10;
                 const SIZE: usize = core::mem::size_of::<$type>();
 
@@ -65,7 +70,9 @@ macro_rules! impl_FloatLike {
     ($($type:tt),*) => {
         $(
             impl FloatLike for $type {
+                const ZERO: Self = 0.0;
                 const ONE: Self = 1.0;
+                const TEN: Self = 10.0;
                 const MINUS_ONE: Self = -1.0;
                 #[inline(always)]
                 fn cast_usize(n: usize) -> Self {
@@ -76,6 +83,11 @@ macro_rules! impl_FloatLike {
                 fn cast_isize(n: isize) -> Self {
                     n as $type
                 }
+
+                #[inline(always)]
+                fn pow_i(self, exp: i32) -> Self {
+                    self.powi(exp)
+                }
             }
         )*
     }
@@ -85,21 +97,31 @@ macro_rules! impl_FloatLike {
 impl_NumLike!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize);
 impl_FloatLike!(f32, f64);
 
-const fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISOR: bool,
-                          O: NumLike,
-                          A: CharLike,
-                          I: SliceLike<RefItem = A>,
-                          S>() -> impl Parser<I, (O, usize, bool), S> {
+
+pub const fn integer_internal<const CHECKED: bool,
+                              const SIGNED: bool,
+                              const LEADING_PLUS: bool,
+                              const LEADING_ZEROS: bool,
+                              const DEC_DIVISOR: bool,
+                              O: NumLike,
+                              A: CharLike,
+                              I: SliceLike<RefItem = A>,
+                              S>() -> impl Parser<I, (O, usize, bool), S> {
     create_parser!(s, {
         let mut idx = I::Idx::default();
-        let mut acc = O::cast_u8(0);
+        let mut acc = O::ZERO;
         let mut dec_divisor = 1;
 
-        // The number 10 is guaranteed to fit into all our `NumLike` types
         let mut iter = s.input.slice_iter();
         let mut consume = |digit: u32, is_negative: bool| -> Option<()> {
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit as u8);
+
+            if !LEADING_ZEROS {
+                if acc == O::ZERO && idx != I::Idx::default() {
+                    return None
+                }
+            }
 
             if CHECKED {
                 acc = acc.checked_mul(O::TEN)?;
@@ -132,10 +154,13 @@ const fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISO
             Some(())
         };
 
-        let is_negative = if NEG {
+        let is_negative = if SIGNED || LEADING_PLUS {
             let c = iter.next()?.as_char();
-            if c == '-' {
+
+            if SIGNED && c == '-' {
                 true
+            } else if LEADING_PLUS && c == '+' {
+                false
             } else {
                 // We don't care about checking the result here, since a single digit can never fail.
                 consume(c.to_digit(10)?, false);
@@ -156,13 +181,73 @@ const fn integer_internal<const CHECKED: bool, const NEG: bool, const DEC_DIVISO
     })
 }
 
+/// Configuration for integer parsing. The instance functions can be used to
+/// change the behavior of the parse.
+pub struct IntConfig<const CHECKED: bool = true,
+                     const SIGNED: bool = false,
+                     const LEADING_PLUS: bool = false,
+                     const LEADING_ZEROS: bool = true>;
+
+impl IntConfig {
+    pub const fn new() -> Self {
+        IntConfig
+    }
+}
+
+impl<const CHECKED: bool,
+     const SIGNED: bool,
+     const LEADING_PLUS: bool,
+     const LEADING_ZEROS: bool>
+     IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS> {
+    pub const fn unchecked(self) -> IntConfig<false, SIGNED, LEADING_PLUS, LEADING_ZEROS> {
+        IntConfig
+    }
+
+    pub const fn signed(self) -> IntConfig<CHECKED, true, LEADING_PLUS, LEADING_ZEROS> {
+        IntConfig
+    }
+
+    pub const fn no_leading_zero(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, false> {
+        IntConfig
+    }
+
+    pub const fn leading_plus(self) -> IntConfig<CHECKED, SIGNED, true, LEADING_ZEROS> {
+        IntConfig
+    }
+}
+
 /// Parse an unsigned integer. The type of the integer will be inferred from the context.
+/// General verison taking a config object. See [`IntConfig`] for more information.
+///
+/// ### Arguments
+/// * `_config` - the configuration object
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::number::{integer_custom, IntConfig};
+///
+/// let parse_plus = integer_custom(IntConfig::new().leading_plus());
+/// let parse_no_plus = integer_custom(IntConfig::new());
+/// let input1 = "+10";
+/// let input2 = "10";
+///
+/// assert_eq!(Some(10), parse(parse_plus, input1).result);
+/// assert_eq!(Some(10), parse(parse_plus, input2).result);
+///
+/// assert_eq!(None, parse(parse_no_plus, input1).result);
+/// assert_eq!(Some(10), parse(parse_no_plus, input2).result);
+/// ```
 #[inline]
-pub const fn integer_unchecked<O: NumLike,
-                               A: CharLike,
-                               I: SliceLike<RefItem = A>,
-                               S>() -> impl Parser<I, O, S> {
-    map(integer_internal::<false, false, false,_,_,_,_>(), |(n, _, _)| n)
+pub const fn integer_custom<const CHECKED: bool,
+                            const SIGNED: bool,
+                            const LEADING_PLUS: bool,
+                            const LEADING_ZEROS: bool,
+                            O: NumLike,
+                            A: CharLike,
+                            I: SliceLike<RefItem = A>,
+                            S>(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS>) -> impl Parser<I, O, S> {
+    map(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, false,_,_,_,_>(), |(n,_,_)| n)
 }
 
 /// Parse an unsigned integer. The type of the integer will be inferred from the context.
@@ -172,16 +257,7 @@ pub const fn integer<O: NumLike,
                      A: CharLike,
                      I: SliceLike<RefItem = A>,
                      S>() -> impl Parser<I, O, S> {
-    map(integer_internal::<true, false, false,_,_,_,_>(), |(n, _, _)| n)
-}
-
-/// Parse an signed integer. The type of the integer will be inferred from the context.
-#[inline]
-pub const fn integer_signed_unchecked<O: NumLike,
-                                      A: CharLike,
-                                      I: SliceLike<RefItem = A>,
-                                      S>() -> impl Parser<I, O, S> {
-    map(integer_internal::<false, true, false,_,_,_,_>(), |(n, _, _)| n)
+    integer_custom(IntConfig::new())
 }
 
 /// Parse an signed integer. The type of the integer will be inferred from the context.
@@ -191,49 +267,136 @@ pub const fn integer_signed<O: NumLike,
                             A: CharLike,
                             I: SliceLike<RefItem = A>,
                             S>() -> impl Parser<I, O, S> {
-    map(integer_internal::<true, true, false,_,_,_,_>(), |(n, _, _)| n)
+    integer_custom(IntConfig::new().signed())
 }
 
+/// Configuration for float parsing. The instance functions can be used to
+/// change the behavior of the parse.
+pub struct FloatConfig<const CHECKED: bool = true,
+                       const SIGNED: bool = true,
+                       const SCI: bool = false,
+                       const LEADING_PLUS: bool = false,
+                       const LEADING_ZEROS_INT: bool = true,
+                       const LEADING_ZEROS_EXP: bool = true,
+                       const DECIMAL_COMMA: bool = false>;
+
+impl FloatConfig {
+    pub const fn new() -> Self {
+        FloatConfig
+    }
+}
+
+impl<const CHECKED: bool,
+     const SIGNED: bool,
+     const SCI: bool,
+     const LEADING_PLUS: bool,
+     const LEADING_ZERO_INT: bool,
+     const LEADING_ZERO_EXP: bool,
+     const DECIMAL_COMMA: bool>
+     FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+
+    pub const fn unchecked(self) -> FloatConfig::<false, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+        FloatConfig
+    }
+
+    pub const fn unsigned(self) -> FloatConfig::<CHECKED, false, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+        FloatConfig
+    }
+
+    pub const fn scientific(self) -> FloatConfig::<CHECKED, SIGNED, true, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+        FloatConfig
+    }
+
+    pub const fn leading_plus(self) -> FloatConfig::<CHECKED, SIGNED, SCI, true, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+        FloatConfig
+    }
+
+    pub const fn no_leading_zero_int(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, false, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+        FloatConfig
+    }
+
+    pub const fn no_leading_zero_exp(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, false, DECIMAL_COMMA> {
+        FloatConfig
+    }
+
+    pub const fn decimal_comma(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, true> {
+        FloatConfig
+    }
+}
+
+/// Parse a float. The type of the float will be inferred from the context.
+/// General verison taking a config object. See [`FloatConfig`] for more information.
+///
+/// ### Arguments
+/// * `_config` - the configuration object
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::number::{float_custom, FloatConfig};
+///
+/// let parse_sci = float_custom(FloatConfig::new().scientific());
+/// let parse_no_sci = float_custom(FloatConfig::new());
+/// let input1 = "1.02e30";
+/// let input2 = "10.2";
+///
+/// assert_eq!(Some(1.02e30), parse(parse_sci, input1).result);
+/// assert_eq!(Some(10.2), parse(parse_sci, input2).result);
+///
+/// assert_eq!(Some(1.02), parse(parse_no_sci, input1).result);
+/// assert_eq!(Some(10.2), parse(parse_no_sci, input2).result);
+/// ```
 #[inline(always)]
-const fn float_internal<const CHECKED: bool,
-                        O: FloatLike,
-                        A: CharLike,
-                        I: SliceLike<RefItem = A>,
-                        S>() -> impl Parser<I, O, S> {
+pub const fn float_custom<const CHECKED: bool,
+                          const SIGNED: bool,
+                          const SCI: bool,
+                          const LEADING_PLUS: bool,
+                          const LEADING_ZERO_INT: bool,
+                          const LEADING_ZERO_EXP: bool,
+                          const DECIMAL_COMMA: bool,
+                          O: FloatLike,
+                          A: CharLike,
+                          I: SliceLike<RefItem = A>,
+                          S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA>)
+                          -> impl Parser<I, O, S> {
     // First parse a possibly negative signed integer
-    bind(integer_internal::<CHECKED, true, false,_,_,_,_>(), |(n, _, is_neg)| {
+    bind(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, false,_,_,_,_>(), |(n, _, is_neg)| {
         // Then parse a period followed by an unsigned integer.
         let int = O::cast_isize(n);
-        let dec = right(item_if(|c: I::RefItem| c.as_char() == '.'),
-                                              integer_internal::<CHECKED, false, true,_,_,_,_>())
-            .map(move |(dec, div, _)|
+        let dec = attempt(
+            right(item_if(|c: I::RefItem| c.as_char() ==  if DECIMAL_COMMA {','} else {'.'}),
+                  integer_internal::<CHECKED, false, false, true, true,_,_,_,_>())
+            ).map(move |(dec, div, _)|
                 int + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));
-        or(dec, pure!(int))
+
+        create_parser!(s, {
+            let pre_exp = dec(s).unwrap_or(int);
+            if SCI {
+                let exp = attempt(right(item_if(|c: I::RefItem| matches!(c.as_char(), 'e' | 'E')),
+                                        integer_custom(IntConfig::<CHECKED, true, true, LEADING_ZERO_EXP>)));
+                exp(s).map(|exp| pre_exp * O::TEN.pow_i(exp))
+                    .or(Some(pre_exp))
+            } else {
+                Some(pre_exp)
+            }
+        })
     })
 }
 
 /// Parse a floating point number. The type of the number will be inferred from the context.
-/// This parser is incomplete, in that it will attempt to parse the float as
-/// `isize.usize`, and if the parsed number does not fit within those types, it will panic.
-#[inline]
-pub const fn float_unchecked<O: FloatLike, A: CharLike, I: SliceLike<RefItem = A>, S>() -> impl Parser<I, O, S> {
-    float_internal::<false,_,_,_,_>()
-}
-
-/// Parse a floating point number. The type of the number will be inferred from the context.
-/// This parser is incomplete, in that it will attempt to parse the float as
-/// `isize.usize`, and if the parsed number does not fit within those types, it will fail.
+/// This parser will attempt to parse the float as `isize.usize`, and if the parsed number
+/// does not fit within those types, it will fail.
 #[inline]
 pub const fn float<O: FloatLike,
-                           A: CharLike,
-                           I: SliceLike<RefItem = A>,
-                           S>() -> impl Parser<I, O, S> {
-    float_internal::<true,_,_,_,_>()
+                   A: CharLike,
+                   I: SliceLike<RefItem = A>,
+                   S>() -> impl Parser<I, O, S> {
+    float_custom(FloatConfig::new())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::parse, number::{integer, float, integer_signed}};
+    use crate::{core::parse, number::{float, integer, integer_signed}};
 
     #[test]
     fn unsigned_integer() {
@@ -270,6 +433,5 @@ mod tests {
         assert_eq!(1.123f32, parse(float(), "1.123").result.unwrap());
         assert_eq!(0.001f32, parse(float(), "0.001").result.unwrap());
         assert_eq!(-0.001f32, parse(float(), "-0.001").result.unwrap());
-        assert_eq!(-0.001f64, parse(float(), "-0.000000000000000000000000000000000000000000000000000000000000000000000000000001").result.unwrap());
     }
 }

@@ -2,7 +2,19 @@
 
 ## 0.11.0
 
+### Breaking changes
+
 - Remove `ContiguousBytes` in favor of `AsRef<[u8]>`
+- Rename:
+    - `integer_checked` => `integer`
+    - `integer_signed_checked` => `integer_signed`
+    - `float_checked` => `float`
+
+ - Unchecked number parsers removed. Functionality still available as per below.
+
+### New features
+ - Add `integer_custom` and `float_custom` parsers for configurable parsing
+   of numbers, e.g. unchecked, leading zeros, etc.
 
 ### New features
 - New variadic parser `bind!`
