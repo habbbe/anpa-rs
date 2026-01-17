@@ -177,9 +177,9 @@ fn generate_parser_for_type(ty: &Type, exact: bool, unescaped_string: bool) -> p
             match type_name.as_str() {
                 "String" => if unescaped_string { quote! { ::anpa::json::string_parser() } }
                             else { quote! { ::anpa::json::escaped_string_parser() } },
-                "u8" | "u16" | "u32" | "u64" | "u128" | "usize" => quote! { ::anpa::number::integer() },
-                "i8" | "i16" | "i32" | "i64" | "i128" | "isize" => quote! { ::anpa::number::integer_signed() },
-                "f32" | "f64" => quote! { ::anpa::number::float() },
+                "u8" | "u16" | "u32" | "u64" | "u128" | "usize" => quote! { ::anpa::number::integer_custom(::anpa::number::IntConfig::new().no_leading_zero()) },
+                "i8" | "i16" | "i32" | "i64" | "i128" | "isize" => quote! { ::anpa::number::integer_custom(::anpa::number::IntConfig::new().signed().no_leading_zero()) },
+                "f32" | "f64" => quote! { ::anpa::number::float_custom(::anpa::number::FloatConfig::new().scientific().no_leading_zero_int()) },
                 "bool" => quote! { ::anpa::json::bool_parse() },
                 "Vec" => {
                     let syn::PathArguments::AngleBracketed(args) = &segment.arguments else {

@@ -5,7 +5,7 @@ pub mod json_string;
 use alloc::{collections::BTreeMap, vec::Vec};
 pub use json_string::escaped_string_parser;
 
-use crate::{combinators::*, core::parse_default, findbyte::{ByteFinder, eq, find_byte, lt}, number::float, parsers::*, whitespace::skip_ascii_whitespace};
+use crate::{combinators::*, core::parse_default, findbyte::{ByteFinder, eq, find_byte, lt}, number::{FloatConfig, float_custom}, parsers::{item, item_if}, whitespace::skip_ascii_whitespace};
 
 create_parser_trait!(JsonParser, str, String, "Trait for a parser intended for JSON parsing, using a String user state to accumulate error messages.");
 
@@ -78,7 +78,7 @@ const fn json_string_parser<'a, T: From<&'a str>>() -> impl JsonParser<'a, JsonV
 }
 
 const fn number_parser<'a, T>() -> impl JsonParser<'a, JsonValue<T>> {
-    map(float(), JsonValue::Num)
+    map(float_custom(FloatConfig::new().scientific().no_leading_zero_int()), JsonValue::Num)
 }
 
 const fn bool_parser<'a, T>() -> impl JsonParser<'a, JsonValue<T>> {
