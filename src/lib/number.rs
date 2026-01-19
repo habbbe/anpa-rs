@@ -347,7 +347,7 @@ impl<const CHECKED: bool,
 /// assert_eq!(Some(1.02), parse(parse_no_sci, input1).result);
 /// assert_eq!(Some(10.2), parse(parse_no_sci, input2).result);
 /// ```
-#[inline(always)]
+#[inline]
 pub const fn float_custom<const CHECKED: bool,
                           const SIGNED: bool,
                           const SCI: bool,
