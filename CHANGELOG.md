@@ -18,6 +18,8 @@
 
 ### New features
 - New variadic parser `bind!`
+- New macro `choose_raw!` that functions like `choose!` but with a value
+  instead of a parser.
 - Add posibility to use & to combine `ByteFinder`s
 - Added new parse function `parse_state_owned` that takes ownership
   of the user state while parsing.

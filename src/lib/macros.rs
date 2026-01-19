@@ -294,7 +294,34 @@ macro_rules! until {
     }
 }
 
-/// Create a parser that takes the result of a parser, and returns different
+#[macro_export]
+macro_rules! choose_internal {
+    ($state:ident, $p:expr => $res:ident $(: $t:ty)?; $($cond:expr => $new_p:expr),* $(,)?) => {
+        $crate::create_parser!($state, {
+            let $res $(:$t)? = $p;
+
+            $(if $cond {
+                return $new_p($state)
+            })*
+
+            None
+        })
+    };
+
+    ($state:ident, $p:expr; $($arm:pat_param $(| $alt:pat_param)* $(if $guard:expr)? => $new_p:expr),* $(,)?) => {
+        $crate::create_parser!($state, {
+            match $p {
+                $(
+                    $arm $(| $alt)* $(if $guard)? => $new_p($state),
+                )*
+                #[allow(unreachable_patterns)]
+                _ => None
+            }
+        })
+    };
+}
+
+/// Create a parser that takes evaluates a parser, and returns different
 /// parsers depending on the provided conditions.
 ///
 /// If none of the provided conditions match, the parser will fail.
@@ -364,27 +391,30 @@ macro_rules! until {
 #[macro_export]
 macro_rules! choose {
     ($p:expr => $res:ident $(: $t:ty)?; $($cond:expr => $new_p:expr),* $(,)?) => {
-        $crate::create_parser!(s, {
-            let $res $(:$t)? = $p(s)?;
-
-            $(if $cond {
-                return $new_p(s)
-            })*
-
-            None
-        })
+        $crate::choose_internal!(s, $p(s)? => $res $(: $t)?; $($cond => $new_p),*)
     };
 
     ($p:expr; $($arm:pat_param $(| $alt:pat_param)* $(if $guard:expr)? => $new_p:expr),* $(,)?) => {
-        $crate::create_parser!(s, {
-            match $p(s)? {
-                $(
-                    $arm $(| $alt)* $(if $guard)? => $new_p(s),
-                )*
-                #[allow(unreachable_patterns)]
-                _ => None
-            }
-        })
+        $crate::choose_internal!(s, $p(s)?; $($arm $(| $alt)* $(if $guard)? => $new_p),*)
+    };
+}
+
+/// Create a parser that evaluates an expression, and returns different
+/// parsers depending on the provided conditions.
+///
+/// If none of the provided conditions match, the parser will fail.
+///
+/// This macro functions like [`choose!`], but acts on a value rather than on a parser.
+///
+/// See [`choose!`] for more details.
+#[macro_export]
+macro_rules! choose_pure {
+    ($p:expr => $res:ident $(: $t:ty)?; $($cond:expr => $new_p:expr),* $(,)?) => {
+        $crate::choose_internal!(s, $p => $res $(: $t)?; $($cond => $new_p),*)
+    };
+
+    ($p:expr; $($arm:pat_param $(| $alt:pat_param)* $(if $guard:expr)? => $new_p:expr),* $(,)?) => {
+        $crate::choose_internal!(s, $p; $($arm $(| $alt)* $(if $guard)? => $new_p),*)
     };
 }
 

@@ -1,6 +1,6 @@
 use core::ops::{Add, Div, Mul, Sub};
 
-use crate::{charlike::CharLike, combinators::{attempt, bind, map, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
+use crate::{charlike::CharLike, combinators::{bind, map, or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 
 /// Trait for types that act like numbers.
 pub trait NumLike:
@@ -359,27 +359,27 @@ pub const fn float_custom<const CHECKED: bool,
                           I: SliceLike<RefItem = A>,
                           S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA>)
                           -> impl Parser<I, O, S> {
+
     // First parse a possibly negative signed integer
     bind(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, false,_,_,_,_>(), |(n, _, is_neg)| {
         // Then parse a period followed by an unsigned integer.
         let int = O::cast_isize(n);
-        let dec = attempt(
-            right(item_if(|c: I::RefItem| c.as_char() ==  if DECIMAL_COMMA {','} else {'.'}),
+        let dec = right(item_if(|c: I::RefItem| c.as_char() ==  if DECIMAL_COMMA {','} else {'.'}),
                   integer_internal::<CHECKED, false, false, true, true,_,_,_,_>())
-            ).map(move |(dec, div, _)|
+            .map(move |(dec, div, _)|
                 int + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));
 
-        create_parser!(s, {
-            let pre_exp = dec(s).unwrap_or(int);
-            if SCI {
-                let exp = attempt(right(item_if(|c: I::RefItem| matches!(c.as_char(), 'e' | 'E')),
-                                        integer_custom(IntConfig::<CHECKED, true, true, LEADING_ZERO_EXP>)));
-                exp(s).map(|exp| pre_exp * O::TEN.pow_i(exp))
-                    .or(Some(pre_exp))
-            } else {
-                Some(pre_exp)
-            }
-        })
+        let pre_exp_parser = or(dec, pure!(int));
+
+        choose_pure!(SCI;
+            true => bind(pre_exp_parser, |pre_exp| {
+                let exp = right(item_if(|c: I::RefItem| matches!(c.as_char(), 'e' | 'E')),
+                                integer_custom(IntConfig::<CHECKED, true, true, LEADING_ZERO_EXP>))
+                    .map(move |exp| pre_exp * O::TEN.pow_i(exp));
+                or(exp, pure!(pre_exp))
+            }),
+            false => pre_exp_parser
+        )
     })
 }
 
