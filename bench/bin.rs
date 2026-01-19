@@ -1,4 +1,5 @@
 use anpa::core::{*};
+use anpa::json::JsonValue;
 use anpa::{*};
 use anpa::combinators::{*};
 use anpa::parsers::{*};
@@ -114,11 +115,10 @@ fn bench_hubb_handrolled() {
 fn bench_json() {
     let mut string = black_box(String::new());
     let _ = read_file("test.json").read_to_string(&mut string);
-    let p = json::object_parser::<&str>();
 
     let (d, _) = bench_fun(10000, || {
         for _ in 0..10 {
-            p.parse_default(&string).result.unwrap();
+            anpa::json::from_str::<JsonValue<&str>>(&string).unwrap();
         }
     });
 

@@ -222,7 +222,7 @@ pub fn parse_state_owned<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
 /// ### Arguments
 /// * `p` - the parser
 /// * `input` - the input to be parsed
-#[inline(always)]
+#[inline]
 pub fn parse_default<I: SliceLike, O, S: Default>(p: impl Parser<I, O, S>,
                                                   input: I) -> AnpaResult<AnpaStateOwned<I, S>, O> {
     parse_state_owned(p, input, S::default())

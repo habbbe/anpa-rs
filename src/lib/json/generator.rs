@@ -146,8 +146,8 @@ macro_rules! json_parser_gen {
                 Other
             }
 
-            let str_parser = $crate::json::string_parser::<&str>();
-            let any_parser = $crate::json::eat($crate::json::value_parser::<&str>());
+            let str_parser = $crate::json::string_parser::<&str, _>();
+            let any_parser = $crate::json::eat($crate::json::value_parser::<&str, _>());
             let colon_parser = $crate::json::colon_parser();
 
             // Create the parser for each field on the format `"field_name": type_parser`.
