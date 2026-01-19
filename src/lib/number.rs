@@ -97,7 +97,6 @@ macro_rules! impl_FloatLike {
 impl_NumLike!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize);
 impl_FloatLike!(f32, f64);
 
-
 pub const fn integer_internal<const CHECKED: bool,
                               const SIGNED: bool,
                               const LEADING_PLUS: bool,
@@ -154,28 +153,30 @@ pub const fn integer_internal<const CHECKED: bool,
             Some(())
         };
 
-        let is_negative = if SIGNED || LEADING_PLUS {
+        let leading = if SIGNED || LEADING_PLUS {
             let c = iter.next()?.as_char();
 
             if SIGNED && c == '-' {
-                true
+                Some(true)
             } else if LEADING_PLUS && c == '+' {
-                false
+                Some(false)
             } else {
                 // We don't care about checking the result here, since a single digit can never fail.
                 consume(c.to_digit(10)?, false);
-                false
+                None
             }
         } else {
-            false
+            None
         };
+
+        let is_negative = leading.unwrap_or(false);
 
         for digit in iter.map_while(|d| d.as_char().to_digit(10)) {
             consume(digit, is_negative)?;
         }
 
         (idx != Default::default()).then(|| {
-            s.input = s.input.slice_from(idx + is_negative.into());
+            s.input = s.input.slice_from(idx + leading.is_some().into());
             (acc, dec_divisor, is_negative)
         })
     })
