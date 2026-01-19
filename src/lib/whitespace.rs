@@ -15,28 +15,28 @@ pub trait TrimmableUtf8: SliceLike {
 impl<A: CharLike> TrimmableAscii for &[A] {
     #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
-        AsciiWhitespace()
+        AsciiWhitespace
     }
 }
 
 impl<A: CharLike> TrimmableUtf8 for &[A] {
     #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
-        Utf8Whitespace()
+        Utf8Whitespace
     }
 }
 
 impl TrimmableAscii for &str {
     #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
-        AsciiWhitespace()
+        AsciiWhitespace
     }
 }
 
 impl TrimmableUtf8 for &str {
     #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
-        Utf8Whitespace()
+        Utf8Whitespace
     }
 }
 
@@ -66,11 +66,11 @@ pub const fn skip_whitespace<I: TrimmableUtf8, S>() -> impl Parser<I, (), S> {
 
 /// `Prefix` that matches zero or more ASCII whitespaces.
 #[derive(Clone, Copy)]
-pub struct AsciiWhitespace();
+pub struct AsciiWhitespace;
 
 /// `Prefix` that matches zero or more UTF-8 whitespaces.
 #[derive(Clone, Copy)]
-pub struct Utf8Whitespace();
+pub struct Utf8Whitespace;
 
 macro_rules! impl_whitespace_prefix_array {
     ($id:ident, $count:ident) => {

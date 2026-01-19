@@ -15,7 +15,7 @@ pub enum JsonValue<StringType> {
 const fn eat<'a, O>(p: impl StrParser<'a, O>) -> impl StrParser<'a, O> {
     // For unknown reasons, this gives better performance than `skip_ascii_whitespace()`.
     // Possibly a random optimization quirk, since it ideally shouldn't happen.
-    right(skip!(AsciiWhitespace()), p)
+    right(skip!(AsciiWhitespace), p)
 }
 
 const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
