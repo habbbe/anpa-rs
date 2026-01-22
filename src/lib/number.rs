@@ -101,6 +101,7 @@ pub const fn integer_internal<const CHECKED: bool,
                               const SIGNED: bool,
                               const LEADING_PLUS: bool,
                               const LEADING_ZEROS: bool,
+                              const BASE: u8,
                               const DEC_DIVISOR: bool,
                               O: NumLike,
                               A: CharLike,
@@ -123,9 +124,9 @@ pub const fn integer_internal<const CHECKED: bool,
             }
 
             if CHECKED {
-                acc = acc.checked_mul(O::TEN)?;
+                acc = acc.checked_mul(O::cast_u8(BASE))?;
             } else {
-                acc = acc * O::TEN;
+                acc = acc * O::cast_u8(BASE);
             }
 
             if is_negative {
@@ -144,9 +145,9 @@ pub const fn integer_internal<const CHECKED: bool,
 
             if DEC_DIVISOR {
                 if CHECKED {
-                    dec_divisor = dec_divisor.checked_mul(10)?;
+                    dec_divisor = dec_divisor.checked_mul(BASE as usize)?;
                 } else {
-                    dec_divisor *= 10;
+                    dec_divisor *= BASE as usize;
                 }
             }
 
@@ -162,7 +163,7 @@ pub const fn integer_internal<const CHECKED: bool,
                 Some(false)
             } else {
                 // We don't care about checking the result here, since a single digit can never fail.
-                consume(c.to_digit(10)?, false);
+                consume(c.to_digit(BASE as u32)?, false);
                 None
             }
         } else {
@@ -171,7 +172,7 @@ pub const fn integer_internal<const CHECKED: bool,
 
         let is_negative = leading.unwrap_or(false);
 
-        for digit in iter.map_while(|d| d.as_char().to_digit(10)) {
+        for digit in iter.map_while(|d| d.as_char().to_digit(BASE as u32)) {
             consume(digit, is_negative)?;
         }
 
@@ -187,7 +188,8 @@ pub const fn integer_internal<const CHECKED: bool,
 pub struct IntConfig<const CHECKED: bool = true,
                      const SIGNED: bool = false,
                      const LEADING_PLUS: bool = false,
-                     const LEADING_ZEROS: bool = true>;
+                     const LEADING_ZEROS: bool = true,
+                     const BASE: u8 = 10>;
 
 impl IntConfig {
     pub const fn new() -> Self {
@@ -198,21 +200,28 @@ impl IntConfig {
 impl<const CHECKED: bool,
      const SIGNED: bool,
      const LEADING_PLUS: bool,
-     const LEADING_ZEROS: bool>
-     IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS> {
-    pub const fn unchecked(self) -> IntConfig<false, SIGNED, LEADING_PLUS, LEADING_ZEROS> {
+     const LEADING_ZEROS: bool,
+     const BASE: u8>
+     IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE> {
+
+    pub const fn unchecked(self) -> IntConfig<false, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE> {
         IntConfig
     }
 
-    pub const fn signed(self) -> IntConfig<CHECKED, true, LEADING_PLUS, LEADING_ZEROS> {
+    pub const fn signed(self) -> IntConfig<CHECKED, true, LEADING_PLUS, LEADING_ZEROS, BASE> {
         IntConfig
     }
 
-    pub const fn no_leading_zero(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, false> {
+    pub const fn no_leading_zero(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, false, BASE> {
         IntConfig
     }
 
-    pub const fn leading_plus(self) -> IntConfig<CHECKED, SIGNED, true, LEADING_ZEROS> {
+    pub const fn leading_plus(self) -> IntConfig<CHECKED, SIGNED, true, LEADING_ZEROS, BASE> {
+        IntConfig
+    }
+
+    pub const fn base<const NEW_BASE: u8>(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, NEW_BASE> {
+        assert!(NEW_BASE >= 2 && NEW_BASE <= 36, "Base must be between 2 and 36");
         IntConfig
     }
 }
@@ -244,11 +253,12 @@ pub const fn integer_custom<const CHECKED: bool,
                             const SIGNED: bool,
                             const LEADING_PLUS: bool,
                             const LEADING_ZEROS: bool,
+                            const BASE: u8,
                             O: NumLike,
                             A: CharLike,
                             I: SliceLike<RefItem = A>,
-                            S>(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS>) -> impl Parser<I, O, S> {
-    map(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, false,_,_,_,_>(), |(n,_,_)| n)
+                            S>(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE>) -> impl Parser<I, O, S> {
+    map(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, false,_,_,_,_>(), |(n,_,_)| n)
 }
 
 /// Parse an unsigned integer. The type of the integer will be inferred from the context.
@@ -362,11 +372,11 @@ pub const fn float_custom<const CHECKED: bool,
                           -> impl Parser<I, O, S> {
 
     // First parse a possibly negative signed integer
-    bind(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, false,_,_,_,_>(), |(n, _, is_neg)| {
+    bind(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, false,_,_,_,_>(), |(n, _, is_neg)| {
         // Then parse a period followed by an unsigned integer.
         let int = O::cast_isize(n);
         let dec = right(item_if(|c: I::RefItem| c.as_char() ==  if DECIMAL_COMMA {','} else {'.'}),
-                  integer_internal::<CHECKED, false, false, true, true,_,_,_,_>())
+                  integer_internal::<CHECKED, false, false, true, 10, true,_,_,_,_>())
             .map(move |(dec, div, _)|
                 int + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));
 
@@ -397,7 +407,7 @@ pub const fn float<O: FloatLike,
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::parse, number::{float, integer, integer_signed}};
+    use crate::{core::parse, number::{IntConfig, float, integer, integer_custom, integer_signed}};
 
     #[test]
     fn unsigned_integer() {
@@ -407,6 +417,17 @@ mod tests {
 
         assert!((parse(integer(), "-1").result as Option<u8>).is_none());
         assert!((parse(integer(), "256").result as Option<u8>).is_none());
+    }
+
+    #[test]
+    fn unsigned_integer_hex() {
+        let p = integer_custom(IntConfig::new().base::<16>());
+        assert_eq!(0u8, parse(p, "0").result.unwrap());
+        assert_eq!(127, parse(p, "7F").result.unwrap());
+        assert_eq!(255, parse(p, "FF").result.unwrap());
+
+        assert!((parse(p, "100").result as Option<u8>).is_none());
+        assert!((parse(p, "-1").result as Option<u8>).is_none());
     }
 
     #[test]

@@ -14,7 +14,7 @@
 
 ### New features
  - Add `integer_custom` and `float_custom` parsers for configurable parsing
-   of numbers, e.g. unchecked, leading zeros, etc.
+   of numbers, e.g. unchecked, leading zeros, changing base, etc.
 
 ### New features
 - New variadic parser `bind!`
