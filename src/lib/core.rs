@@ -212,7 +212,7 @@ pub fn parse_state_owned<I: SliceLike, O, S>(p: impl Parser<I, O, S>,
                                              mut user_state: S) -> AnpaResult<AnpaStateOwned<I, S>, O> {
     let mut parser_state = AnpaState { input, user_state: &mut user_state };
     let result = p(&mut parser_state);
-    AnpaResult { state: AnpaStateOwned { input: parser_state.input, user_state: user_state }, result }
+    AnpaResult { state: AnpaStateOwned { input: parser_state.input, user_state }, result }
 }
 
 /// Perform a parse with a default user state.

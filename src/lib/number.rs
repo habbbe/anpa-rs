@@ -117,10 +117,8 @@ pub const fn integer_internal<const CHECKED: bool,
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit as u8);
 
-            if !LEADING_ZEROS {
-                if acc == O::ZERO && idx != I::Idx::default() {
+            if !LEADING_ZEROS && acc == O::ZERO && idx != I::Idx::default() {
                     return None
-                }
             }
 
             if CHECKED {
@@ -185,6 +183,7 @@ pub const fn integer_internal<const CHECKED: bool,
 
 /// Configuration for integer parsing. The instance functions can be used to
 /// change the behavior of the parse.
+#[derive(Clone, Copy)]
 pub struct IntConfig<const CHECKED: bool = true,
                      const SIGNED: bool = false,
                      const LEADING_PLUS: bool = false,
@@ -194,6 +193,12 @@ pub struct IntConfig<const CHECKED: bool = true,
 impl IntConfig {
     pub const fn new() -> Self {
         IntConfig
+    }
+}
+
+impl Default for IntConfig {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -283,6 +288,7 @@ pub const fn integer_signed<O: NumLike,
 
 /// Configuration for float parsing. The instance functions can be used to
 /// change the behavior of the parse.
+#[derive(Clone, Copy)]
 pub struct FloatConfig<const CHECKED: bool = true,
                        const SIGNED: bool = true,
                        const SCI: bool = false,
@@ -294,6 +300,12 @@ pub struct FloatConfig<const CHECKED: bool = true,
 impl FloatConfig {
     pub const fn new() -> Self {
         FloatConfig
+    }
+}
+
+impl Default for FloatConfig {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -407,7 +419,7 @@ pub const fn float<O: FloatLike,
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::parse, number::{IntConfig, float, integer, integer_custom, integer_signed}};
+    use crate::{core::parse, number::{FloatConfig, IntConfig, float, float_custom, integer, integer_custom, integer_signed}};
 
     #[test]
     fn unsigned_integer() {
@@ -455,5 +467,14 @@ mod tests {
         assert_eq!(1.123f32, parse(float(), "1.123").result.unwrap());
         assert_eq!(0.001f32, parse(float(), "0.001").result.unwrap());
         assert_eq!(-0.001f32, parse(float(), "-0.001").result.unwrap());
+    }
+
+    #[test]
+    fn float_sci_test() {
+        let p = float_custom(FloatConfig::new().scientific());
+        assert_eq!(1e10, parse(p, "1e10").result.unwrap());
+        assert_eq!(0.05e15, parse(p, "0.05e15").result.unwrap());
+        assert_eq!(-1.3e12, parse(p, "-1.3e12").result.unwrap());
+        assert_eq!(-1.3e+12, parse(p, "-1.3e+12").result.unwrap());
     }
 }
