@@ -1,4 +1,4 @@
-use core::{convert::TryInto, ops::{BitAnd, BitOr}};
+use core::ops::{BitAnd, BitOr};
 
 use crate::{core::Parser, number::NumLike, slicelike::SliceLike};
 
@@ -198,23 +198,24 @@ fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
     let mut pos = 0;
     let bytes = input.as_ref();
 
-    let mut chunks = bytes.chunks_exact(Work::SIZE);
-    for chunk in chunks.by_ref() {
-        let val = Work::from_le_bytes(chunk.try_into().unwrap());
-        let present = finder.intermediate(val) & HIGH_BITS;
+    let (chunks, rest) = bytes.as_chunks::<{Work::SIZE}>();
 
-        if present != 0 {
-            pos += (present.trailing_zeros() / u8::BITS) as usize;
+    'outer: {
+        for chunk in chunks {
+            let val = Work::from_le_bytes(*chunk);
+            let present = finder.intermediate(val) & HIGH_BITS;
 
-            // Inlining this rather than using a labeled break yields slightly
-            // better performance.
-            return Some((bytes[pos], input.slice_idx_from_offset(pos)))
+            if present != 0 {
+                pos += (present.trailing_zeros() / u8::BITS) as usize;
+                break 'outer;
+            }
+
+            pos += Work::SIZE;
         }
 
-        pos += Work::SIZE;
+        pos += rest.iter().position(|x| finder.slow_cmp(*x))?;
     }
 
-    pos += chunks.remainder().iter().position(|x| finder.slow_cmp(*x))?;
     Some((bytes[pos], input.slice_idx_from_offset(pos)))
 }
 

@@ -4,6 +4,7 @@
 
 ### Breaking changes
 
+- Bump MSRV to 1.88
 - Remove `ContiguousBytes` in favor of `AsRef<[u8]>`
 - Rename:
     - `integer_checked` => `integer`
