@@ -1,6 +1,6 @@
-use core::{convert::TryInto, ops};
+use core::ops::{BitAnd, BitOr};
 
-use crate::{core::Parser, number::NumLike, slicelike::{ContiguousBytes, SliceLike}};
+use crate::{core::Parser, number::NumLike, slicelike::SliceLike};
 
 /// One unit of "work". In this case `usize` will process 8 bytes
 /// at a time on a 64-bit CPU (or 4 bytes on 32-bit).
@@ -31,6 +31,10 @@ pub trait ByteFinder: Copy {
 #[derive(Clone, Copy)]
 pub struct OrByte<A: ByteFinder, B: ByteFinder>(pub A, pub B);
 
+/// A wrapper for combining two [`ByteFinder`] via logic AND.
+#[derive(Clone, Copy)]
+pub struct AndByte<A: ByteFinder, B: ByteFinder>(pub A, pub B);
+
 macro_rules! impl_finder_for_combinator {
     ($id:ident, $bit_op:tt, $logic_op:tt) => {
         impl<A: ByteFinder, B: ByteFinder> ByteFinder for $id<A, B> {
@@ -48,33 +52,47 @@ macro_rules! impl_finder_for_combinator {
 }
 
 impl_finder_for_combinator!(OrByte, |, ||);
+impl_finder_for_combinator!(AndByte, &, &&);
 
-macro_rules! impl_or_for_finder {
-    ($id:ident) => {
-        impl<A: ByteFinder> ops::BitOr<A> for $id {
-            type Output = OrByte<Self, A>;
+macro_rules! impl_bitop_for_finder {
+    ($id:ident, $bitop:ident, $bitopf:ident, $output:ident) => {
+        impl<A: ByteFinder> $bitop<A> for $id {
+            type Output = $output<Self, A>;
 
             #[inline(always)]
-            fn bitor(self, rhs: A) -> Self::Output {
-                OrByte(self, rhs)
+            fn $bitopf(self, rhs: A) -> Self::Output {
+                $output(self, rhs)
             }
         }
     };
 }
 
-impl_or_for_finder!(EqByte);
-impl_or_for_finder!(NeByte);
-impl_or_for_finder!(LtByte);
-impl_or_for_finder!(GtByte);
+impl_bitop_for_finder!(EqByte, BitOr, bitor, OrByte);
+impl_bitop_for_finder!(NeByte, BitOr, bitor, OrByte);
+impl_bitop_for_finder!(LtByte, BitOr, bitor, OrByte);
+impl_bitop_for_finder!(GtByte, BitOr, bitor, OrByte);
+impl_bitop_for_finder!(EqByte, BitAnd, bitand, AndByte);
+impl_bitop_for_finder!(NeByte, BitAnd, bitand, AndByte);
+impl_bitop_for_finder!(LtByte, BitAnd, bitand, AndByte);
+impl_bitop_for_finder!(GtByte, BitAnd, bitand, AndByte);
 
-impl<A: ByteFinder, B: ByteFinder, C: ByteFinder> ops::BitOr<C> for OrByte<A, B> {
-    type Output = OrByte<A, OrByte<B, C>>;
+macro_rules! impl_bitop_for_combinator {
+    ($id:ident, $bitop:ident, $bitopf:ident) => {
+        impl<A: ByteFinder, B: ByteFinder, C: ByteFinder> $bitop<C> for $id<A, B> {
+            type Output = $id<A, $id<B, C>>;
 
-    #[inline(always)]
-    fn bitor(self, rhs: C) -> Self::Output {
-        OrByte(self.0, OrByte(self.1, rhs))
-    }
+            #[inline(always)]
+            fn $bitopf(self, rhs: C) -> Self::Output {
+                $id(self.0, $id(self.1, rhs))
+            }
+        }
+    };
 }
+
+impl_bitop_for_combinator!(OrByte, BitOr, bitor);
+impl_bitop_for_combinator!(OrByte, BitAnd, bitand);
+impl_bitop_for_combinator!(AndByte, BitOr, bitor);
+impl_bitop_for_combinator!(AndByte, BitAnd, bitand);
 
 /// A wrapper used for finding a byte that is equal to
 /// the wrappee.
@@ -176,27 +194,28 @@ pub const fn gt(b: u8) -> GtByte {
 /// result along with its position.
 #[inline]
 fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
-    where I: SliceLike + ContiguousBytes, B: ByteFinder {
+    where I: SliceLike + AsRef<[u8]>, B: ByteFinder {
     let mut pos = 0;
-    let bytes = input.to_u8_slice();
+    let bytes = input.as_ref();
 
-    let mut chunks = bytes.chunks_exact(Work::SIZE);
-    for chunk in chunks.by_ref() {
-        let val = Work::from_le_bytes(chunk.try_into().unwrap());
-        let present = finder.intermediate(val) & HIGH_BITS;
+    let (chunks, rest) = bytes.as_chunks::<{Work::SIZE}>();
 
-        if present != 0 {
-            pos += (present.trailing_zeros() / u8::BITS) as usize;
+    'outer: {
+        for chunk in chunks {
+            let val = Work::from_le_bytes(*chunk);
+            let present = finder.intermediate(val) & HIGH_BITS;
 
-            // Inlining this rather than using a labeled break yields slightly
-            // better performance.
-            return Some((bytes[pos], input.slice_idx_from_offset(pos)))
+            if present != 0 {
+                pos += (present.trailing_zeros() / u8::BITS) as usize;
+                break 'outer;
+            }
+
+            pos += Work::SIZE;
         }
 
-        pos += Work::SIZE;
+        pos += rest.iter().position(|x| finder.slow_cmp(*x))?;
     }
 
-    pos += chunks.remainder().iter().position(|x| finder.slow_cmp(*x))?;
     Some((bytes[pos], input.slice_idx_from_offset(pos)))
 }
 
@@ -211,7 +230,7 @@ fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
 ///
 /// Available finders are:
 /// - [`eq(x)`](eq): Search for a byte via equality, i.e. `eq(10)`
-///             will search for a byte not equal to 10.
+///             will search for a byte equal to 10.
 /// - [`ne(x)`](ne): Search for a byte via inequality, i.e. `ne(10)`
 ///             will search for a byte not equal to 10.
 /// - [`lt(x)`](lt): Search for a byte via "less than", i.e. `lt(10)`
@@ -219,7 +238,7 @@ fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
 /// - [`gt(x)`](gt): Search for a byte via "greater than", i.e. `gt(10)`
 ///             will search for a byte greater than 10.
 ///
-/// Arguments can be combined with '|' to search for muliple bytes
+/// Arguments can be combined with '|' or '&' to search for muliple bytes
 /// simultaneously.
 ///
 /// Note: When searching in an UTF-8 string, it is not safe to search
@@ -252,7 +271,7 @@ fn get_byte_pos<I, B>(input: I, finder: B) -> Option<(u8, I::Idx)>
 /// ```
 #[inline]
 pub const fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> impl Parser<I, u8, S>
-    where I: SliceLike + ContiguousBytes {
+    where I: SliceLike + AsRef<[u8]> {
     create_parser!(s, {
         let (res, pos) = get_byte_pos(s.input, finder)?;
         s.input = s.input.slice_from(pos + consume_result.into());
@@ -301,7 +320,7 @@ pub const fn find_byte<I, S>(finder: impl ByteFinder, consume_result: bool) -> i
 pub const fn until_byte<I, S>(finder: impl ByteFinder,
                               include_result: bool,
                               consume_result: bool) -> impl Parser<I, I, S>
-    where I: SliceLike + ContiguousBytes {
+    where I: SliceLike + AsRef<[u8]> {
     create_parser!(s, {
         let (_, pos) = get_byte_pos(s.input, finder)?;
         let res = s.input.slice_to(pos + include_result.into());
@@ -312,7 +331,7 @@ pub const fn until_byte<I, S>(finder: impl ByteFinder,
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::parse, findbyte::{eq, find_byte, gt, lt, ne}};
+    use crate::{core::parse, findbyte::{eq, find_byte, gt, lt, ne, ByteFinder}};
 
     #[test]
     fn less_than() {
@@ -429,22 +448,53 @@ mod tests {
     }
 
     #[test]
-    fn byte_slice() {
-        let s: &[u8] = &[5, 4, 3, 2, 1, 1, 1, 1];
+    fn no_consume() {
+        let arr: &[u8] = &[9, 8, 7, 6, 5, 4, 3, 2, 1];
+        let p = find_byte(eq(7), false);
+        let res = parse(p, arr);
+        assert_eq!(res.result, Some(7));
+        assert_eq!(res.state, &arr[2..]);
+    }
 
-        let p = find_byte(eq(2) | eq(4), true);
-        let res = parse(p, s);
-        assert_eq!(res.result, Some(4));
-        assert_eq!(res.state, &[3, 2, 1, 1, 1, 1]);
+    const INPUT: &[u8] = &[5, 4, 3, 2, 1, 50, 60, 70];
 
-        let p = find_byte(eq(2) | eq(4), false);
-        let res = parse(p, s);
-        assert_eq!(res.result, Some(4));
-        assert_eq!(res.state, &[4, 3, 2, 1, 1, 1, 1]);
+    fn test_finder(finder: impl ByteFinder, out: Option<u8>, consumed: usize) {
+        let p = find_byte(finder, true);
+        let res = parse(p, INPUT);
+        assert_eq!(res.result, out);
+        assert_eq!(res.state, &INPUT[consumed..]);
+    }
 
-        let p = find_byte(eq(3) | lt(5), true);
-        let res = parse(p, s);
-        assert_eq!(res.result, Some(4));
-        assert_eq!(res.state, &[3, 2, 1, 1, 1, 1]);
+    #[test]
+    fn eq_or() {
+
+        test_finder(eq(2) | eq(4), Some(4), 2);
+        test_finder(eq(2) | eq(4), Some(4), 2);
+        test_finder(eq(70) | eq(6), Some(70), 8);
+    }
+
+    #[test]
+    fn combine_or() {
+        test_finder(eq(2) | gt(4), Some(5), 1);
+        test_finder(eq(6) | gt(55), Some(60), 7);
+        test_finder(eq(2) | lt(1), Some(2), 4);
+    }
+
+    #[test]
+    fn combine_and() {
+        test_finder(ne(5) & ne(4), Some(3), 3);
+        test_finder(lt(100) & gt(60), Some(70), 8);
+        test_finder(lt(100) & gt(5), Some(50), 6);
+        test_finder(lt(100) & gt(60) & ne(70), None, 0);
+        test_finder(gt(50) & lt(70), Some(60), 7);
+        test_finder(ne(50) & gt(20), Some(60), 7);
+    }
+
+    #[test]
+    fn combine_and_or() {
+        test_finder(eq(3) | (gt(50) & lt(70)), Some(3), 3);
+        test_finder(gt(4) | (gt(50) & lt(70)), Some(5), 1);
+        test_finder(lt(1) | (gt(50) & lt(70)), Some(60), 7);
+        test_finder(lt(2) | (gt(50) & lt(70)), Some(1), 5);
     }
 }

@@ -250,7 +250,14 @@ mod tests {
         assert_eq!(res.state, "y");
 
         let p = item_while(|c: char| c.is_digit(10));
-        assert_eq!(parse(p, "1234abcd").result.unwrap(), "1234")
+        let res = parse(p, "1234abcd");
+        assert_eq!(res.result.unwrap(), "1234");
+        assert_eq!(res.state, "abcd");
+
+        let p = item_while(|c: char| c.is_digit(10));
+        let res = parse(p, "abcd1234");
+        assert_eq!(res.result.unwrap(), "");
+        assert_eq!(res.state, "abcd1234");
     }
 
     #[test]
@@ -269,5 +276,10 @@ mod tests {
         let res = parse(p, "xxxxy");
         assert_eq!(res.result.unwrap(), "xxxx");
         assert_eq!(res.state, "");
+
+        let p = until("z");
+        let res = parse(p, "xxxxy");
+        assert!(res.result.is_none());
+        assert_eq!(res.state, "xxxxy");
     }
 }

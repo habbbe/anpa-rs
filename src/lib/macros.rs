@@ -1,7 +1,15 @@
-/// Shorthand for creating a parser.
+/// Shorthand for creating a parser. All parsers shall return `Option<T>`
 /// ### Example:
-/// ```ignore
-/// let p = create_parser!(s, { /* Define parser behavior using state `s` */ })
+/// ```
+/// use anpa::create_parser;
+/// # use anpa::core::parse;
+///
+/// let p = create_parser!(s, {
+///     /* Define parser behavior using state `s` */
+///     # Some(())
+/// });
+///
+/// # parse(p, "test");
 /// ```
 #[macro_export]
 macro_rules! create_parser {
@@ -37,7 +45,19 @@ macro_rules! defer_parser {
     }
 }
 
-/// Variadic version of `map`, where all provided parsers must succeed.
+/// Variadic version of [`combinators::bind`](crate::combinators::bind), where all provided parsers must succeed.
+/// ### Arguments
+/// * `f` - the transformation function. Its arguments must match the result types of `p...` in
+///         both type and number.
+/// * `p...` - any number of parsers.
+#[macro_export]
+macro_rules! bind {
+    ($f:expr, $($p:expr),* $(,)?) => {
+        $crate::create_parser!(s, $f($($p(s)?),*)(s))
+    };
+}
+
+/// Variadic version of [`combinators::map`](crate::combinators::map), where all provided parsers must succeed.
 /// ### Arguments
 /// * `f` - the transformation function. Its arguments must match the result types of `p...` in
 ///         both type and number.
@@ -49,7 +69,7 @@ macro_rules! map {
     };
 }
 
-/// Variadic version of `map_if`, where all provided parsers must succeed.
+/// Variadic version of [`combinators::map_if`](crate::combinators::map_if), where all provided parsers must succeed.
 /// ### Arguments
 /// * `f` - the transformation function. Its arguments must match the result types of `p...` in
 ///         both type and number.
@@ -101,7 +121,7 @@ macro_rules! variadic {
     };
 }
 
-/// Variadic version of `or`.
+/// Variadic version of [`combinators::or`](crate::combinators::or).
 ///
 /// ### Arguments
 /// * `p...` - any number of parsers.
@@ -112,7 +132,7 @@ macro_rules! or {
     };
 }
 
-/// Variadic version of `or_no_partial`.
+/// Variadic version of [`or_no_partial`](crate::combinators::or_no_partial).
 ///
 /// ### Arguments
 /// * `p...` - any number of parsers.
@@ -123,7 +143,7 @@ macro_rules! or_no_partial {
     };
 }
 
-/// Variadic version of `or_diff`.
+/// Variadic version of [`combinators::or_diff`](crate::combinators::or_diff).
 ///
 /// ### Arguments
 /// * `p...` - any number of parsers.
@@ -134,7 +154,7 @@ macro_rules! or_diff {
     };
 }
 
-/// Variadic version of `or_diff_no_partial`.
+/// Variadic version of [`or_diff_no_partial`](crate::combinators::or_diff_no_partial).
 ///
 /// ### Arguments
 /// * `p...` - any number of parsers.
@@ -145,7 +165,20 @@ macro_rules! or_diff_no_partial {
     };
 }
 
-/// Variadic version of `left`, where only the leftmost parser's result will be returned.
+/// Variadic version of [`combinators::greedy_or`](crate::combinators::greedy_or), where
+/// the result of the parser with the most consumed input will be returned.
+///
+/// ### Arguments
+/// * `p...` - any number of parsers.
+#[macro_export]
+macro_rules! greedy_or {
+    ($($p:expr),* $(,)?) => {
+        $crate::variadic!($crate::combinators::greedy_or, $($p),*)
+    };
+}
+
+/// Variadic version of [`combinators::left`](crate::combinators::left), where
+/// only the leftmost parser's result will be returned.
 ///
 /// ### Arguments
 /// * `p...` - any number of parsers.
@@ -156,7 +189,8 @@ macro_rules! left {
     };
 }
 
-/// Variadic version of `right`, where only the rightmost parser's result will be returned.
+/// Variadic version of [`combinators::right`](crate::combinators::right), where
+/// only the rightmost parser's result will be returned.
 ///
 /// ### Arguments
 /// * `p...` - any number of parsers.
@@ -197,7 +231,8 @@ macro_rules! item_matches {
     };
 }
 
-/// Alternative to the `take` parser that inlines the argument into the parser.
+/// Alternative to the [`parsers::take`](crate::parsers::take) parser that
+/// inlines the argument into the parser.
 ///
 /// This can give better performance and/or smaller binary size, or the opposite.
 /// Try it and don't forget to measure!
@@ -218,7 +253,8 @@ macro_rules! take {
     }
 }
 
-/// Alternative to the `skip` parser that inlines the argument into the parser.
+/// Alternative to the [`parsers::skip`](crate::parsers::skip) parser that
+/// inlines the argument into the parser.
 ///
 /// This can give better performance and/or smaller binary size, or the opposite.
 /// Try it and don't forget to measure!
@@ -236,7 +272,8 @@ macro_rules! skip {
         })
     }
 }
-/// Alternative to the `until` parser that inlines the argument into the parser.
+/// Alternative to the [`parsers::until`](crate::parsers::until) parser that
+/// inlines the argument into the parser.
 ///
 /// This can give better performance and/or smaller binary size, or the opposite.
 /// Try it and don't forget to measure!
@@ -257,19 +294,34 @@ macro_rules! until {
     }
 }
 
-/// Variadic version of `greedy_or`, where the result of the parser with the most consumed
-/// input will be returned.
-///
-/// ### Arguments
-/// * `p...` - any number of parsers.
 #[macro_export]
-macro_rules! greedy_or {
-    ($($p:expr),* $(,)?) => {
-        $crate::variadic!($crate::combinators::greedy_or, $($p),*)
+macro_rules! choose_internal {
+    ($state:ident, $p:expr => $res:ident $(: $t:ty)?; $($cond:expr => $new_p:expr),* $(,)?) => {
+        $crate::create_parser!($state, {
+            let $res $(:$t)? = $p;
+
+            $(if $cond {
+                return $new_p($state)
+            })*
+
+            None
+        })
+    };
+
+    ($state:ident, $p:expr; $($arm:pat_param $(| $alt:pat_param)* $(if $guard:expr)? => $new_p:expr),* $(,)?) => {
+        $crate::create_parser!($state, {
+            match $p {
+                $(
+                    $arm $(| $alt)* $(if $guard)? => $new_p($state),
+                )*
+                #[allow(unreachable_patterns)]
+                _ => None
+            }
+        })
     };
 }
 
-/// Create a parser that takes the result of a parser, and returns different
+/// Create a parser that takes evaluates a parser, and returns different
 /// parsers depending on the provided conditions.
 ///
 /// If none of the provided conditions match, the parser will fail.
@@ -339,27 +391,30 @@ macro_rules! greedy_or {
 #[macro_export]
 macro_rules! choose {
     ($p:expr => $res:ident $(: $t:ty)?; $($cond:expr => $new_p:expr),* $(,)?) => {
-        $crate::create_parser!(s, {
-            let $res $(:$t)? = $p(s)?;
-
-            $(if $cond {
-                return $new_p(s)
-            })*
-
-            None
-        })
+        $crate::choose_internal!(s, $p(s)? => $res $(: $t)?; $($cond => $new_p),*)
     };
 
     ($p:expr; $($arm:pat_param $(| $alt:pat_param)* $(if $guard:expr)? => $new_p:expr),* $(,)?) => {
-        $crate::create_parser!(s, {
-            match $p(s)? {
-                $(
-                    $arm $(| $alt)* $(if $guard)? => $new_p(s),
-                )*
-                #[allow(unreachable_patterns)]
-                _ => None
-            }
-        })
+        $crate::choose_internal!(s, $p(s)?; $($arm $(| $alt)* $(if $guard)? => $new_p),*)
+    };
+}
+
+/// Create a parser that evaluates an expression, and returns different
+/// parsers depending on the provided conditions.
+///
+/// If none of the provided conditions match, the parser will fail.
+///
+/// This macro functions like [`choose!`], but acts on a value rather than on a parser.
+///
+/// See [`choose!`] for more details.
+#[macro_export]
+macro_rules! choose_pure {
+    ($p:expr => $res:ident $(: $t:ty)?; $($cond:expr => $new_p:expr),* $(,)?) => {
+        $crate::choose_internal!(s, $p => $res $(: $t)?; $($cond => $new_p),*)
+    };
+
+    ($p:expr; $($arm:pat_param $(| $alt:pat_param)* $(if $guard:expr)? => $new_p:expr),* $(,)?) => {
+        $crate::choose_internal!(s, $p; $($arm $(| $alt)* $(if $guard)? => $new_p),*)
     };
 }
 

@@ -13,28 +13,30 @@ pub trait TrimmableUtf8: SliceLike {
 }
 
 impl<A: CharLike> TrimmableAscii for &[A] {
+    #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
-        AsciiWhitespace()
+        AsciiWhitespace
     }
 }
 
 impl<A: CharLike> TrimmableUtf8 for &[A] {
+    #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
-        Utf8Whitespace()
+        Utf8Whitespace
     }
 }
 
 impl TrimmableAscii for &str {
     #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
-        AsciiWhitespace()
+        AsciiWhitespace
     }
 }
 
 impl TrimmableUtf8 for &str {
     #[inline(always)]
     fn prefix() -> impl Prefix<Self, Self> {
-        Utf8Whitespace()
+        Utf8Whitespace
     }
 }
 
@@ -64,11 +66,11 @@ pub const fn skip_whitespace<I: TrimmableUtf8, S>() -> impl Parser<I, (), S> {
 
 /// `Prefix` that matches zero or more ASCII whitespaces.
 #[derive(Clone, Copy)]
-pub struct AsciiWhitespace();
+pub struct AsciiWhitespace;
 
 /// `Prefix` that matches zero or more UTF-8 whitespaces.
 #[derive(Clone, Copy)]
-pub struct Utf8Whitespace();
+pub struct Utf8Whitespace;
 
 macro_rules! impl_whitespace_prefix_array {
     ($id:ident, $count:ident) => {
@@ -118,13 +120,13 @@ mod tests {
 
     #[test]
     fn test_whitespace_u8() {
-        let input = &[b' ', b' ', 1, 2];
+        let input = &[b' ', b'\t', 1, 2];
         let res = parse(skip_ascii_whitespace(), input.as_slice());
         assert_eq!(res.result, Some(()));
         assert_eq!(res.state, &[1, 2]);
 
         let res = parse(ascii_whitespace(), input.as_slice());
-        assert_eq!(res.result, Some([b' ', b' '].as_slice()));
+        assert_eq!(res.result, Some([b' ', b'\t'].as_slice()));
         assert_eq!(res.state, &[1, 2]);
     }
 

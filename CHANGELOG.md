@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.11.0
+
+### Breaking changes
+
+- Bump MSRV to 1.88
+- Remove `ContiguousBytes` in favor of `AsRef<[u8]>`
+- Rename:
+    - `integer_checked` => `integer`
+    - `integer_signed_checked` => `integer_signed`
+    - `float_checked` => `float`
+
+ - Unchecked number parsers removed. Functionality still available as per below.
+
+### New features
+ - Add `integer_custom` and `float_custom` parsers for configurable parsing
+   of numbers, e.g. unchecked, leading zeros, changing base, etc.
+
+### New features
+- New variadic parser `bind!`
+- New macro `choose_raw!` that functions like `choose!` but with a value
+  instead of a parser.
+- Add posibility to use & to combine `ByteFinder`s
+- Added new parse function `parse_state_owned` that takes ownership
+  of the user state while parsing.
+- Added new parse function `parse_default` that performs a parse using
+  an owned default (via `Default`) user state.
+
 ## 0.10.0
 
 ### New features

@@ -11,6 +11,21 @@ Allocating parsers:
 - `many_to_vec`, `many_to_map_ordered`: Require feature "alloc"
 - `many_to_map`: Requires feature "std"
 
+### Performance tuning
+
+While the performance should be good with the default settings, you can try to
+modify the following for further performance tuning:
+
+#### rustc
+- `lto=true`: Likely gives a substantial performance increase.
+- `panic=abort`: Likely gives a performance increase.
+- `codegen-units=N`: In the benchmarks, a value of 4 seems to give the best performance.
+
+#### LLVM flags
+Enable by setting environment variable `RUSTFLAGS="-Cllvm-flags=--flag_name=value" cargo build ...`
+
+- `inline-threshold=N`: Try to play around with values larger than 225. Note
+  that larger values lead to larger binaries.
 
 ### Examples
 
