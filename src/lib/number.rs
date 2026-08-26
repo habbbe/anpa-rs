@@ -118,7 +118,7 @@ pub const fn integer_internal<const CHECKED: bool,
             let digit = O::cast_u8(digit as u8);
 
             if !LEADING_ZEROS && acc == O::ZERO && idx != I::Idx::default() {
-                    return None
+                return None
             }
 
             if CHECKED {

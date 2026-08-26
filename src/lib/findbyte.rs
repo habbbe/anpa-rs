@@ -97,27 +97,27 @@ impl_bitop_for_combinator!(AndByte, BitAnd, bitand);
 /// A wrapper used for finding a byte that is equal to
 /// the wrappee.
 #[derive(Clone, Copy)]
-pub struct EqByte(pub u8);
+pub struct EqByte(pub u8, Work);
 
 /// A wrapper used for finding a byte that is smaller than
 /// the wrappee.
 #[derive(Clone, Copy)]
-pub struct LtByte(pub u8);
+pub struct LtByte(pub u8, Work);
 
 /// A wrapper used for finding a byte that is greater than
 /// the wrappee.
 #[derive(Clone, Copy)]
-pub struct GtByte(pub u8);
+pub struct GtByte(pub u8, Work);
 
 /// A wrapper used for finding a byte that is not equal to
 /// the wrappee.
 #[derive(Clone, Copy)]
-pub struct NeByte(pub u8);
+pub struct NeByte(pub u8, Work);
 
 impl ByteFinder for EqByte {
     #[inline]
     fn intermediate(self, haystack: Work) -> Work {
-        let to_find = haystack ^ (self.0 as Work * LOW_BITS);
+        let to_find = haystack ^ self.1;
         to_find.wrapping_sub(LOW_BITS) & !to_find
     }
 
@@ -132,7 +132,7 @@ impl ByteFinder for NeByte {
     fn intermediate(self, haystack: Work) -> Work {
         // Non-equality is obtained by toggling the high bits of
         // equality.
-        EqByte(self.0).intermediate(haystack) ^ HIGH_BITS
+        EqByte(self.0, self.1).intermediate(haystack) ^ HIGH_BITS
     }
 
     #[inline(always)]
@@ -144,7 +144,7 @@ impl ByteFinder for NeByte {
 impl ByteFinder for LtByte {
     #[inline]
     fn intermediate(self, haystack: Work) -> Work {
-        haystack.wrapping_sub(LOW_BITS * self.0 as Work) & !haystack
+        haystack.wrapping_sub(self.1) & !haystack
     }
 
     #[inline(always)]
@@ -156,7 +156,7 @@ impl ByteFinder for LtByte {
 impl ByteFinder for GtByte {
     #[inline]
     fn intermediate(self, haystack: Work) -> Work {
-        let mask = LOW_BITS * self.0 as Work;
+        let mask = self.1;
         mask.wrapping_sub(haystack) & !mask
     }
 
@@ -169,25 +169,25 @@ impl ByteFinder for GtByte {
 /// Return a byte finder representing `== b`.
 #[inline(always)]
 pub const fn eq(b: u8) -> EqByte {
-    EqByte(b)
+    EqByte(b, b as Work * LOW_BITS)
 }
 
 /// Return a byte finder representing `!= b`.
 #[inline(always)]
 pub const fn ne(b: u8) -> NeByte {
-    NeByte(b)
+    NeByte(b, b as Work * LOW_BITS)
 }
 
 /// Return a byte finder representing `< b`.
 #[inline(always)]
 pub const fn lt(b: u8) -> LtByte {
-    LtByte(b)
+    LtByte(b, b as Work * LOW_BITS)
 }
 
 /// Return a byte finder representing `> b`.
 #[inline(always)]
 pub const fn gt(b: u8) -> GtByte {
-    GtByte(b)
+    GtByte(b, b as Work * LOW_BITS)
 }
 
 /// Helper function for performing the byte search and returning the
@@ -467,8 +467,6 @@ mod tests {
 
     #[test]
     fn eq_or() {
-
-        test_finder(eq(2) | eq(4), Some(4), 2);
         test_finder(eq(2) | eq(4), Some(4), 2);
         test_finder(eq(70) | eq(6), Some(70), 8);
     }
