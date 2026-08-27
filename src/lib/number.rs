@@ -109,7 +109,7 @@ pub const fn integer_internal<const CHECKED: bool,
                               const DEC_DIVISOR: bool,
                               O: NumLike,
                               A: CharLike,
-                              I: SliceLike<RefItem = A>,
+                              I: SliceLike<AtomRefItem = A>,
                               S>() -> impl Parser<I, (O, usize, bool), S> {
     create_parser!(s, {
         let mut idx = I::Idx::default();
@@ -122,7 +122,9 @@ pub const fn integer_internal<const CHECKED: bool,
             SIGNED == SIGN_SIGNED
         };
 
-        let mut iter = s.input.slice_iter();
+        // Using the atom iterator is safe, since all valid characters used for
+        // constructing integers are ASCII, and thus at valid boundaries in e.g. `&str`.
+        let mut iter = s.input.slice_atom_iter();
         let mut consume = |digit: u32, is_negative: bool| -> Option<()> {
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit as u8);
@@ -271,7 +273,7 @@ pub const fn integer_custom<const CHECKED: bool,
                             const BASE: u8,
                             O: NumLike,
                             A: CharLike,
-                            I: SliceLike<RefItem = A>,
+                            I: SliceLike<AtomRefItem = A>,
                             S>(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE>) -> impl Parser<I, O, S> {
     map(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, false,_,_,_,_>(), |(n,_,_)| n)
 }
@@ -281,7 +283,7 @@ pub const fn integer_custom<const CHECKED: bool,
 #[inline]
 pub const fn integer<O: NumLike,
                      A: CharLike,
-                     I: SliceLike<RefItem = A>,
+                     I: SliceLike<AtomRefItem = A>,
                      S>() -> impl Parser<I, O, S> {
     integer_custom(IntConfig::new())
 }
@@ -379,7 +381,8 @@ pub const fn float_custom<const CHECKED: bool,
                           const DECIMAL_COMMA: bool,
                           O: FloatLike,
                           A: CharLike,
-                          I: SliceLike<RefItem = A>,
+                          A2: CharLike,
+                          I: SliceLike<AtomRefItem = A, RefItem= A2>,
                           S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA>)
                           -> impl Parser<I, O, S> {
 
@@ -412,7 +415,8 @@ pub const fn float_custom<const CHECKED: bool,
 #[inline]
 pub const fn float<O: FloatLike,
                    A: CharLike,
-                   I: SliceLike<RefItem = A>,
+                   A2: CharLike,
+                   I: SliceLike<RefItem = A, AtomRefItem = A2>,
                    S>() -> impl Parser<I, O, S> {
     float_custom(FloatConfig::new())
 }

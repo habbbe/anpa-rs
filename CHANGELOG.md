@@ -9,6 +9,9 @@
     - It is still possible to force unsigned by using `IntConfig::unsigned`
       with `integer_custom`.
 
+### Optimizations
+- When parsing integers from `&str`, use byte slices when traversing input.
+
 ## 0.11.0
 
 ### Breaking changes
