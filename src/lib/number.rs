@@ -1,4 +1,4 @@
-use core::ops::{Add, Div, Mul, Sub};
+use core::{convert::TryInto, ops::{Add, Div, Mul, Sub}};
 
 use crate::{charlike::CharLike, combinators::{bind, map, or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 
@@ -19,6 +19,9 @@ Add<Output = Self>
     fn checked_add(self, n: Self) -> Option<Self>;
     fn checked_sub(self, n: Self) -> Option<Self>;
     fn checked_mul(self, n: Self) -> Option<Self>;
+    fn from_le_bytes(bytes: &[u8]) -> Option<Self>;
+    fn from_be_bytes(bytes: &[u8]) -> Option<Self>;
+    fn from_ne_bytes(bytes: &[u8]) -> Option<Self>;
 }
 
 /// Trait for types that act like floating point numbers.
@@ -60,6 +63,18 @@ macro_rules! impl_NumLike {
                 #[inline(always)]
                 fn checked_mul(self, n: Self) -> Option<Self> {
                     self.checked_mul(n)
+                }
+
+                fn from_le_bytes(bytes: &[u8]) -> Option<Self> {
+                    Some($type::from_le_bytes(bytes.try_into().ok()?))
+                }
+
+                fn from_be_bytes(bytes: &[u8]) -> Option<Self> {
+                    Some($type::from_be_bytes(bytes.try_into().ok()?))
+                }
+
+                fn from_ne_bytes(bytes: &[u8]) -> Option<Self> {
+                    Some($type::from_ne_bytes(bytes.try_into().ok()?))
                 }
             }
         )*
@@ -288,6 +303,39 @@ pub const fn integer<O: NumLike,
     integer_custom(IntConfig::new())
 }
 
+macro_rules! raw_integer {
+    ($f:expr) => {
+        create_parser!(s, {
+            let res = $f(s.input.as_ref());
+            if res.is_some() {
+                s.input = s.input.slice_from(s.input.slice_idx_from_offset(O::SIZE));
+            }
+            res
+        })
+    };
+}
+
+/// Parse a raw little-endian integer from a byte slice.
+pub const fn raw_le_integer<'a,
+                            O: NumLike,
+                            S>() -> impl Parser<&'a [u8], O, S> {
+    raw_integer!(O::from_le_bytes)
+}
+
+/// Parse a raw big-endian integer from a byte slice.
+pub const fn raw_be_integer<'a,
+                            O: NumLike,
+                            S>() -> impl Parser<&'a [u8], O, S> {
+    raw_integer!(O::from_be_bytes)
+}
+
+/// Parse a raw native-endian integer from a byte slice.
+pub const fn raw_ne_integer<'a,
+                            O: NumLike,
+                            S>() -> impl Parser<&'a [u8], O, S> {
+    raw_integer!(O::from_ne_bytes)
+}
+
 /// Configuration for float parsing. The instance functions can be used to
 /// change the behavior of the parse.
 #[derive(Clone, Copy)]
@@ -423,7 +471,7 @@ pub const fn float<O: FloatLike,
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::parse, number::{FloatConfig, IntConfig, float, float_custom, integer, integer_custom}};
+    use crate::{core::parse, number::{FloatConfig, IntConfig, float, float_custom, integer, integer_custom, raw_be_integer, raw_le_integer, raw_ne_integer}};
 
     #[test]
     fn infer_integer() {
@@ -445,7 +493,7 @@ mod tests {
     #[test]
     fn integer_override_sign() {
         let p = integer_custom(IntConfig::new().unsigned());
-        assert_eq!(127i8, parse(p, "127").result.unwrap());
+        assert_eq!(127_i8, parse(p, "127").result.unwrap());
 
         assert!((parse(p, "-0").result as Option<i8>).is_none());
         assert!((parse(p, "128").result as Option<i8>).is_none());
@@ -471,16 +519,16 @@ mod tests {
 
     #[test]
     fn float_test() {
-        assert_eq!(0f32, parse(float(), "0").result.unwrap());
-        assert_eq!(100000000f32, parse(float(), "100000000").result.unwrap());
-        assert_eq!(-100000000f32, parse(float(), "-100000000").result.unwrap());
-        assert_eq!(13.37f32, parse(float(), "13.37").result.unwrap());
-        assert_eq!(-13.37f32, parse(float(), "-13.37").result.unwrap());
-        assert_eq!(13.07f32, parse(float(), "13.07").result.unwrap());
-        assert_eq!(-13.07f32, parse(float(), "-13.07").result.unwrap());
-        assert_eq!(1.123f32, parse(float(), "1.123").result.unwrap());
-        assert_eq!(0.001f32, parse(float(), "0.001").result.unwrap());
-        assert_eq!(-0.001f32, parse(float(), "-0.001").result.unwrap());
+        assert_eq!(0_f32, parse(float(), "0").result.unwrap());
+        assert_eq!(100000000_f32, parse(float(), "100000000").result.unwrap());
+        assert_eq!(-100000000_f32, parse(float(), "-100000000").result.unwrap());
+        assert_eq!(13.37_f32, parse(float(), "13.37").result.unwrap());
+        assert_eq!(-13.37_f32, parse(float(), "-13.37").result.unwrap());
+        assert_eq!(13.07_f32, parse(float(), "13.07").result.unwrap());
+        assert_eq!(-13.07_f32, parse(float(), "-13.07").result.unwrap());
+        assert_eq!(1.123_f32, parse(float(), "1.123").result.unwrap());
+        assert_eq!(0.001_f32, parse(float(), "0.001").result.unwrap());
+        assert_eq!(-0.001_f32, parse(float(), "-0.001").result.unwrap());
     }
 
     #[test]
@@ -490,5 +538,20 @@ mod tests {
         assert_eq!(0.05e15, parse(p, "0.05e15").result.unwrap());
         assert_eq!(-1.3e12, parse(p, "-1.3e12").result.unwrap());
         assert_eq!(-1.3e+12, parse(p, "-1.3e+12").result.unwrap());
+    }
+
+    #[test]
+    fn raw_integer() {
+        for i in i16::MIN..=i16::MAX {
+            let le = i.to_le_bytes();
+            let be = i.to_be_bytes();
+            let ne = i.to_ne_bytes();
+
+            assert_eq!(i, parse(raw_le_integer(), le.as_slice()).result.unwrap());
+            assert_eq!(i, parse(raw_be_integer(), be.as_slice()).result.unwrap());
+            assert_eq!(i, parse(raw_ne_integer(), ne.as_slice()).result.unwrap());
+        }
+
+        assert!((parse(raw_be_integer(), &[0x12, 0x34, 0x56, 0x78]).result as Option<u64>).is_none());
     }
 }

@@ -9,6 +9,10 @@
     - It is still possible to force unsigned by using `IntConfig::unsigned`
       with `integer_custom`.
 
+### New features
+- New parsers `raw_le_integer`, `raw_be_integer`, `raw_ne_integer` for parsing
+  raw integers from byte slices.
+
 ### Optimizations
 - When parsing integers from `&str`, use byte slices when traversing input.
 
