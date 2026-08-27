@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.12.0
+
+### Breaking changes
+
+- Remove parser `integer_signed`.
+    - `integer` now infers the signedness from the type
+    - It is still possible to force unsigned by using `IntConfig::unsigned`
+      with `integer_custom`.
+
 ## 0.11.0
 
 ### Breaking changes
