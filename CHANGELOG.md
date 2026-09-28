@@ -16,6 +16,9 @@
 ### Optimizations
 - When parsing integers from `&str`, use byte slices when traversing input.
 
+### Fixes
+- Fix builds on no_std by using internal powi function for floats
+
 ## 0.11.0
 
 ### Breaking changes

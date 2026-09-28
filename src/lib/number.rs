@@ -99,15 +99,51 @@ macro_rules! impl_FloatLike {
                     n as $type
                 }
 
+                #[cfg(feature = "std")]
                 #[inline(always)]
                 fn pow_i(self, exp: i32) -> Self {
                     self.powi(exp)
+                }
+
+                #[cfg(not(feature = "std"))]
+                #[inline(always)]
+                fn pow_i(self, exp: i32) -> Self {
+                    powi_internal(self, exp)
                 }
             }
         )*
     }
 }
 
+#[allow(dead_code)]
+fn powi_internal<F: FloatLike>(mut base: F, n: i32) -> F {
+    // TODO: Exponentiation by squaring.
+    // Likely possible to optimise since base is always 10.
+
+    if n == 0 {
+        return F::ONE;
+    }
+
+    let is_neg = n.is_negative();
+    let mut n = n.unsigned_abs();
+
+    let mut acc = F::ONE;
+
+    while n > 0 {
+        if !n.is_multiple_of(2)  {
+            acc = acc.mul(base);
+        }
+
+        base = base.mul(base);
+        n /= 2;
+    }
+
+    if is_neg {
+        F::ONE.div(acc)
+    } else {
+        acc
+    }
+}
 
 impl_NumLike!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize);
 impl_FloatLike!(f32, f64);
@@ -471,7 +507,7 @@ pub const fn float<O: FloatLike,
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::parse, number::{FloatConfig, IntConfig, float, float_custom, integer, integer_custom, raw_be_integer, raw_le_integer, raw_ne_integer}};
+    use crate::{core::parse, number::{FloatConfig, IntConfig, float, float_custom, integer, integer_custom, powi_internal, raw_be_integer, raw_le_integer, raw_ne_integer}};
 
     #[test]
     fn infer_integer() {
@@ -553,5 +589,17 @@ mod tests {
         }
 
         assert!((parse(raw_be_integer(), &[0x12, 0x34, 0x56, 0x78]).result as Option<u64>).is_none());
+    }
+
+    #[test]
+    fn powi_internal_test() {
+        for i in 0..100 {
+            for j in 0..100 {
+                assert_eq!((i as f64).powi(j), powi_internal(i as f64, j));
+                assert_eq!((i as f64).powi(-j), powi_internal(i as f64, -j));
+                assert_eq!((-i as f64).powi(j), powi_internal(-i as f64, j));
+                assert_eq!((-i as f64).powi(-j), powi_internal(-i as f64, -j));
+            }
+        }
     }
 }
