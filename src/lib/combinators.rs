@@ -1094,7 +1094,7 @@ pub const fn greedy_or<I: SliceLike, S, O>(p1: impl Parser<I, O, S>,
 /// use anpa::core::*;
 /// use anpa::defer_parser;
 /// use anpa::combinators::{chain, or, middle};
-/// use anpa::number::integer_signed;
+/// use anpa::number::integer;
 /// use anpa::parsers::{skip, take};
 ///
 /// // A parser that calculates an arihmetic expression.
@@ -1115,7 +1115,7 @@ pub const fn greedy_or<I: SliceLike, S, O>(p1: impl Parser<I, O, S>,
 ///     let add_op = or(take('+'), take('-')).map(ops);
 ///     let mul_op = or(take('*'), take('/')).map(ops);
 ///
-///     let atom = or(integer_signed(),
+///     let atom = or(integer(),
 ///                   middle(skip('('), defer_parser!(expr()), skip(')')));
 ///     let factor = chain(atom, mul_op);
 ///     chain(factor, add_op)

@@ -5,13 +5,22 @@ pub trait SliceLike: Copy {
     type Idx: Add<Output = Self::Idx> + AddAssign + Sub<Output = Self::Idx> +
                            SubAssign + PartialEq + PartialOrd + From<bool> + Default + Copy;
     type RefItem: Copy;
+    type AtomRefItem: Copy;
     type Iter: Iterator<Item = Self::RefItem>;
+    type AtomIter: Iterator<Item = Self::AtomRefItem>;
 
     /// Get an index from `usize`.
     fn slice_idx_from_offset(self, idx: usize) -> Self::Idx;
 
     /// Get an iterator for this input.
     fn slice_iter(self) -> Self::Iter;
+
+    /// Get an iterator for the atoms of this input.
+    /// For example, this is an iterator over `&u8` for &str.
+    /// For regular slice types `&[T]`, this is equivalent to [`slice_iter`].
+    ///
+    /// Use with caution, since the input may not be splittable on the atom boundary.
+    fn slice_atom_iter(self) -> Self::AtomIter;
 
     /// Get the first item of this input along with the rest, if it satisfies the provided predicate.
     fn slice_first_if(self, pred: impl FnOnce(Self::RefItem) -> bool + Copy) -> Option<(Self::RefItem, Self)>;
@@ -38,7 +47,9 @@ pub trait SliceLike: Copy {
 impl<'a, A> SliceLike for &'a [A] {
     type Idx = usize;
     type RefItem = &'a A;
+    type AtomRefItem = Self::RefItem;
     type Iter = Iter<'a, A>;
+    type AtomIter = Self::Iter;
 
     #[inline(always)]
     fn slice_idx_from_offset(self, idx: usize) -> Self::Idx {
@@ -47,6 +58,11 @@ impl<'a, A> SliceLike for &'a [A] {
 
     fn slice_iter(self) -> Self::Iter {
         self.iter()
+    }
+
+    #[inline(always)]
+    fn slice_atom_iter(self) -> Self::AtomIter {
+        self.slice_iter()
     }
 
     fn slice_first_if(self, pred: impl FnOnce(Self::RefItem) -> bool + Copy) -> Option<(Self::RefItem, Self)> {
@@ -81,7 +97,9 @@ impl<'a, A> SliceLike for &'a [A] {
 impl<'a> SliceLike for &'a str {
     type Idx = usize;
     type RefItem = char;
+    type AtomRefItem = &'a u8;
     type Iter = Chars<'a>;
+    type AtomIter = Iter<'a, u8>;
 
     #[inline(always)]
     fn slice_idx_from_offset(self, idx: usize) -> Self::Idx {
@@ -90,6 +108,10 @@ impl<'a> SliceLike for &'a str {
 
     fn slice_iter(self) -> Self::Iter {
         self.chars()
+    }
+
+    fn slice_atom_iter(self) -> Self::AtomIter {
+        self.as_bytes().iter()
     }
 
     fn slice_first_if(self, pred: impl FnOnce(Self::RefItem) -> bool + Copy) -> Option<(Self::RefItem, Self)> {

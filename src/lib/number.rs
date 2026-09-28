@@ -1,4 +1,4 @@
-use core::ops::{Add, Div, Mul, Sub};
+use core::{convert::TryInto, ops::{Add, Div, Mul, Sub}};
 
 use crate::{charlike::CharLike, combinators::{bind, map, or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 
@@ -19,6 +19,9 @@ Add<Output = Self>
     fn checked_add(self, n: Self) -> Option<Self>;
     fn checked_sub(self, n: Self) -> Option<Self>;
     fn checked_mul(self, n: Self) -> Option<Self>;
+    fn from_le_bytes(bytes: &[u8]) -> Option<Self>;
+    fn from_be_bytes(bytes: &[u8]) -> Option<Self>;
+    fn from_ne_bytes(bytes: &[u8]) -> Option<Self>;
 }
 
 /// Trait for types that act like floating point numbers.
@@ -61,6 +64,18 @@ macro_rules! impl_NumLike {
                 fn checked_mul(self, n: Self) -> Option<Self> {
                     self.checked_mul(n)
                 }
+
+                fn from_le_bytes(bytes: &[u8]) -> Option<Self> {
+                    Some($type::from_le_bytes(bytes.try_into().ok()?))
+                }
+
+                fn from_be_bytes(bytes: &[u8]) -> Option<Self> {
+                    Some($type::from_be_bytes(bytes.try_into().ok()?))
+                }
+
+                fn from_ne_bytes(bytes: &[u8]) -> Option<Self> {
+                    Some($type::from_ne_bytes(bytes.try_into().ok()?))
+                }
             }
         )*
     }
@@ -84,41 +99,89 @@ macro_rules! impl_FloatLike {
                     n as $type
                 }
 
+                #[cfg(feature = "std")]
                 #[inline(always)]
                 fn pow_i(self, exp: i32) -> Self {
                     self.powi(exp)
+                }
+
+                #[cfg(not(feature = "std"))]
+                #[inline(always)]
+                fn pow_i(self, exp: i32) -> Self {
+                    powi_internal(self, exp)
                 }
             }
         )*
     }
 }
 
+#[allow(dead_code)]
+fn powi_internal<F: FloatLike>(mut base: F, n: i32) -> F {
+    // TODO: Exponentiation by squaring.
+    // Likely possible to optimise since base is always 10.
+
+    if n == 0 {
+        return F::ONE;
+    }
+
+    let is_neg = n.is_negative();
+    let mut n = n.unsigned_abs();
+
+    let mut acc = F::ONE;
+
+    while n > 0 {
+        if !n.is_multiple_of(2)  {
+            acc = acc.mul(base);
+        }
+
+        base = base.mul(base);
+        n /= 2;
+    }
+
+    if is_neg {
+        F::ONE.div(acc)
+    } else {
+        acc
+    }
+}
 
 impl_NumLike!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize);
 impl_FloatLike!(f32, f64);
 
+const SIGN_INFER: u8 = 0;
+const SIGN_UNSIGED: u8 = 1;
+const SIGN_SIGNED: u8 = 2;
+
 pub const fn integer_internal<const CHECKED: bool,
-                              const SIGNED: bool,
+                              const SIGNED: u8,
                               const LEADING_PLUS: bool,
                               const LEADING_ZEROS: bool,
                               const BASE: u8,
                               const DEC_DIVISOR: bool,
                               O: NumLike,
                               A: CharLike,
-                              I: SliceLike<RefItem = A>,
+                              I: SliceLike<AtomRefItem = A>,
                               S>() -> impl Parser<I, (O, usize, bool), S> {
     create_parser!(s, {
         let mut idx = I::Idx::default();
         let mut acc = O::ZERO;
         let mut dec_divisor = 1;
 
-        let mut iter = s.input.slice_iter();
+        let signed: bool = if SIGNED == SIGN_INFER {
+            O::ZERO > O::MIN
+        } else {
+            SIGNED == SIGN_SIGNED
+        };
+
+        // Using the atom iterator is safe, since all valid characters used for
+        // constructing integers are ASCII, and thus at valid boundaries in e.g. `&str`.
+        let mut iter = s.input.slice_atom_iter();
         let mut consume = |digit: u32, is_negative: bool| -> Option<()> {
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit as u8);
 
             if !LEADING_ZEROS && acc == O::ZERO && idx != I::Idx::default() {
-                    return None
+                return None
             }
 
             if CHECKED {
@@ -152,10 +215,10 @@ pub const fn integer_internal<const CHECKED: bool,
             Some(())
         };
 
-        let leading = if SIGNED || LEADING_PLUS {
+        let leading = if signed || LEADING_PLUS {
             let c = iter.next()?.as_char();
 
-            if SIGNED && c == '-' {
+            if signed && c == '-' {
                 Some(true)
             } else if LEADING_PLUS && c == '+' {
                 Some(false)
@@ -185,7 +248,7 @@ pub const fn integer_internal<const CHECKED: bool,
 /// change the behavior of the parse.
 #[derive(Clone, Copy)]
 pub struct IntConfig<const CHECKED: bool = true,
-                     const SIGNED: bool = false,
+                     const SIGNED: u8 = SIGN_INFER,
                      const LEADING_PLUS: bool = false,
                      const LEADING_ZEROS: bool = true,
                      const BASE: u8 = 10>;
@@ -203,7 +266,7 @@ impl Default for IntConfig {
 }
 
 impl<const CHECKED: bool,
-     const SIGNED: bool,
+     const SIGNED: u8,
      const LEADING_PLUS: bool,
      const LEADING_ZEROS: bool,
      const BASE: u8>
@@ -213,7 +276,7 @@ impl<const CHECKED: bool,
         IntConfig
     }
 
-    pub const fn signed(self) -> IntConfig<CHECKED, true, LEADING_PLUS, LEADING_ZEROS, BASE> {
+    pub const fn unsigned(self) -> IntConfig<CHECKED, SIGN_UNSIGED, LEADING_PLUS, LEADING_ZEROS, BASE> {
         IntConfig
     }
 
@@ -231,7 +294,7 @@ impl<const CHECKED: bool,
     }
 }
 
-/// Parse an unsigned integer. The type of the integer will be inferred from the context.
+/// Parse an integer. The type of the integer will be inferred from the context.
 /// General verison taking a config object. See [`IntConfig`] for more information.
 ///
 /// ### Arguments
@@ -255,42 +318,65 @@ impl<const CHECKED: bool,
 /// ```
 #[inline]
 pub const fn integer_custom<const CHECKED: bool,
-                            const SIGNED: bool,
+                            const SIGNED: u8,
                             const LEADING_PLUS: bool,
                             const LEADING_ZEROS: bool,
                             const BASE: u8,
                             O: NumLike,
                             A: CharLike,
-                            I: SliceLike<RefItem = A>,
+                            I: SliceLike<AtomRefItem = A>,
                             S>(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE>) -> impl Parser<I, O, S> {
     map(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, false,_,_,_,_>(), |(n,_,_)| n)
 }
 
-/// Parse an unsigned integer. The type of the integer will be inferred from the context.
+/// Parse an integer. The type of the integer will be inferred from the context.
 /// This parser will fail if the result does not fit in the inferred integer type.
 #[inline]
 pub const fn integer<O: NumLike,
                      A: CharLike,
-                     I: SliceLike<RefItem = A>,
+                     I: SliceLike<AtomRefItem = A>,
                      S>() -> impl Parser<I, O, S> {
     integer_custom(IntConfig::new())
 }
 
-/// Parse an signed integer. The type of the integer will be inferred from the context.
-/// This parser will fail if the result does not fit in the inferred integer type.
-#[inline]
-pub const fn integer_signed<O: NumLike,
-                            A: CharLike,
-                            I: SliceLike<RefItem = A>,
-                            S>() -> impl Parser<I, O, S> {
-    integer_custom(IntConfig::new().signed())
+macro_rules! raw_integer {
+    ($f:expr) => {
+        create_parser!(s, {
+            let res = $f(s.input.as_ref());
+            if res.is_some() {
+                s.input = s.input.slice_from(s.input.slice_idx_from_offset(O::SIZE));
+            }
+            res
+        })
+    };
+}
+
+/// Parse a raw little-endian integer from a byte slice.
+pub const fn raw_le_integer<'a,
+                            O: NumLike,
+                            S>() -> impl Parser<&'a [u8], O, S> {
+    raw_integer!(O::from_le_bytes)
+}
+
+/// Parse a raw big-endian integer from a byte slice.
+pub const fn raw_be_integer<'a,
+                            O: NumLike,
+                            S>() -> impl Parser<&'a [u8], O, S> {
+    raw_integer!(O::from_be_bytes)
+}
+
+/// Parse a raw native-endian integer from a byte slice.
+pub const fn raw_ne_integer<'a,
+                            O: NumLike,
+                            S>() -> impl Parser<&'a [u8], O, S> {
+    raw_integer!(O::from_ne_bytes)
 }
 
 /// Configuration for float parsing. The instance functions can be used to
 /// change the behavior of the parse.
 #[derive(Clone, Copy)]
 pub struct FloatConfig<const CHECKED: bool = true,
-                       const SIGNED: bool = true,
+                       const SIGNED: u8 = SIGN_SIGNED,
                        const SCI: bool = false,
                        const LEADING_PLUS: bool = false,
                        const LEADING_ZEROS_INT: bool = true,
@@ -310,7 +396,7 @@ impl Default for FloatConfig {
 }
 
 impl<const CHECKED: bool,
-     const SIGNED: bool,
+     const SIGNED: u8,
      const SCI: bool,
      const LEADING_PLUS: bool,
      const LEADING_ZERO_INT: bool,
@@ -322,7 +408,7 @@ impl<const CHECKED: bool,
         FloatConfig
     }
 
-    pub const fn unsigned(self) -> FloatConfig::<CHECKED, false, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+    pub const fn unsigned(self) -> FloatConfig::<CHECKED, SIGN_UNSIGED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
         FloatConfig
     }
 
@@ -371,7 +457,7 @@ impl<const CHECKED: bool,
 /// ```
 #[inline]
 pub const fn float_custom<const CHECKED: bool,
-                          const SIGNED: bool,
+                          const SIGNED: u8,
                           const SCI: bool,
                           const LEADING_PLUS: bool,
                           const LEADING_ZERO_INT: bool,
@@ -379,7 +465,8 @@ pub const fn float_custom<const CHECKED: bool,
                           const DECIMAL_COMMA: bool,
                           O: FloatLike,
                           A: CharLike,
-                          I: SliceLike<RefItem = A>,
+                          A2: CharLike,
+                          I: SliceLike<AtomRefItem = A, RefItem= A2>,
                           S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA>)
                           -> impl Parser<I, O, S> {
 
@@ -388,7 +475,7 @@ pub const fn float_custom<const CHECKED: bool,
         // Then parse a period followed by an unsigned integer.
         let int = O::cast_isize(n);
         let dec = right(item_if(|c: I::RefItem| c.as_char() ==  if DECIMAL_COMMA {','} else {'.'}),
-                  integer_internal::<CHECKED, false, false, true, 10, true,_,_,_,_>())
+                  integer_internal::<CHECKED, SIGN_UNSIGED, false, true, 10, true,_,_,_,_>())
             .map(move |(dec, div, _)|
                 int + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));
 
@@ -397,7 +484,7 @@ pub const fn float_custom<const CHECKED: bool,
         choose_pure!(SCI;
             true => bind(pre_exp_parser, |pre_exp| {
                 let exp = right(item_if(|c: I::RefItem| matches!(c.as_char(), 'e' | 'E')),
-                                integer_custom(IntConfig::<CHECKED, true, true, LEADING_ZERO_EXP>))
+                                integer_custom(IntConfig::<CHECKED, SIGN_SIGNED, true, LEADING_ZERO_EXP>))
                     .map(move |exp| pre_exp * O::TEN.pow_i(exp));
                 or(exp, pure!(pre_exp))
             }),
@@ -412,61 +499,72 @@ pub const fn float_custom<const CHECKED: bool,
 #[inline]
 pub const fn float<O: FloatLike,
                    A: CharLike,
-                   I: SliceLike<RefItem = A>,
+                   A2: CharLike,
+                   I: SliceLike<RefItem = A, AtomRefItem = A2>,
                    S>() -> impl Parser<I, O, S> {
     float_custom(FloatConfig::new())
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::parse, number::{FloatConfig, IntConfig, float, float_custom, integer, integer_custom, integer_signed}};
+    use crate::{core::parse, number::{FloatConfig, IntConfig, float, float_custom, integer, integer_custom, powi_internal, raw_be_integer, raw_le_integer, raw_ne_integer}};
 
     #[test]
-    fn unsigned_integer() {
+    fn infer_integer() {
         assert_eq!(0, parse(integer(), "0").result.unwrap());
         assert_eq!(127, parse(integer(), "127").result.unwrap());
         assert_eq!(255, parse(integer(), "255").result.unwrap());
 
+        assert_eq!(-0, parse(integer(), "-0").result.unwrap());
+        assert_eq!(-1, parse(integer(), "-1").result.unwrap());
+        assert_eq!(-128, parse(integer(), "-128").result.unwrap());
+
         assert!((parse(integer(), "-1").result as Option<u8>).is_none());
         assert!((parse(integer(), "256").result as Option<u8>).is_none());
+
+        assert!((parse(integer(), "-129").result as Option<i8>).is_none());
+        assert!((parse(integer(), "128").result as Option<i8>).is_none());
     }
 
     #[test]
-    fn unsigned_integer_hex() {
+    fn integer_override_sign() {
+        let p = integer_custom(IntConfig::new().unsigned());
+        assert_eq!(127_i8, parse(p, "127").result.unwrap());
+
+        assert!((parse(p, "-0").result as Option<i8>).is_none());
+        assert!((parse(p, "128").result as Option<i8>).is_none());
+        assert!((parse(p, "-1").result as Option<i8>).is_none());
+    }
+
+    #[test]
+    fn integer_hex() {
         let p = integer_custom(IntConfig::new().base::<16>());
         assert_eq!(0u8, parse(p, "0").result.unwrap());
         assert_eq!(127, parse(p, "7F").result.unwrap());
         assert_eq!(255, parse(p, "FF").result.unwrap());
-
         assert!((parse(p, "100").result as Option<u8>).is_none());
         assert!((parse(p, "-1").result as Option<u8>).is_none());
-    }
 
-    #[test]
-    fn signed_integer() {
-        assert_eq!(0, parse(integer_signed(), "0").result.unwrap());
-        assert_eq!(127, parse(integer_signed(), "127").result.unwrap());
-        assert_eq!(-1, parse(integer_signed(), "-1").result.unwrap());
-        assert_eq!(-128, parse(integer_signed(), "-128").result.unwrap());
-
-        assert_eq!(128u8, parse(integer_signed(), "128").result.unwrap());
-
-        assert!((parse(integer_signed(), "-129").result as Option<u8>).is_none());
-        assert!((parse(integer_signed(), "128").result as Option<i8>).is_none());
+        let p = integer_custom(IntConfig::new().base::<16>());
+        assert_eq!(-1i8, parse(p, "-1").result.unwrap());
+        assert_eq!(-128, parse(p, "-80").result.unwrap());
+        assert_eq!(127, parse(p, "7F").result.unwrap());
+        assert!((parse(p, "80").result as Option<i8>).is_none());
+        assert!((parse(p, "-81").result as Option<i8>).is_none());
     }
 
     #[test]
     fn float_test() {
-        assert_eq!(0f32, parse(float(), "0").result.unwrap());
-        assert_eq!(100000000f32, parse(float(), "100000000").result.unwrap());
-        assert_eq!(-100000000f32, parse(float(), "-100000000").result.unwrap());
-        assert_eq!(13.37f32, parse(float(), "13.37").result.unwrap());
-        assert_eq!(-13.37f32, parse(float(), "-13.37").result.unwrap());
-        assert_eq!(13.07f32, parse(float(), "13.07").result.unwrap());
-        assert_eq!(-13.07f32, parse(float(), "-13.07").result.unwrap());
-        assert_eq!(1.123f32, parse(float(), "1.123").result.unwrap());
-        assert_eq!(0.001f32, parse(float(), "0.001").result.unwrap());
-        assert_eq!(-0.001f32, parse(float(), "-0.001").result.unwrap());
+        assert_eq!(0_f32, parse(float(), "0").result.unwrap());
+        assert_eq!(100000000_f32, parse(float(), "100000000").result.unwrap());
+        assert_eq!(-100000000_f32, parse(float(), "-100000000").result.unwrap());
+        assert_eq!(13.37_f32, parse(float(), "13.37").result.unwrap());
+        assert_eq!(-13.37_f32, parse(float(), "-13.37").result.unwrap());
+        assert_eq!(13.07_f32, parse(float(), "13.07").result.unwrap());
+        assert_eq!(-13.07_f32, parse(float(), "-13.07").result.unwrap());
+        assert_eq!(1.123_f32, parse(float(), "1.123").result.unwrap());
+        assert_eq!(0.001_f32, parse(float(), "0.001").result.unwrap());
+        assert_eq!(-0.001_f32, parse(float(), "-0.001").result.unwrap());
     }
 
     #[test]
@@ -476,5 +574,32 @@ mod tests {
         assert_eq!(0.05e15, parse(p, "0.05e15").result.unwrap());
         assert_eq!(-1.3e12, parse(p, "-1.3e12").result.unwrap());
         assert_eq!(-1.3e+12, parse(p, "-1.3e+12").result.unwrap());
+    }
+
+    #[test]
+    fn raw_integer() {
+        for i in i16::MIN..=i16::MAX {
+            let le = i.to_le_bytes();
+            let be = i.to_be_bytes();
+            let ne = i.to_ne_bytes();
+
+            assert_eq!(i, parse(raw_le_integer(), le.as_slice()).result.unwrap());
+            assert_eq!(i, parse(raw_be_integer(), be.as_slice()).result.unwrap());
+            assert_eq!(i, parse(raw_ne_integer(), ne.as_slice()).result.unwrap());
+        }
+
+        assert!((parse(raw_be_integer(), &[0x12, 0x34, 0x56, 0x78]).result as Option<u64>).is_none());
+    }
+
+    #[test]
+    fn powi_internal_test() {
+        for i in 0..100 {
+            for j in 0..100 {
+                assert_eq!((i as f64).powi(j), powi_internal(i as f64, j));
+                assert_eq!((i as f64).powi(-j), powi_internal(i as f64, -j));
+                assert_eq!((-i as f64).powi(j), powi_internal(-i as f64, j));
+                assert_eq!((-i as f64).powi(-j), powi_internal(-i as f64, -j));
+            }
+        }
     }
 }

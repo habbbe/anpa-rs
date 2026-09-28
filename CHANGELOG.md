@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.12.0
+
+### Breaking changes
+
+- Remove parser `integer_signed`.
+    - `integer` now infers the signedness from the type
+    - It is still possible to force unsigned by using `IntConfig::unsigned`
+      with `integer_custom`.
+
+### New features
+- New parsers `raw_le_integer`, `raw_be_integer`, `raw_ne_integer` for parsing
+  raw integers from byte slices.
+
+### Optimizations
+- When parsing integers from `&str`, use byte slices when traversing input.
+
+### Fixes
+- Fix builds on no_std by using internal powi function for floats
+
 ## 0.11.0
 
 ### Breaking changes
