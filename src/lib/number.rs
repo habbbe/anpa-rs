@@ -1,4 +1,4 @@
-use core::{convert::TryInto, ops::{Add, Div, Mul, Sub}};
+use core::ops::{Add, Div, Mul, Sub};
 
 use crate::{charlike::CharLike, combinators::{bind, map, or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 
@@ -19,9 +19,9 @@ Add<Output = Self>
     fn checked_add(self, n: Self) -> Option<Self>;
     fn checked_sub(self, n: Self) -> Option<Self>;
     fn checked_mul(self, n: Self) -> Option<Self>;
-    fn from_le_bytes(bytes: &[u8]) -> Option<Self>;
-    fn from_be_bytes(bytes: &[u8]) -> Option<Self>;
-    fn from_ne_bytes(bytes: &[u8]) -> Option<Self>;
+    fn from_le_bytes(bytes: &[u8]) -> Option<(Self, &[u8])>;
+    fn from_be_bytes(bytes: &[u8]) -> Option<(Self, &[u8])>;
+    fn from_ne_bytes(bytes: &[u8]) -> Option<(Self, &[u8])>;
 }
 
 /// Trait for types that act like floating point numbers.
@@ -65,16 +65,19 @@ macro_rules! impl_NumLike {
                     self.checked_mul(n)
                 }
 
-                fn from_le_bytes(bytes: &[u8]) -> Option<Self> {
-                    Some($type::from_le_bytes(bytes.try_into().ok()?))
+                fn from_le_bytes(bytes: &[u8]) -> Option<(Self, &[u8])> {
+                    bytes.split_first_chunk::<{Self::SIZE}>()
+                        .map(|(chunk, rest)| ($type::from_le_bytes(*chunk), rest))
                 }
 
-                fn from_be_bytes(bytes: &[u8]) -> Option<Self> {
-                    Some($type::from_be_bytes(bytes.try_into().ok()?))
+                fn from_be_bytes(bytes: &[u8]) -> Option<(Self, &[u8])> {
+                    bytes.split_first_chunk::<{Self::SIZE}>()
+                        .map(|(chunk, rest)| ($type::from_be_bytes(*chunk), rest))
                 }
 
-                fn from_ne_bytes(bytes: &[u8]) -> Option<Self> {
-                    Some($type::from_ne_bytes(bytes.try_into().ok()?))
+                fn from_ne_bytes(bytes: &[u8]) -> Option<(Self, &[u8])> {
+                    bytes.split_first_chunk::<{Self::SIZE}>()
+                        .map(|(chunk, rest)| ($type::from_ne_bytes(*chunk), rest))
                 }
             }
         )*
@@ -342,11 +345,10 @@ pub const fn integer<O: NumLike,
 macro_rules! raw_integer {
     ($f:expr) => {
         create_parser!(s, {
-            let res = $f(s.input.as_ref());
-            if res.is_some() {
-                s.input = s.input.slice_from(s.input.slice_idx_from_offset(O::SIZE));
-            }
-            res
+            $f(s.input.as_ref()).map(|(res, rest)| {
+                s.input = rest;
+                res
+            })
         })
     };
 }
@@ -507,7 +509,8 @@ pub const fn float<O: FloatLike,
 
 #[cfg(test)]
 mod tests {
-    use crate::{core::parse, number::{FloatConfig, IntConfig, float, float_custom, integer, integer_custom, powi_internal, raw_be_integer, raw_le_integer, raw_ne_integer}};
+
+use crate::{core::parse, number::{FloatConfig, IntConfig, float, float_custom, integer, integer_custom, powi_internal, raw_be_integer, raw_le_integer, raw_ne_integer}};
 
     #[test]
     fn infer_integer() {
@@ -578,14 +581,34 @@ mod tests {
 
     #[test]
     fn raw_integer() {
+        let empty: &[u8] = &[];
+        let tail: &[u8] = &[3, 4];
         for i in i16::MIN..=i16::MAX {
-            let le = i.to_le_bytes();
-            let be = i.to_be_bytes();
-            let ne = i.to_ne_bytes();
+            let le_exact = i.to_le_bytes();
+            let be_exact = i.to_be_bytes();
+            let ne_exact = i.to_ne_bytes();
+            let le = parse(raw_le_integer(), le_exact.as_slice());
+            let be = parse(raw_be_integer(), be_exact.as_slice());
+            let ne = parse(raw_ne_integer(), ne_exact.as_slice());
+            assert_eq!(i, le.result.unwrap());
+            assert_eq!(empty, le.state);
+            assert_eq!(i, be.result.unwrap());
+            assert_eq!(empty, be.state);
+            assert_eq!(i, ne.result.unwrap());
+            assert_eq!(empty, ne.state);
 
-            assert_eq!(i, parse(raw_le_integer(), le.as_slice()).result.unwrap());
-            assert_eq!(i, parse(raw_be_integer(), be.as_slice()).result.unwrap());
-            assert_eq!(i, parse(raw_ne_integer(), ne.as_slice()).result.unwrap());
+            let le_larger = &[le_exact[0], le_exact[1], 3, 4];
+            let be_larger = &[be_exact[0], be_exact[1], 3, 4];
+            let ne_larger = &[ne_exact[0], ne_exact[1], 3, 4];
+            let le = parse(raw_le_integer(), le_larger);
+            let be = parse(raw_be_integer(), be_larger);
+            let ne = parse(raw_ne_integer(), ne_larger);
+            assert_eq!(i, le.result.unwrap());
+            assert_eq!(tail, le.state);
+            assert_eq!(i, be.result.unwrap());
+            assert_eq!(tail, be.state);
+            assert_eq!(i, ne.result.unwrap());
+            assert_eq!(tail, ne.state);
         }
 
         assert!((parse(raw_be_integer(), &[0x12, 0x34, 0x56, 0x78]).result as Option<u64>).is_none());
