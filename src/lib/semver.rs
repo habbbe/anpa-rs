@@ -1,4 +1,4 @@
-use crate::{combinators::*, core::{ParserExtNoState, StrParser}, number::integer, parsers::*};
+use crate::{combinators::*, core::{ParserExtNoState, StrParser}, number::{IntConfig, integer_custom}, parsers::*};
 
 #[derive(Debug)]
 pub struct AnpaVersion<T> {
@@ -43,12 +43,10 @@ pub const fn semver<'a, T: From<&'a str>>() -> impl StrParser<'a, AnpaVersion<T>
 
 #[inline]
 const fn version_core<'a>() -> impl StrParser<'a, (u64, u64, u64)> {
-    let component = map_if(and_parsed(integer()), |(i, p): (&str, _)| {
-        (!i.starts_with('0') || p == 0).then_some(p)
-    });
+    let component = integer_custom(IntConfig::new().no_leading_zero());
 
     // We could go completely with re-use, but it's faster to use the internal integer parser.
-    // let component = numeric_identifier().map(|s| s.parse().unwrap());
+    // let component = map(numeric_identifier(), |s| s.parse().unwrap());
 
     let major_minor = left(component, skip('.'));
     tuplify!(major_minor, major_minor, component)
@@ -159,5 +157,20 @@ mod tests {
         assert_eq!(res.patch, 67890);
         assert_eq!(res.pre_release, "SNAPSHOT");
         assert_eq!(res.build, "build1");
+    }
+
+    #[test]
+    fn allow_zero() {
+        assert!(parse_inline("0.345.67890-SNAPSHOT+build1").is_some());
+        assert!(parse_inline("12.0.67890-SNAPSHOT+build1").is_some());
+        assert!(parse_inline("12.345.0-SNAPSHOT+build1").is_some());
+    }
+
+    #[test]
+    fn no_leading_zeros() {
+        assert!(parse_inline("00.345.67890-SNAPSHOT+build1").is_none());
+        assert!(parse_inline("01.345.67890-SNAPSHOT+build1").is_none());
+        assert!(parse_inline("12.034.67890-SNAPSHOT+build1").is_none());
+        assert!(parse_inline("12.345.07890-SNAPSHOT+build1").is_none());
     }
 }
