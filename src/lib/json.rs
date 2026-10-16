@@ -23,7 +23,7 @@ const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
     let escaped = right(item(), or_diff(item_matches!('"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't'),
                                         unicode));
     let parse_until = choose!(find_byte(eq(b'"') | eq(b'\\') | lt(0x20), false);
-                                        b'\\' => escaped);
+                                        b'\\' => attempt(escaped));
     into_type(middle(skip!('"'), many(parse_until, true, no_separator()), skip!('"')))
 }
 
@@ -71,7 +71,7 @@ pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, J
         value_parser());
     map(middle(
         skip!('{'),
-        many_to_map_ordered(pair_parser, true, separator(eat(skip!(',')), false)),
+        many_to_map_ordered(attempt(pair_parser), true, separator(eat(skip!(',')), false)),
         eat(skip!('}'))), JsonValue::Dic)
 }
 
