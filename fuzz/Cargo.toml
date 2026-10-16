@@ -1,0 +1,62 @@
+[package]
+name = "anpa-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+serde_json = "1"
+semver = "1"
+anpa = { path = "..", features = ["std", "json", "semver"] }
+
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "findbyte"
+path = "fuzz_targets/findbyte.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "integer"
+path = "fuzz_targets/integer.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "float"
+path = "fuzz_targets/float.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "json"
+path = "fuzz_targets/json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "semver"
+path = "fuzz_targets/semver.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "prefix_needle"
+path = "fuzz_targets/prefix_needle.rs"
+test = false
+doc = false
+bench = false
