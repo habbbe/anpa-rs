@@ -13,8 +13,10 @@ Add<Output = Self>
     const MIN: Self;
     const MAX: Self;
     const ZERO: Self;
+    const ONE: Self;
     const TEN: Self;
     const SIZE: usize;
+    const SIGNED: bool;
     fn cast_u8(n: u8) -> Self;
     fn checked_add(self, n: Self) -> Option<Self>;
     fn checked_sub(self, n: Self) -> Option<Self>;
@@ -42,8 +44,12 @@ macro_rules! impl_NumLike {
                 const MIN: $type = $type::MIN;
                 const MAX: $type = $type::MAX;
                 const ZERO: $type = 0;
+                const ONE: $type = 1;
                 const TEN: $type = 10;
                 const SIZE: usize = core::mem::size_of::<$type>();
+
+                #[allow(unused_comparisons)]
+                const SIGNED: bool = 0 > $type::MIN;
 
                 #[inline(always)]
                 fn cast_u8(n: u8) -> Self {
@@ -189,10 +195,10 @@ pub const fn integer_internal<const CHECKED: bool,
     create_parser!(s, {
         let mut digit_count = I::Idx::default();
         let mut acc = O::ZERO;
-        let mut dec_divisor = O::cast_u8(1);
+        let mut dec_divisor = O::ONE;
 
         let signed: bool = if SIGNED == SIGN_INFER {
-            O::ZERO > O::MIN
+            O::SIGNED
         } else {
             SIGNED == SIGN_SIGNED
         };
