@@ -179,69 +179,67 @@ pub const fn integer_internal<const CHECKED: bool,
         // Using the atom iterator is safe, since all valid characters used for
         // constructing integers are ASCII, and thus at valid boundaries in e.g. `&str`.
         let mut iter = s.input.slice_atom_iter();
-        let mut consume = |digit: u32, is_negative: bool| -> Option<()> {
+        let mut consume = |acc: &mut O, digit: u32, is_negative: bool| -> Option<()> {
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit as u8);
 
-            if !LEADING_ZEROS && acc == O::ZERO && idx != I::Idx::default() {
-                return None
-            }
-
-            if CHECKED {
-                acc = acc.checked_mul(O::cast_u8(BASE))?;
+            *acc = if CHECKED {
+                acc.checked_mul(O::cast_u8(BASE))?
             } else {
-                acc = acc * O::cast_u8(BASE);
-            }
+                *acc * O::cast_u8(BASE)
+            };
 
-            if is_negative {
+            *acc = if is_negative {
                 if CHECKED {
-                    acc = acc.checked_sub(digit)?;
+                    acc.checked_sub(digit)?
                 } else {
-                    acc = acc - digit;
+                    *acc - digit
                 }
             } else if CHECKED {
-                acc = acc.checked_add(digit)?;
+                acc.checked_add(digit)?
             } else {
-                acc = acc + digit;
-            }
+                *acc + digit
+            };
 
             idx += true.into();
 
             if DEC_DIVISOR {
-                if CHECKED {
-                    dec_divisor = dec_divisor.checked_mul(BASE as usize)?;
+                dec_divisor = if CHECKED {
+                    dec_divisor.checked_mul(BASE as usize)?
                 } else {
-                    dec_divisor *= BASE as usize;
-                }
+                    dec_divisor * BASE as usize
+                };
             }
 
             Some(())
         };
 
-        let leading = if signed || LEADING_PLUS {
-            let c = iter.next()?.as_char();
+        let mut first_char = iter.next()?.as_char();
 
-            if signed && c == '-' {
-                Some(true)
-            } else if LEADING_PLUS && c == '+' {
-                Some(false)
-            } else {
-                // We don't care about checking the result here, since a single digit can never fail.
-                consume(c.to_digit(BASE as u32)?, false);
-                None
-            }
+        let (is_negative, leading) = if signed && first_char == '-' {
+            first_char = iter.next()?.as_char();
+            (true, true)
+        } else if LEADING_PLUS && first_char == '+' {
+            first_char = iter.next()?.as_char();
+            (false, true)
         } else {
-            None
+            (false, false)
         };
 
-        let is_negative = leading.unwrap_or(false);
+        let first_digit = first_char.to_digit(BASE as u32)?;
+
+        consume(&mut acc, first_digit, is_negative);
 
         for digit in iter.map_while(|d| d.as_char().to_digit(BASE as u32)) {
-            consume(digit, is_negative)?;
+            consume(&mut acc, digit, is_negative)?;
+        }
+
+        if !LEADING_ZEROS && (idx > true.into()) && (first_digit == 0) {
+            return None;
         }
 
         (idx != Default::default()).then(|| {
-            s.input = s.input.slice_from(idx + leading.is_some().into());
+            s.input = s.input.slice_from(idx + leading.into());
             (acc, dec_divisor, is_negative)
         })
     })
@@ -527,6 +525,19 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, float, float_custom, i
 
         assert!((parse(integer(), "-129").result as Option<i8>).is_none());
         assert!((parse(integer(), "128").result as Option<i8>).is_none());
+    }
+
+    #[test]
+    fn zero() {
+        let leading_zero = integer();
+        assert_eq!(0, parse(leading_zero, "0").result.unwrap());
+        assert_eq!(0, parse(leading_zero, "00").result.unwrap());
+        assert_eq!(1, parse(leading_zero, "01").result.unwrap());
+
+        let no_leading_zeros = integer_custom(IntConfig::new().no_leading_zero());
+        assert_eq!(0, parse(no_leading_zeros, "0").result.unwrap());
+        assert!(parse(no_leading_zeros, "00").result.is_none());
+        assert!(parse(no_leading_zeros, "01").result.is_none());
     }
 
     #[test]
