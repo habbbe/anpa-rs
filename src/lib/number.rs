@@ -148,6 +148,27 @@ fn powi_internal<F: FloatLike>(mut base: F, n: i32) -> F {
     }
 }
 
+/// Calculate the maximum number of digits that can fit in an integer.
+const fn integer_max_digits(base: u8, size: usize, signed: bool) -> u8 {
+    let bits = size * 8;
+    let bits = if signed { bits - 1 } else { bits };
+
+    let limit = 1_u128 << bits;
+    let mut digits = 0;
+    let mut power = 1_u128;
+
+    // Start at 1, multiply by base until it exceeds the bit-limit
+    while let Some(next) = power.checked_mul(base as u128) {
+        if next > limit {
+            break;
+        }
+        power = next;
+        digits += 1;
+    }
+
+    digits
+}
+
 impl_NumLike!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize);
 impl_FloatLike!(f32, f64);
 
@@ -166,7 +187,7 @@ pub const fn integer_internal<const CHECKED: bool,
                               I: SliceLike<AtomRefItem = A>,
                               S>() -> impl Parser<I, (O, usize, bool), S> {
     create_parser!(s, {
-        let mut idx = I::Idx::default();
+        let mut digit_count = I::Idx::default();
         let mut acc = O::ZERO;
         let mut dec_divisor = 1;
 
@@ -176,35 +197,45 @@ pub const fn integer_internal<const CHECKED: bool,
             SIGNED == SIGN_SIGNED
         };
 
+        let max_digits = s.input.slice_idx_from_offset(
+            integer_max_digits(BASE, O::SIZE, signed) as usize
+        );
+
         // Using the atom iterator is safe, since all valid characters used for
         // constructing integers are ASCII, and thus at valid boundaries in e.g. `&str`.
         let mut iter = s.input.slice_atom_iter();
-        let mut consume = |acc: &mut O, digit: u32, is_negative: bool| -> Option<()> {
+        let mut consume = |acc: &mut O,
+                           count: &mut I::Idx,
+                           digit: u32,
+                           is_negative: bool,
+                           check: bool| -> Option<()> {
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit as u8);
 
-            *acc = if CHECKED {
+            // When we have reached the maximum guaranteed number of digits, start checking
+
+            *acc = if check {
                 acc.checked_mul(O::cast_u8(BASE))?
             } else {
                 *acc * O::cast_u8(BASE)
             };
 
             *acc = if is_negative {
-                if CHECKED {
+                if check {
                     acc.checked_sub(digit)?
                 } else {
                     *acc - digit
                 }
-            } else if CHECKED {
+            } else if check {
                 acc.checked_add(digit)?
             } else {
                 *acc + digit
             };
 
-            idx += true.into();
+            *count += true.into();
 
             if DEC_DIVISOR {
-                dec_divisor = if CHECKED {
+                dec_divisor = if check {
                     dec_divisor.checked_mul(BASE as usize)?
                 } else {
                     dec_divisor * BASE as usize
@@ -228,18 +259,19 @@ pub const fn integer_internal<const CHECKED: bool,
 
         let first_digit = first_char.to_digit(BASE as u32)?;
 
-        consume(&mut acc, first_digit, is_negative);
+        consume(&mut acc, &mut digit_count, first_digit, is_negative, false);
 
         for digit in iter.map_while(|d| d.as_char().to_digit(BASE as u32)) {
-            consume(&mut acc, digit, is_negative)?;
+            let check = CHECKED && (digit_count >= max_digits);
+            consume(&mut acc, &mut digit_count, digit, is_negative, check)?;
         }
 
-        if !LEADING_ZEROS && (idx > true.into()) && (first_digit == 0) {
+        if !LEADING_ZEROS && (digit_count > true.into()) && (first_digit == 0) {
             return None;
         }
 
-        (idx != Default::default()).then(|| {
-            s.input = s.input.slice_from(idx + leading.into());
+        (digit_count != Default::default()).then(|| {
+            s.input = s.input.slice_from(digit_count + leading.into());
             (acc, dec_divisor, is_negative)
         })
     })

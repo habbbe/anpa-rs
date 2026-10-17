@@ -1,4 +1,4 @@
-use crate::{combinators::*, core::{ParserExtNoState, StrParser}, number::{IntConfig, integer, integer_custom}, parsers::*};
+use crate::{combinators::*, core::{ParserExtNoState, StrParser}, number::{IntConfig, integer_custom}, parsers::*};
 
 #[derive(Debug)]
 pub struct AnpaVersion<T> {
