@@ -185,11 +185,11 @@ pub const fn integer_internal<const CHECKED: bool,
                               O: NumLike,
                               A: CharLike,
                               I: SliceLike<AtomRefItem = A>,
-                              S>() -> impl Parser<I, (O, usize, bool), S> {
+                              S>() -> impl Parser<I, (O, O, bool), S> {
     create_parser!(s, {
         let mut digit_count = I::Idx::default();
         let mut acc = O::ZERO;
-        let mut dec_divisor = 1;
+        let mut dec_divisor = O::cast_u8(1);
 
         let signed: bool = if SIGNED == SIGN_INFER {
             O::ZERO > O::MIN
@@ -235,11 +235,7 @@ pub const fn integer_internal<const CHECKED: bool,
             *count += true.into();
 
             if DEC_DIVISOR {
-                dec_divisor = if check {
-                    dec_divisor.checked_mul(BASE as usize)?
-                } else {
-                    dec_divisor * BASE as usize
-                };
+                dec_divisor = dec_divisor * O::cast_u8(BASE)
             }
 
             Some(())
