@@ -40,6 +40,11 @@ These parsers can be enabled using the features "json" and "semver" respectively
 
 None
 
+### Known issues
+
+- `float` when parsing numbers with (too) long decimal part will drop the decimal
+  and return the integer part successfully.
+
 ### TODO
 
 - Add support for `Read`
