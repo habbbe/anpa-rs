@@ -92,6 +92,8 @@ macro_rules! impl_NumLike {
                 /// That is, until we reach this number, checked arithmetic is not needed.
                 fn max_safe_digits<const BASE: u8>() -> u8 {
                     const {
+                        assert!(BASE >= 2, "Base must be 2 or greater");
+
                         let n = (BASE - 1) as $type;
                         let mut digits = 1;
                         let mut acc = n;
