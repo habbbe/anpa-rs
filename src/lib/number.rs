@@ -196,9 +196,9 @@ pub const fn integer_internal<const CHECKED: bool,
                               O: NumLike,
                               A: CharLike,
                               I: SliceLike<AtomRefItem = A>,
-                              S>() -> impl Parser<I, (O, u32, bool), S> {
+                              S>() -> impl Parser<I, (O, usize, bool), S> {
     create_parser!(s, {
-        let mut digit_count: u32 = 0;
+        let mut digit_count: usize = 0;
         let mut acc = O::ZERO;
 
         let signed: bool = if SIGNED == SIGN_INFER {
@@ -208,7 +208,7 @@ pub const fn integer_internal<const CHECKED: bool,
         };
 
         let max_digits = if CHECKED {
-            O::max_safe_digits::<BASE>() as u32
+            O::max_safe_digits::<BASE>() as usize
         } else {
             0
         };
@@ -217,7 +217,7 @@ pub const fn integer_internal<const CHECKED: bool,
         // constructing integers are ASCII, and thus at valid boundaries in e.g. `&str`.
         let mut iter = s.input.slice_atom_iter();
         let consume = |acc: &mut O,
-                       count: &mut u32,
+                       count: &mut usize,
                        digit: u32,
                        is_negative: bool,
                        check: bool| -> Option<()> {
@@ -274,7 +274,7 @@ pub const fn integer_internal<const CHECKED: bool,
             return None;
         }
 
-        let consumed = (digit_count + if leading {1} else {0}) as usize;
+        let consumed = digit_count + if leading {1} else {0};
 
         (digit_count != Default::default()).then(|| {
             s.input = s.input.slice_from(s.input.slice_idx_from_offset(consumed));
@@ -516,9 +516,9 @@ pub const fn float_custom<const CHECKED: bool,
                   integer_internal::<CHECKED, SIGN_UNSIGED, false, true, 10,_,_,_,_>())
             .map_if(move |(dec, digit_count, _)| {
                 let div = if CHECKED {
-                    10_usize.checked_pow(digit_count)?
+                    10_usize.checked_pow(digit_count as u32)?
                 } else {
-                    10_usize.pow(digit_count)
+                    10_usize.pow(digit_count as u32)
                 };
                 Some(int + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div))
             });
