@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12.1
+
+### Fixes
+- raw integer parsers now work on slices larger than integer type
+- allow scientific notation and disallow leading zero for numbers in JSON parser
+- prevent successful incomplete parses for JSON string and object
+- disallow multi-digit all-zero components in semver
+
+### Optimizations
+- integer parser now pre-calculates number of digits that can be safely parsed
+  without using checked arithmetic
+
 ## 0.12.0
 
 ### Breaking changes
