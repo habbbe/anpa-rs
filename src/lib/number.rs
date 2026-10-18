@@ -193,15 +193,13 @@ pub const fn integer_internal<const CHECKED: bool,
                               const LEADING_PLUS: bool,
                               const LEADING_ZEROS: bool,
                               const BASE: u8,
-                              const DEC_DIVISOR: bool,
                               O: NumLike,
                               A: CharLike,
                               I: SliceLike<AtomRefItem = A>,
-                              S>() -> impl Parser<I, (O, O, bool), S> {
+                              S>() -> impl Parser<I, (O, u32, bool), S> {
     create_parser!(s, {
-        let mut digit_count = I::Idx::default();
+        let mut digit_count: u32 = 0;
         let mut acc = O::ZERO;
-        let mut dec_divisor = O::ONE;
 
         let signed: bool = if SIGNED == SIGN_INFER {
             O::SIGNED
@@ -210,19 +208,19 @@ pub const fn integer_internal<const CHECKED: bool,
         };
 
         let max_digits = if CHECKED {
-            s.input.slice_idx_from_offset(O::max_safe_digits::<BASE>() as usize)
+            O::max_safe_digits::<BASE>() as u32
         } else {
-            false.into()
+            0
         };
 
         // Using the atom iterator is safe, since all valid characters used for
         // constructing integers are ASCII, and thus at valid boundaries in e.g. `&str`.
         let mut iter = s.input.slice_atom_iter();
-        let mut consume = |acc: &mut O,
-                           count: &mut I::Idx,
-                           digit: u32,
-                           is_negative: bool,
-                           check: bool| -> Option<()> {
+        let consume = |acc: &mut O,
+                       count: &mut u32,
+                       digit: u32,
+                       is_negative: bool,
+                       check: bool| -> Option<()> {
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit as u8);
 
@@ -246,11 +244,7 @@ pub const fn integer_internal<const CHECKED: bool,
                 *acc + digit
             };
 
-            *count += true.into();
-
-            if DEC_DIVISOR {
-                dec_divisor = dec_divisor * O::cast_u8(BASE)
-            }
+            *count += 1;
 
             Some(())
         };
@@ -276,13 +270,15 @@ pub const fn integer_internal<const CHECKED: bool,
             consume(&mut acc, &mut digit_count, digit, is_negative, check)?;
         }
 
-        if !LEADING_ZEROS && (digit_count > true.into()) && (first_digit == 0) {
+        if !LEADING_ZEROS && (digit_count > 1) && (first_digit == 0) {
             return None;
         }
 
+        let consumed = (digit_count + if leading {1} else {0}) as usize;
+
         (digit_count != Default::default()).then(|| {
-            s.input = s.input.slice_from(digit_count + leading.into());
-            (acc, dec_divisor, is_negative)
+            s.input = s.input.slice_from(s.input.slice_idx_from_offset(consumed));
+            (acc, digit_count, is_negative)
         })
     })
 }
@@ -369,7 +365,7 @@ pub const fn integer_custom<const CHECKED: bool,
                             A: CharLike,
                             I: SliceLike<AtomRefItem = A>,
                             S>(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE>) -> impl Parser<I, O, S> {
-    map(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, false,_,_,_,_>(), |(n,_,_)| n)
+    map(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE,_,_,_,_>(), |(n,_,_)| n)
 }
 
 /// Parse an integer. The type of the integer will be inferred from the context.
@@ -513,13 +509,19 @@ pub const fn float_custom<const CHECKED: bool,
                           -> impl Parser<I, O, S> {
 
     // First parse a possibly negative signed integer
-    bind(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, false,_,_,_,_>(), |(n, _, is_neg)| {
+    bind(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10,_,_,_,_>(), |(n, _, is_neg)| {
         // Then parse a period followed by an unsigned integer.
         let int = O::cast_isize(n);
         let dec = right(item_if(|c: I::RefItem| c.as_char() ==  if DECIMAL_COMMA {','} else {'.'}),
-                  integer_internal::<CHECKED, SIGN_UNSIGED, false, true, 10, true,_,_,_,_>())
-            .map(move |(dec, div, _)|
-                int + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div));
+                  integer_internal::<CHECKED, SIGN_UNSIGED, false, true, 10,_,_,_,_>())
+            .map_if(move |(dec, digit_count, _)| {
+                let div = if CHECKED {
+                    10_usize.checked_pow(digit_count)?
+                } else {
+                    10_usize.pow(digit_count)
+                };
+                Some(int + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div))
+            });
 
         let pre_exp_parser = or(dec, pure!(int));
 
