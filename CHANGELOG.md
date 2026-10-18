@@ -1,6 +1,9 @@
 # Changelog
 
-## 0.12.1
+## 0.13.0
+
+### Breaking changes
+- Signature change of NumLike
 
 ### Fixes
 - raw integer parsers now work on slices larger than integer type
