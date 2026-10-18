@@ -2,6 +2,7 @@ use core::ops::{Add, Div, Mul, Sub};
 
 use crate::{charlike::CharLike, combinators::{bind, map, or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 
+
 /// Trait for types that act like numbers.
 pub trait NumLike:
 Add<Output = Self>
@@ -24,6 +25,7 @@ Add<Output = Self>
     fn from_le_bytes(bytes: &[u8]) -> Option<(Self, &[u8])>;
     fn from_be_bytes(bytes: &[u8]) -> Option<(Self, &[u8])>;
     fn from_ne_bytes(bytes: &[u8]) -> Option<(Self, &[u8])>;
+    fn max_safe_digits<const BASE: u8>() -> u8;
 }
 
 /// Trait for types that act like floating point numbers.
@@ -84,6 +86,29 @@ macro_rules! impl_NumLike {
                 fn from_ne_bytes(bytes: &[u8]) -> Option<(Self, &[u8])> {
                     bytes.split_first_chunk::<{Self::SIZE}>()
                         .map(|(chunk, rest)| ($type::from_ne_bytes(*chunk), rest))
+                }
+
+                /// Calculate the safe maximum number of digits that can fit in this integer.
+                /// That is, until we reach this number, checked arithmetic is not needed.
+                fn max_safe_digits<const BASE: u8>() -> u8 {
+                    const {
+                        let n = (BASE - 1) as $type;
+                        let mut digits = 1;
+                        let mut acc = n;
+                        loop {
+                            let Some(mul) = acc.checked_mul(BASE as $type) else {
+                                break;
+                            };
+
+                            let Some(next) = mul.checked_add(n) else {
+                                break;
+                            };
+
+                            digits += 1;
+                            acc = next;
+                        }
+                        digits
+                    }
                 }
             }
         )*
@@ -154,27 +179,6 @@ fn powi_internal<F: FloatLike>(mut base: F, n: i32) -> F {
     }
 }
 
-/// Calculate the maximum number of digits that can fit in an integer.
-const fn integer_max_digits(base: u8, size: usize, signed: bool) -> u8 {
-    let bits = size * 8;
-    let bits = if signed { bits - 1 } else { bits };
-
-    let limit = 1_u128 << bits;
-    let mut digits = 0;
-    let mut power = 1_u128;
-
-    // Start at 1, multiply by base until it exceeds the bit-limit
-    while let Some(next) = power.checked_mul(base as u128) {
-        if next > limit {
-            break;
-        }
-        power = next;
-        digits += 1;
-    }
-
-    digits
-}
-
 impl_NumLike!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize);
 impl_FloatLike!(f32, f64);
 
@@ -203,9 +207,11 @@ pub const fn integer_internal<const CHECKED: bool,
             SIGNED == SIGN_SIGNED
         };
 
-        let max_digits = s.input.slice_idx_from_offset(
-            integer_max_digits(BASE, O::SIZE, signed) as usize
-        );
+        let max_digits = if CHECKED {
+            s.input.slice_idx_from_offset(O::max_safe_digits::<BASE>() as usize)
+        } else {
+            false.into()
+        };
 
         // Using the atom iterator is safe, since all valid characters used for
         // constructing integers are ASCII, and thus at valid boundaries in e.g. `&str`.
@@ -542,23 +548,51 @@ pub const fn float<O: FloatLike,
 #[cfg(test)]
 mod tests {
 
-use crate::{core::parse, number::{FloatConfig, IntConfig, float, float_custom, integer, integer_custom, powi_internal, raw_be_integer, raw_le_integer, raw_ne_integer}};
+use core::fmt::{Display, Debug};
+
+use alloc::string::{ToString};
+
+use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_custom, integer, integer_custom, powi_internal, raw_be_integer, raw_le_integer, raw_ne_integer}};
 
     #[test]
     fn infer_integer() {
-        assert_eq!(0, parse(integer(), "0").result.unwrap());
-        assert_eq!(127, parse(integer(), "127").result.unwrap());
-        assert_eq!(255, parse(integer(), "255").result.unwrap());
+        fn test_int<N: NumLike + Display + Debug>(max_plus_1: &str, min_minus_1: &str) {
+            // Zero
+            assert_eq!(0, parse(integer(), "0").result.unwrap());
 
-        assert_eq!(-0, parse(integer(), "-0").result.unwrap());
-        assert_eq!(-1, parse(integer(), "-1").result.unwrap());
-        assert_eq!(-128, parse(integer(), "-128").result.unwrap());
+            // Max
+            assert_eq!(N::MAX, parse(integer(), N::MAX.to_string().as_str()).result.unwrap());
 
-        assert!((parse(integer(), "-1").result as Option<u8>).is_none());
-        assert!((parse(integer(), "256").result as Option<u8>).is_none());
+            // Min
+            assert_eq!(N::MIN, parse(integer(), N::MIN.to_string().as_str()).result.unwrap());
 
-        assert!((parse(integer(), "-129").result as Option<i8>).is_none());
-        assert!((parse(integer(), "128").result as Option<i8>).is_none());
+            // Max + 1
+            assert!((parse(integer(), max_plus_1).result as Option<N>).is_none());
+
+            // Min - 1
+            assert!((parse(integer(), min_minus_1).result as Option<N>).is_none());
+        }
+
+        test_int::<u8>("256", "-1");
+        test_int::<i8>("128", "-129");
+        test_int::<u16>("65536", "-1");
+        test_int::<i16>("32768", "-32769");
+        test_int::<u32>("4294967296", "-1");
+        test_int::<i32>("2147483648", "-2147483649");
+        test_int::<u64>("18446744073709551616", "-1");
+        test_int::<i64>("9223372036854775808", "-9223372036854775809");
+        // test_int::<u128>("340282366920938463463374607431768211456", "-1");
+        test_int::<i128>("170141183460469231731687303715884105728",
+            "-170141183460469231731687303715884105729");
+
+        // Test full u16 and i16 range
+        for n in u16::MIN..=u16::MAX {
+            assert_eq!(n, parse(integer(), n.to_string().as_str()).result.unwrap());
+        }
+
+        for n in i16::MIN..=i16::MAX {
+            assert_eq!(n, parse(integer(), n.to_string().as_str()).result.unwrap());
+        }
     }
 
     #[test]
@@ -669,5 +703,43 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, float, float_custom, i
                 assert_eq!((-i as f64).powi(-j), powi_internal(-i as f64, -j));
             }
         }
+    }
+
+    #[test]
+    fn max_digits() {
+        assert_eq!(8, u8::max_safe_digits::<2>());
+        assert_eq!(7, i8::max_safe_digits::<2>());
+        assert_eq!(2, u8::max_safe_digits::<10>());
+        assert_eq!(2, i8::max_safe_digits::<10>());
+        assert_eq!(2, u8::max_safe_digits::<16>());
+        assert_eq!(1, i8::max_safe_digits::<16>());
+
+        assert_eq!(16, u16::max_safe_digits::<2>());
+        assert_eq!(15, i16::max_safe_digits::<2>());
+        assert_eq!(4, u16::max_safe_digits::<10>());
+        assert_eq!(4, i16::max_safe_digits::<10>());
+        assert_eq!(4, u16::max_safe_digits::<16>());
+        assert_eq!(3, i16::max_safe_digits::<16>());
+
+        assert_eq!(32, u32::max_safe_digits::<2>());
+        assert_eq!(31, i32::max_safe_digits::<2>());
+        assert_eq!(9, u32::max_safe_digits::<10>());
+        assert_eq!(9, i32::max_safe_digits::<10>());
+        assert_eq!(8, u32::max_safe_digits::<16>());
+        assert_eq!(7, i32::max_safe_digits::<16>());
+
+        assert_eq!(64, u64::max_safe_digits::<2>());
+        assert_eq!(63, i64::max_safe_digits::<2>());
+        assert_eq!(19, u64::max_safe_digits::<10>());
+        assert_eq!(18, i64::max_safe_digits::<10>());
+        assert_eq!(16, u64::max_safe_digits::<16>());
+        assert_eq!(15, i64::max_safe_digits::<16>());
+
+        assert_eq!(128, u128::max_safe_digits::<2>());
+        assert_eq!(127, i128::max_safe_digits::<2>());
+        assert_eq!(38, u128::max_safe_digits::<10>());
+        assert_eq!(38, i128::max_safe_digits::<10>());
+        assert_eq!(32, u128::max_safe_digits::<16>());
+        assert_eq!(31, i128::max_safe_digits::<16>());
     }
 }
