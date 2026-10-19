@@ -1,6 +1,6 @@
 use core::ops::{Add, Div, Mul, Sub};
 
-use crate::{charlike::CharLike, combinators::{bind, map, or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
+use crate::{charlike::CharLike, combinators::{bind, or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 
 
 /// Trait for types that act like numbers.
@@ -185,18 +185,57 @@ impl_NumLike!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize);
 impl_FloatLike!(f32, f64);
 
 const SIGN_INFER: u8 = 0;
-const SIGN_UNSIGED: u8 = 1;
+const SIGN_UNSIGNED: u8 = 1;
 const SIGN_SIGNED: u8 = 2;
 
-pub const fn integer_internal<const CHECKED: bool,
-                              const SIGNED: u8,
-                              const LEADING_PLUS: bool,
-                              const LEADING_ZEROS: bool,
-                              const BASE: u8,
-                              O: NumLike,
-                              A: CharLike,
-                              I: SliceLike<AtomRefItem = A>,
-                              S>() -> impl Parser<I, (O, usize, bool), S> {
+/// A type containing a parsed integer along with parsing metadata
+#[derive(Clone, Copy)]
+#[non_exhaustive]
+pub struct IntWithMeta<O> {
+    pub value: O,
+    pub digit_count: usize,
+    pub is_negative: bool,
+}
+
+/// Helper trait for constructing the return type of [`integer_custom`].
+pub trait IntReturn<O, const INCLUDE_METADATA: bool> {
+    type Return;
+    fn construct(value: O, digit_count: usize, is_negative: bool) -> Self::Return;
+}
+
+impl<O> IntReturn<O, true> for () {
+    type Return = IntWithMeta<O>;
+
+    #[inline(always)]
+    fn construct(value: O, digit_count: usize, is_negative: bool) -> Self::Return {
+        IntWithMeta { value, digit_count, is_negative }
+    }
+}
+
+impl<O> IntReturn<O, false> for () {
+    type Return = O;
+
+    #[inline(always)]
+    fn construct(value: O, _digit_count: usize, _is_negative: bool) -> Self::Return {
+        value
+    }
+}
+
+const fn integer_internal<const CHECKED: bool,
+                          const SIGNED: u8,
+                          const LEADING_PLUS: bool,
+                          const LEADING_ZEROS: bool,
+                          const BASE: u8,
+                          const INCLUDE_METADATA: bool,
+                          O: NumLike,
+                          A: CharLike,
+                          I: SliceLike<AtomRefItem = A>,
+                          S,
+>() -> impl Parser<I, <() as IntReturn<O, INCLUDE_METADATA>>::Return, S>
+where
+    (): IntReturn<O, INCLUDE_METADATA>,
+{
+
     create_parser!(s, {
         let mut digit_count: usize = 0;
         let mut acc = O::ZERO;
@@ -263,6 +302,7 @@ pub const fn integer_internal<const CHECKED: bool,
 
         let first_digit = first_char.to_digit(BASE as u32)?;
 
+        // The first digit fits in all types for all allowed bases.
         consume(&mut acc, &mut digit_count, first_digit, is_negative, false);
 
         for digit in iter.map_while(|d| d.as_char().to_digit(BASE as u32)) {
@@ -278,7 +318,7 @@ pub const fn integer_internal<const CHECKED: bool,
 
         (digit_count != Default::default()).then(|| {
             s.input = s.input.slice_from(s.input.slice_idx_from_offset(consumed));
-            (acc, digit_count, is_negative)
+            <() as IntReturn<O, INCLUDE_METADATA>>::construct(acc, digit_count, is_negative)
         })
     })
 }
@@ -290,7 +330,8 @@ pub struct IntConfig<const CHECKED: bool = true,
                      const SIGNED: u8 = SIGN_INFER,
                      const LEADING_PLUS: bool = false,
                      const LEADING_ZEROS: bool = true,
-                     const BASE: u8 = 10>;
+                     const BASE: u8 = 10,
+                     const INCLUDE_METADATA: bool = false>;
 
 impl IntConfig {
     pub const fn new() -> Self {
@@ -308,27 +349,32 @@ impl<const CHECKED: bool,
      const SIGNED: u8,
      const LEADING_PLUS: bool,
      const LEADING_ZEROS: bool,
-     const BASE: u8>
-     IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE> {
+     const BASE: u8,
+     const INCLUDE_METADATA: bool>
+     IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA> {
 
-    pub const fn unchecked(self) -> IntConfig<false, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE> {
+    pub const fn unchecked(self) -> IntConfig<false, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA> {
         IntConfig
     }
 
-    pub const fn unsigned(self) -> IntConfig<CHECKED, SIGN_UNSIGED, LEADING_PLUS, LEADING_ZEROS, BASE> {
+    pub const fn unsigned(self) -> IntConfig<CHECKED, SIGN_UNSIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA> {
         IntConfig
     }
 
-    pub const fn no_leading_zero(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, false, BASE> {
+    pub const fn no_leading_zero(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, false, BASE, INCLUDE_METADATA> {
         IntConfig
     }
 
-    pub const fn leading_plus(self) -> IntConfig<CHECKED, SIGNED, true, LEADING_ZEROS, BASE> {
+    pub const fn leading_plus(self) -> IntConfig<CHECKED, SIGNED, true, LEADING_ZEROS, BASE, INCLUDE_METADATA> {
         IntConfig
     }
 
-    pub const fn base<const NEW_BASE: u8>(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, NEW_BASE> {
+    pub const fn base<const NEW_BASE: u8>(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, NEW_BASE, INCLUDE_METADATA> {
         assert!(NEW_BASE >= 2 && NEW_BASE <= 36, "Base must be between 2 and 36");
+        IntConfig
+    }
+
+    pub const fn with_metadata(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, true> {
         IntConfig
     }
 }
@@ -361,11 +407,17 @@ pub const fn integer_custom<const CHECKED: bool,
                             const LEADING_PLUS: bool,
                             const LEADING_ZEROS: bool,
                             const BASE: u8,
+                            const INCLUDE_METADATA: bool,
                             O: NumLike,
                             A: CharLike,
                             I: SliceLike<AtomRefItem = A>,
-                            S>(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE>) -> impl Parser<I, O, S> {
-    map(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE,_,_,_,_>(), |(n,_,_)| n)
+                            S
+>(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA>
+) -> impl Parser<I, <() as IntReturn<O, INCLUDE_METADATA>>::Return, S>
+where
+    (): IntReturn<O, INCLUDE_METADATA>
+{
+    integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA,_,_,_,_>()
 }
 
 /// Parse an integer. The type of the integer will be inferred from the context.
@@ -446,7 +498,7 @@ impl<const CHECKED: bool,
         FloatConfig
     }
 
-    pub const fn unsigned(self) -> FloatConfig::<CHECKED, SIGN_UNSIGED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+    pub const fn unsigned(self) -> FloatConfig::<CHECKED, SIGN_UNSIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
         FloatConfig
     }
 
@@ -507,20 +559,19 @@ pub const fn float_custom<const CHECKED: bool,
                           I: SliceLike<AtomRefItem = A, RefItem= A2>,
                           S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA>)
                           -> impl Parser<I, O, S> {
-
     // First parse a possibly negative signed integer
-    bind(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10,_,_,_,_>(), |(n, _, is_neg)| {
+    bind(integer_custom(IntConfig::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, true>), |meta| {
         // Then parse a period followed by an unsigned integer.
-        let int = O::cast_isize(n);
+        let int = O::cast_isize(meta.value);
         let dec = right(item_if(|c: I::RefItem| c.as_char() ==  if DECIMAL_COMMA {','} else {'.'}),
-                  integer_internal::<CHECKED, SIGN_UNSIGED, false, true, 10,_,_,_,_>())
-            .map_if(move |(dec, digit_count, _)| {
+                  integer_custom(IntConfig::<CHECKED, SIGN_UNSIGNED, false, true, 10, true>))
+            .map_if(move |meta_dec| {
                 let div = if CHECKED {
-                    10_usize.checked_pow(digit_count as u32)?
+                    10_usize.checked_pow(meta_dec.digit_count as u32)?
                 } else {
-                    10_usize.pow(digit_count as u32)
+                    10_usize.pow(meta_dec.digit_count as u32)
                 };
-                Some(int + if is_neg {O::MINUS_ONE} else {O::ONE} * O::cast_usize(dec) / O::cast_usize(div))
+                Some(int + if meta.is_negative {O::MINUS_ONE} else {O::ONE} * O::cast_usize(meta_dec.value) / O::cast_usize(div))
             });
 
         let pre_exp_parser = or(dec, pure!(int));
@@ -585,7 +636,7 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_
         test_int::<i32>("2147483648", "-2147483649");
         test_int::<u64>("18446744073709551616", "-1");
         test_int::<i64>("9223372036854775808", "-9223372036854775809");
-        // test_int::<u128>("340282366920938463463374607431768211456", "-1");
+        test_int::<u128>("340282366920938463463374607431768211456", "-1");
         test_int::<i128>("170141183460469231731687303715884105728",
             "-170141183460469231731687303715884105729");
 

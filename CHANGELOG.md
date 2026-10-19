@@ -4,15 +4,22 @@
 
 ### Breaking changes
 - Signature change of NumLike
+- `integer_internal` is no longer public. `integer_custom` with the new
+  configuration described below replaces it.
+
+### New features
+- Added possibility to request additional metadata with a parsed integer using
+  `IntConfig::with_metadata` together with `integer_custom`. The metadata
+  currently includes the number of parsed digits and the sign.
 
 ### Fixes
-- raw integer parsers now work on slices larger than integer type
-- allow scientific notation and disallow leading zero for numbers in JSON parser
-- prevent successful incomplete parses for JSON string and object
-- disallow multi-digit all-zero components in semver
+- Raw integer parsers now work on slices larger than integer type
+- Allow scientific notation and disallow leading zero for numbers in JSON parser
+- Prevent successful incomplete parses for JSON string and object
+- Disallow multi-digit all-zero components in semver
 
 ### Optimizations
-- integer parser now pre-calculates number of digits that can be safely parsed
+- Integer parser now pre-calculates number of digits that can be safely parsed
   without using checked arithmetic
 
 ## 0.12.0
