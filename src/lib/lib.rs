@@ -1,4 +1,5 @@
 #![no_std]
+#![allow(clippy::doc_overindented_list_items)]
 
 #[cfg(feature = "std")]
 extern crate std;
