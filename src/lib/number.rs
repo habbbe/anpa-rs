@@ -1,6 +1,6 @@
 use core::ops::{Add, Div, Mul, Sub};
 
-use crate::{charlike::CharLike, combinators::{bind, or, right}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
+use crate::{charlike::CharLike, combinators::{attempt, bind, succeed}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 
 
 /// Trait for types that act like numbers.
@@ -556,15 +556,14 @@ pub const fn float_custom<const CHECKED: bool,
                           O: FloatLike,
                           A: CharLike,
                           A2: CharLike,
-                          I: SliceLike<AtomRefItem = A, RefItem= A2>,
+                          I: SliceLike<AtomRefItem = A, RefItem = A2>,
                           S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA>)
                           -> impl Parser<I, O, S> {
     // First parse a possibly negative signed integer
-    bind(integer_custom(IntConfig::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, true>), |meta| {
-        // Then parse a period followed by an unsigned integer.
+    attempt(bind(integer_custom(IntConfig::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, true>), |meta| {
         let int = O::cast_isize(meta.value);
-        let dec = right(item_if(|c: I::RefItem| c.as_char() ==  if DECIMAL_COMMA {','} else {'.'}),
-                  integer_custom(IntConfig::<CHECKED, SIGN_UNSIGNED, false, true, 10, true>))
+        let comma: char = if DECIMAL_COMMA {','} else { '.' };
+        let dec = integer_custom(IntConfig::<CHECKED, SIGN_UNSIGNED, false, true, 10, true>)
             .map_if(move |meta_dec| {
                 let div = if CHECKED {
                     10_usize.checked_pow(meta_dec.digit_count as u32)?
@@ -574,18 +573,23 @@ pub const fn float_custom<const CHECKED: bool,
                 Some(int + if meta.is_negative {O::MINUS_ONE} else {O::ONE} * O::cast_usize(meta_dec.value) / O::cast_usize(div))
             });
 
-        let pre_exp_parser = or(dec, pure!(int));
+        let pre_exp_parser = choose!(succeed(item_if(|c: A2| c.as_char() == comma));
+                Some(_) => dec,
+                _ => pure!(int)
+            );
 
         choose_pure!(SCI;
             true => bind(pre_exp_parser, |pre_exp| {
-                let exp = right(item_if(|c: I::RefItem| matches!(c.as_char(), 'e' | 'E')),
-                                integer_custom(IntConfig::<CHECKED, SIGN_SIGNED, true, LEADING_ZERO_EXP>))
+                let exp = integer_custom(IntConfig::<CHECKED, SIGN_SIGNED, true, LEADING_ZERO_EXP>)
                     .map(move |exp| pre_exp * O::TEN.pow_i(exp));
-                or(exp, pure!(pre_exp))
+                choose!(succeed(item_if(|c: A2| matches!(c.as_char(), 'e' | 'E')));
+                    Some(_) => exp,
+                    _ => pure!(pre_exp)
+                )
             }),
             false => pre_exp_parser
         )
-    })
+    }))
 }
 
 /// Parse a floating point number. The type of the number will be inferred from the context.
@@ -702,6 +706,34 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_
         assert_eq!(1.123_f32, parse(float(), "1.123").result.unwrap());
         assert_eq!(0.001_f32, parse(float(), "0.001").result.unwrap());
         assert_eq!(-0.001_f32, parse(float(), "-0.001").result.unwrap());
+    }
+
+    #[test]
+    fn float_no_partial_test() {
+        let p = float_custom(FloatConfig::new().scientific());
+
+        let dec_overflow = "0.".to_string() + usize::MAX.to_string().as_str() + "0";
+        let int_overflow = isize::MAX.to_string() + "0.5";
+
+        // Too many digits to fit in isize
+        let res = parse(p, int_overflow.as_str());
+        assert_eq!(None as Option<f32>, res.result);
+        assert_eq!(int_overflow.as_str(), res.state);
+
+        // Too many digits to fit in usize
+        let res = parse(p, dec_overflow.as_str());
+        assert_eq!(None as Option<f32>, res.result);
+        assert_eq!(dec_overflow.as_str(), res.state);
+
+        let wrong_exp = "1234.2134et";
+        let res = parse(p, wrong_exp);
+        assert_eq!(None as Option<f32>, res.result);
+        assert_eq!(wrong_exp, res.state);
+
+        let exp_overflow = "1234.2134e".to_string() + isize::MAX.to_string().as_str() + "0";
+        let res = parse(p, exp_overflow.as_str());
+        assert_eq!(None as Option<f32>, res.result);
+        assert_eq!(exp_overflow.as_str(), res.state);
     }
 
     #[test]

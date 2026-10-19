@@ -17,6 +17,7 @@
 - Allow scientific notation and disallow leading zero for numbers in JSON parser
 - Prevent successful incomplete parses for JSON string and object
 - Disallow multi-digit all-zero components in semver
+- Don't return partial results in `float` if decimal or exponent fails to parse
 
 ### Optimizations
 - Integer parser now pre-calculates number of digits that can be safely parsed
