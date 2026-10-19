@@ -31,6 +31,7 @@ Add<Output = Self>
 /// Trait for types that act like floating point numbers.
 pub trait FloatLike: Add<Output = Self> + Mul<Output = Self> + Div<Output = Self> + Copy {
     const ZERO: Self;
+    const MINUS_ZERO: Self;
     const ONE: Self;
     const TEN: Self;
     const MINUS_ONE: Self;
@@ -122,17 +123,18 @@ macro_rules! impl_FloatLike {
         $(
             impl FloatLike for $type {
                 const ZERO: Self = 0.0;
+                const MINUS_ZERO: Self = -0.0;
                 const ONE: Self = 1.0;
                 const TEN: Self = 10.0;
                 const MINUS_ONE: Self = -1.0;
                 #[inline(always)]
                 fn cast_usize(n: usize) -> Self {
-                    n as $type
+                    n as Self
                 }
 
                 #[inline(always)]
                 fn cast_isize(n: isize) -> Self {
-                    n as $type
+                    n as Self
                 }
 
                 #[cfg(feature = "std")]
@@ -561,7 +563,12 @@ pub const fn float_custom<const CHECKED: bool,
                           -> impl Parser<I, O, S> {
     // First parse a possibly negative signed integer
     attempt(bind(integer_custom(IntConfig::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, true>), |meta| {
-        let int = O::cast_isize(meta.value);
+        let int = if meta.value == 0 && meta.is_negative {
+            O::MINUS_ZERO
+        } else {
+            O::cast_isize(meta.value)
+        };
+
         let comma: char = if DECIMAL_COMMA {','} else { '.' };
         let dec = integer_custom(IntConfig::<CHECKED, SIGN_UNSIGNED, false, true, 10, true>)
             .map_if(move |meta_dec| {
@@ -697,6 +704,7 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_
     #[test]
     fn float_test() {
         assert_eq!(0_f32, parse(float(), "0").result.unwrap());
+        assert_eq!(0.0_f32, parse(float(), "0.0").result.unwrap());
         assert_eq!(100000000_f32, parse(float(), "100000000").result.unwrap());
         assert_eq!(-100000000_f32, parse(float(), "-100000000").result.unwrap());
         assert_eq!(13.37_f32, parse(float(), "13.37").result.unwrap());
@@ -706,6 +714,17 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_
         assert_eq!(1.123_f32, parse(float(), "1.123").result.unwrap());
         assert_eq!(0.001_f32, parse(float(), "0.001").result.unwrap());
         assert_eq!(-0.001_f32, parse(float(), "-0.001").result.unwrap());
+    }
+
+    #[test]
+    fn float_negative_zero_test() {
+        let zero: f32 = parse(float(), "-0").result.unwrap();
+        let zero_point_zero: f32 = parse(float(), "-0.0").result.unwrap();
+        assert_eq!(-0_f32, zero);
+        assert!(zero.is_sign_negative());
+
+        assert_eq!(-0.0_f32, zero_point_zero);
+        assert!(zero_point_zero.is_sign_negative());
     }
 
     #[test]

@@ -18,6 +18,7 @@
 - Prevent successful incomplete parses for JSON string and object
 - Disallow multi-digit all-zero components in semver
 - Don't return partial results in `float` if decimal or exponent fails to parse
+- Return negative zero for `float` if parsing e.g. "-0.0"
 
 ### Optimizations
 - Integer parser now pre-calculates number of digits that can be safely parsed
