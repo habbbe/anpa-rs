@@ -230,7 +230,7 @@ const fn integer_internal<const CHECKED: bool,
                           const LEADING_ZEROS: bool,
                           const BASE: u8,
                           const INCLUDE_METADATA: bool,
-                          const SATURATE: bool,
+                          const ALLOW_OVERFLOW: bool,
                           O: NumLike,
                           A: CharLike,
                           I: SliceLike<AtomRefItem = A>,
@@ -273,7 +273,7 @@ where
 
             macro_rules! check_overflow {
                 ($e:expr) => {
-                    if SATURATE {
+                    if ALLOW_OVERFLOW {
                         match $e {
                             Some(v) => v,
                             None => {
@@ -354,7 +354,7 @@ pub struct IntConfig<const CHECKED: bool = true,
                      const LEADING_ZEROS: bool = true,
                      const BASE: u8 = 10,
                      const INCLUDE_METADATA: bool = false,
-                     const SATURATE: bool = false>;
+                     const ALLOW_OVERFLOW: bool = false>;
 
 impl IntConfig {
     pub const fn new() -> Self {
@@ -374,39 +374,48 @@ impl<const CHECKED: bool,
      const LEADING_ZEROS: bool,
      const BASE: u8,
      const INCLUDE_METADATA: bool,
-     const SATURATE: bool>
-     IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE> {
+     const ALLOW_OVERFLOW: bool>
+     IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
 
-    pub const fn unchecked(self) -> IntConfig<false, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE> {
+    /// Disable overflow checking.
+    pub const fn unchecked(self) -> IntConfig<false, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
         IntConfig
     }
 
-    pub const fn unsigned(self) -> IntConfig<CHECKED, SIGN_UNSIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE> {
+    /// Force parsing of an unsigned integer. Can be used even if the type is signed.
+    pub const fn unsigned(self) -> IntConfig<CHECKED, SIGN_UNSIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
         IntConfig
     }
 
-    pub const fn signed(self) -> IntConfig<CHECKED, SIGN_SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE> {
+    /// Force parsing of a signed integer. Can be used even if the type is unsigned.
+    /// The sign can be obtained by using [`IntConfig::with_metadata`].
+    pub const fn signed(self) -> IntConfig<CHECKED, SIGN_SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
         IntConfig
     }
 
-    pub const fn no_leading_zero(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, false, BASE, INCLUDE_METADATA, SATURATE> {
+    /// Disallow leading zeros.
+    pub const fn no_leading_zero(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, false, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
         IntConfig
     }
 
-    pub const fn leading_plus(self) -> IntConfig<CHECKED, SIGNED, true, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE> {
+    /// Allow a leading plus sign.
+    pub const fn leading_plus(self) -> IntConfig<CHECKED, SIGNED, true, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
         IntConfig
     }
 
-    pub const fn base<const NEW_BASE: u8>(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, NEW_BASE, INCLUDE_METADATA, SATURATE> {
+    /// Set the numeric base for parsing. Must be between 2 and 36.
+    pub const fn base<const NEW_BASE: u8>(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, NEW_BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
         assert!(NEW_BASE >= 2 && NEW_BASE <= 36, "Base must be between 2 and 36");
         IntConfig
     }
 
-    pub const fn with_metadata(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, true, SATURATE> {
+    /// Include metadata about the parsed integer. The result of the parse will be a [`IntWithMeta`].
+    pub const fn with_metadata(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, true, ALLOW_OVERFLOW> {
         IntConfig
     }
 
-    pub const fn saturate(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, true> {
+    /// Allow integer overflow. The count for overflow digits can be obtained by using [`IntConfig::with_metadata`].
+    pub const fn allow_overflow(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, true> {
         IntConfig
     }
 }
@@ -440,17 +449,17 @@ pub const fn integer_custom<const CHECKED: bool,
                             const LEADING_ZEROS: bool,
                             const BASE: u8,
                             const INCLUDE_METADATA: bool,
-                            const SATURATE: bool,
+                            const ALLOW_OVERFLOW: bool,
                             O: NumLike,
                             A: CharLike,
                             I: SliceLike<AtomRefItem = A>,
                             S
->(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE>
+>(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW>
 ) -> impl Parser<I, <() as IntReturn<O, INCLUDE_METADATA>>::Return, S>
 where
     (): IntReturn<O, INCLUDE_METADATA>
 {
-    integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE,_,_,_,_>()
+    integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW,_,_,_,_>()
 }
 
 /// Parse an integer. The type of the integer will be inferred from the context.
@@ -529,34 +538,44 @@ impl<const CHECKED: bool,
      const SATURATE: bool>
      FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
 
+    /// Do not check for overflow when parsing the float components. This is the fastest option if the input is known
+    /// to be within bounds.
     pub const fn unchecked(self) -> FloatConfig::<false, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
         FloatConfig
     }
 
+    /// Do not allow negative numbers.
     pub const fn unsigned(self) -> FloatConfig::<CHECKED, SIGN_UNSIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
         FloatConfig
     }
 
+    /// Enable scientific notation e.g. 1.23e10 or 1.23E10.
     pub const fn scientific(self) -> FloatConfig::<CHECKED, SIGNED, true, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
         FloatConfig
     }
 
+    /// Allow a leading plus sign e.g. +1.23.
     pub const fn leading_plus(self) -> FloatConfig::<CHECKED, SIGNED, SCI, true, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
         FloatConfig
     }
 
+    /// Disallow leading zeros in the integer part e.g. 001.23.
     pub const fn no_leading_zero_int(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, false, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
         FloatConfig
     }
 
+    /// Disallow leading zeros in the exponent part e.g. 1.23e0010.
     pub const fn no_leading_zero_exp(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, false, DECIMAL_COMMA, SATURATE> {
         FloatConfig
     }
 
+    /// Use a decimal comma instead of a decimal point e.g. 1,23.
     pub const fn decimal_comma(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, true, SATURATE> {
         FloatConfig
     }
 
+    /// Enable saturation arithmetic. When using this option, a parse can never fail as long as the input
+    /// has a valid float structure.
     pub const fn saturate(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, true> {
         FloatConfig
     }
