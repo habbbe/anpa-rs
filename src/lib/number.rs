@@ -755,6 +755,33 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_
     }
 
     #[test]
+    fn int_overflow_test() {
+        let max = usize::MAX;
+        let max_string = max.to_string();
+
+        for i in 1_u16..10 {
+            let p = integer_custom(IntConfig::new().allow_overflow().with_metadata());
+            let overflow = max_string.clone() + &"0".repeat(i as usize);
+            let res = parse(p, overflow.as_str()).result.unwrap();
+
+            assert_eq!(max, res.value);
+            assert_eq!(i, res.overflow_count);
+        }
+
+        let min = isize::MIN;
+        let min_string = &min.to_string();
+
+        for i in 1_u16..10 {
+            let p = integer_custom(IntConfig::new().allow_overflow().with_metadata());
+            let overflow = min_string.clone() + &"0".repeat(i as usize);
+            let res = parse(p, overflow.as_str()).result.unwrap();
+
+            assert_eq!(min, res.value);
+            assert_eq!(i, res.overflow_count);
+        }
+    }
+
+    #[test]
     fn float_test() {
         assert_eq!(0_f32, parse(float(), "0").result.unwrap());
         assert_eq!(0.0_f32, parse(float(), "0.0").result.unwrap());

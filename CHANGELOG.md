@@ -12,8 +12,12 @@
 - Added possibility to request additional metadata with a parsed integer using
   `IntConfig::with_metadata` together with `integer_custom`. The metadata
   currently includes the number of parsed digits, the sign, and the overflow count.
-- Added support for saturating integer and float parsing.
-  - `integer` will report `overflow_count` in the metadata if requested.
+- Added support for parsing integers with overflow using `integer_custom` and
+  `IntConfig::allow_overflow`
+  - The number of overflows can be obtained in the metadata if requested.
+- Added support for saturation when parsing floats using `float_custom` and
+  `FloatConfig::saturate`. If enabled, a float on the correct format will never
+  fail to parse, but will lose accuracy when its components reach large sizes.
 
 ### Fixes
 - Raw integer parsers now work on slices larger than integer type
