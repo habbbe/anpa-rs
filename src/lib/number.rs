@@ -891,6 +891,13 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, IntWithMeta, NumLike, 
         // Attempt too long parts, should saturate instead of overflowing
         // Validate against std
 
+        let p = float_custom(FloatConfig::new().scientific().saturate());
+        let max_u64_plus_1 = "18446744073709551616";
+        assert_eq!(max_u64_plus_1.parse::<f64>().unwrap(), parse(p, max_u64_plus_1).result.unwrap());
+
+        let min_i64_minus_1 = "-9223372036854775809";
+        assert_eq!(min_i64_minus_1.parse::<f64>().unwrap(), parse(p, min_i64_minus_1).result.unwrap());
+
         for additional_digits in 0..30 {
             for sign in ["", "-"] {
                 let p = float_custom(FloatConfig::new().scientific().saturate());
