@@ -270,11 +270,13 @@ where
                        check: bool| -> Option<()> {
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit as u8);
+            let mut tmp = *acc;
 
             macro_rules! check_overflow {
                 ($e:expr) => {
                     if ALLOW_OVERFLOW {
-                        match $e {
+                        let x = if *overflow_count == 0 { $e } else { None };
+                        match x {
                             Some(v) => v,
                             None => {
                                 *overflow_count = overflow_count.saturating_add(1);
@@ -287,25 +289,26 @@ where
                 };
             }
 
-            *acc = if check {
-                check_overflow!(acc.checked_mul(O::cast_u8(BASE)))
+            tmp = if check {
+                check_overflow!(tmp.checked_mul(O::cast_u8(BASE)))
             } else {
-                *acc * O::cast_u8(BASE)
+                tmp * O::cast_u8(BASE)
             };
 
-            *acc = if !report_neg_only && is_negative {
+            tmp = if !report_neg_only && is_negative {
                 if check {
-                    check_overflow!(acc.checked_sub(digit))
+                    check_overflow!(tmp.checked_sub(digit))
                 } else {
-                    *acc - digit
+                    tmp - digit
                 }
             } else if check {
-                check_overflow!(acc.checked_add(digit))
+                check_overflow!(tmp.checked_add(digit))
             } else {
-                *acc + digit
+                tmp + digit
             };
 
             *count += 1;
+            *acc = tmp;
 
             Some(())
         };
@@ -695,7 +698,7 @@ use core::fmt::{Display, Debug};
 
 use alloc::string::{ToString};
 
-use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_custom, integer, integer_custom, powi_internal, raw_be_integer, raw_le_integer, raw_ne_integer}};
+use crate::{core::parse, number::{FloatConfig, IntConfig, IntWithMeta, NumLike, float, float_custom, integer, integer_custom, powi_internal, raw_be_integer, raw_le_integer, raw_ne_integer}};
 
     #[test]
     fn infer_integer() {
@@ -780,6 +783,14 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_
 
     #[test]
     fn int_overflow_test() {
+        let p = integer_custom(IntConfig::new().allow_overflow().with_metadata());
+        let edge = "2561";
+        let res = parse(p, edge);
+        let val: IntWithMeta<u8> = res.result.unwrap();
+        assert_eq!(25, val.value);
+        assert_eq!(2, val.overflow_count);
+
+
         let max = usize::MAX;
         let max_string = max.to_string();
 
