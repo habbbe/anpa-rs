@@ -4,13 +4,16 @@
 
 ### Breaking changes
 - Signature change of NumLike
+- Signature change of FloatLike
 - `integer_internal` is no longer public. `integer_custom` with the new
   configuration described below replaces it.
 
 ### New features
 - Added possibility to request additional metadata with a parsed integer using
   `IntConfig::with_metadata` together with `integer_custom`. The metadata
-  currently includes the number of parsed digits and the sign.
+  currently includes the number of parsed digits, the sign, and the overflow count.
+- Added support for saturating integer and float parsing.
+  - `integer` will report `overflow_count` in the metadata if requested.
 
 ### Fixes
 - Raw integer parsers now work on slices larger than integer type

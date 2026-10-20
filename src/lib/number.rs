@@ -195,22 +195,23 @@ const SIGN_SIGNED: u8 = 2;
 #[non_exhaustive]
 pub struct IntWithMeta<O> {
     pub value: O,
-    pub digit_count: usize,
+    pub digit_count: u16,
     pub is_negative: bool,
+    pub overflow_count: u16,
 }
 
 /// Helper trait for constructing the return type of [`integer_custom`].
 pub trait IntReturn<O, const INCLUDE_METADATA: bool> {
     type Return;
-    fn construct(value: O, digit_count: usize, is_negative: bool) -> Self::Return;
+    fn construct(value: O, digit_count: u16, is_negative: bool, overflow_count: u16) -> Self::Return;
 }
 
 impl<O> IntReturn<O, true> for () {
     type Return = IntWithMeta<O>;
 
     #[inline(always)]
-    fn construct(value: O, digit_count: usize, is_negative: bool) -> Self::Return {
-        IntWithMeta { value, digit_count, is_negative }
+    fn construct(value: O, digit_count: u16, is_negative: bool, overflow_count: u16) -> Self::Return {
+        IntWithMeta { value, digit_count, is_negative, overflow_count }
     }
 }
 
@@ -218,7 +219,7 @@ impl<O> IntReturn<O, false> for () {
     type Return = O;
 
     #[inline(always)]
-    fn construct(value: O, _digit_count: usize, _is_negative: bool) -> Self::Return {
+    fn construct(value: O, _digit_count: u16, _is_negative: bool, _overflow_count: u16) -> Self::Return {
         value
     }
 }
@@ -229,6 +230,7 @@ const fn integer_internal<const CHECKED: bool,
                           const LEADING_ZEROS: bool,
                           const BASE: u8,
                           const INCLUDE_METADATA: bool,
+                          const SATURATE: bool,
                           O: NumLike,
                           A: CharLike,
                           I: SliceLike<AtomRefItem = A>,
@@ -239,7 +241,8 @@ where
 {
 
     create_parser!(s, {
-        let mut digit_count: usize = 0;
+        let mut digit_count: u16 = 0;
+        let mut overflow_count: u16 = 0;
         let mut acc = O::ZERO;
 
         let (signed, report_neg_only) = if SIGNED == SIGN_INFER {
@@ -251,7 +254,7 @@ where
         };
 
         let max_digits = if CHECKED {
-            O::max_safe_digits::<BASE>() as usize
+            O::max_safe_digits::<BASE>() as u16
         } else {
             0
         };
@@ -260,29 +263,44 @@ where
         // constructing integers are ASCII, and thus at valid boundaries in e.g. `&str`.
         let mut iter = s.input.slice_atom_iter();
         let consume = |acc: &mut O,
-                       count: &mut usize,
+                       count: &mut u16,
+                       overflow_count: &mut u16,
                        digit: u32,
                        is_negative: bool,
                        check: bool| -> Option<()> {
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit as u8);
 
-            // When we have reached the maximum guaranteed number of digits, start checking
+            macro_rules! check_overflow {
+                ($e:expr) => {
+                    if SATURATE {
+                        match $e {
+                            Some(v) => v,
+                            None => {
+                                *overflow_count = overflow_count.saturating_add(1);
+                                return Some(());
+                            }
+                        }
+                    } else {
+                        $e?
+                    }
+                };
+            }
 
             *acc = if check {
-                acc.checked_mul(O::cast_u8(BASE))?
+                check_overflow!(acc.checked_mul(O::cast_u8(BASE)))
             } else {
                 *acc * O::cast_u8(BASE)
             };
 
             *acc = if !report_neg_only && is_negative {
                 if check {
-                    acc.checked_sub(digit)?
+                    check_overflow!(acc.checked_sub(digit))
                 } else {
                     *acc - digit
                 }
             } else if check {
-                acc.checked_add(digit)?
+                check_overflow!(acc.checked_add(digit))
             } else {
                 *acc + digit
             };
@@ -307,22 +325,22 @@ where
         let first_digit = first_char.to_digit(BASE as u32)?;
 
         // The first digit fits in all types for all allowed bases.
-        consume(&mut acc, &mut digit_count, first_digit, is_negative, false);
+        consume(&mut acc, &mut digit_count, &mut overflow_count, first_digit, is_negative, false);
 
         for digit in iter.map_while(|d| d.as_char().to_digit(BASE as u32)) {
             let check = CHECKED && (digit_count >= max_digits);
-            consume(&mut acc, &mut digit_count, digit, is_negative, check)?;
+            consume(&mut acc, &mut digit_count, &mut overflow_count, digit, is_negative, check)?;
         }
 
         if !LEADING_ZEROS && (digit_count > 1) && (first_digit == 0) {
             return None;
         }
 
-        let consumed = digit_count + if leading {1} else {0};
+        let consumed = digit_count + overflow_count + if leading {1} else {0};
 
         (digit_count != Default::default()).then(|| {
-            s.input = s.input.slice_from(s.input.slice_idx_from_offset(consumed));
-            <() as IntReturn<O, INCLUDE_METADATA>>::construct(acc, digit_count, is_negative)
+            s.input = s.input.slice_from(s.input.slice_idx_from_offset(consumed as usize));
+            <() as IntReturn<O, INCLUDE_METADATA>>::construct(acc, digit_count, is_negative, overflow_count)
         })
     })
 }
@@ -335,7 +353,8 @@ pub struct IntConfig<const CHECKED: bool = true,
                      const LEADING_PLUS: bool = false,
                      const LEADING_ZEROS: bool = true,
                      const BASE: u8 = 10,
-                     const INCLUDE_METADATA: bool = false>;
+                     const INCLUDE_METADATA: bool = false,
+                     const SATURATE: bool = false>;
 
 impl IntConfig {
     pub const fn new() -> Self {
@@ -354,35 +373,40 @@ impl<const CHECKED: bool,
      const LEADING_PLUS: bool,
      const LEADING_ZEROS: bool,
      const BASE: u8,
-     const INCLUDE_METADATA: bool>
-     IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA> {
+     const INCLUDE_METADATA: bool,
+     const SATURATE: bool>
+     IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE> {
 
-    pub const fn unchecked(self) -> IntConfig<false, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA> {
+    pub const fn unchecked(self) -> IntConfig<false, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE> {
         IntConfig
     }
 
-    pub const fn unsigned(self) -> IntConfig<CHECKED, SIGN_UNSIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA> {
+    pub const fn unsigned(self) -> IntConfig<CHECKED, SIGN_UNSIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE> {
         IntConfig
     }
 
-    pub const fn signed(self) -> IntConfig<CHECKED, SIGN_SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA> {
+    pub const fn signed(self) -> IntConfig<CHECKED, SIGN_SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE> {
         IntConfig
     }
 
-    pub const fn no_leading_zero(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, false, BASE, INCLUDE_METADATA> {
+    pub const fn no_leading_zero(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, false, BASE, INCLUDE_METADATA, SATURATE> {
         IntConfig
     }
 
-    pub const fn leading_plus(self) -> IntConfig<CHECKED, SIGNED, true, LEADING_ZEROS, BASE, INCLUDE_METADATA> {
+    pub const fn leading_plus(self) -> IntConfig<CHECKED, SIGNED, true, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE> {
         IntConfig
     }
 
-    pub const fn base<const NEW_BASE: u8>(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, NEW_BASE, INCLUDE_METADATA> {
+    pub const fn base<const NEW_BASE: u8>(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, NEW_BASE, INCLUDE_METADATA, SATURATE> {
         assert!(NEW_BASE >= 2 && NEW_BASE <= 36, "Base must be between 2 and 36");
         IntConfig
     }
 
-    pub const fn with_metadata(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, true> {
+    pub const fn with_metadata(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, true, SATURATE> {
+        IntConfig
+    }
+
+    pub const fn saturate(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, true> {
         IntConfig
     }
 }
@@ -416,16 +440,17 @@ pub const fn integer_custom<const CHECKED: bool,
                             const LEADING_ZEROS: bool,
                             const BASE: u8,
                             const INCLUDE_METADATA: bool,
+                            const SATURATE: bool,
                             O: NumLike,
                             A: CharLike,
                             I: SliceLike<AtomRefItem = A>,
                             S
->(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA>
+>(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE>
 ) -> impl Parser<I, <() as IntReturn<O, INCLUDE_METADATA>>::Return, S>
 where
     (): IntReturn<O, INCLUDE_METADATA>
 {
-    integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA,_,_,_,_>()
+    integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, SATURATE,_,_,_,_>()
 }
 
 /// Parse an integer. The type of the integer will be inferred from the context.
@@ -479,7 +504,8 @@ pub struct FloatConfig<const CHECKED: bool = true,
                        const LEADING_PLUS: bool = false,
                        const LEADING_ZEROS_INT: bool = true,
                        const LEADING_ZEROS_EXP: bool = true,
-                       const DECIMAL_COMMA: bool = false>;
+                       const DECIMAL_COMMA: bool = false,
+                       const SATURATE: bool = false>;
 
 impl FloatConfig {
     pub const fn new() -> Self {
@@ -499,34 +525,39 @@ impl<const CHECKED: bool,
      const LEADING_PLUS: bool,
      const LEADING_ZERO_INT: bool,
      const LEADING_ZERO_EXP: bool,
-     const DECIMAL_COMMA: bool>
-     FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+     const DECIMAL_COMMA: bool,
+     const SATURATE: bool>
+     FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
 
-    pub const fn unchecked(self) -> FloatConfig::<false, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+    pub const fn unchecked(self) -> FloatConfig::<false, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
         FloatConfig
     }
 
-    pub const fn unsigned(self) -> FloatConfig::<CHECKED, SIGN_UNSIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+    pub const fn unsigned(self) -> FloatConfig::<CHECKED, SIGN_UNSIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
         FloatConfig
     }
 
-    pub const fn scientific(self) -> FloatConfig::<CHECKED, SIGNED, true, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+    pub const fn scientific(self) -> FloatConfig::<CHECKED, SIGNED, true, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
         FloatConfig
     }
 
-    pub const fn leading_plus(self) -> FloatConfig::<CHECKED, SIGNED, SCI, true, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+    pub const fn leading_plus(self) -> FloatConfig::<CHECKED, SIGNED, SCI, true, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
         FloatConfig
     }
 
-    pub const fn no_leading_zero_int(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, false, LEADING_ZERO_EXP, DECIMAL_COMMA> {
+    pub const fn no_leading_zero_int(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, false, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
         FloatConfig
     }
 
-    pub const fn no_leading_zero_exp(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, false, DECIMAL_COMMA> {
+    pub const fn no_leading_zero_exp(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, false, DECIMAL_COMMA, SATURATE> {
         FloatConfig
     }
 
-    pub const fn decimal_comma(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, true> {
+    pub const fn decimal_comma(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, true, SATURATE> {
+        FloatConfig
+    }
+
+    pub const fn saturate(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, true> {
         FloatConfig
     }
 }
@@ -561,30 +592,36 @@ pub const fn float_custom<const CHECKED: bool,
                           const LEADING_ZERO_INT: bool,
                           const LEADING_ZERO_EXP: bool,
                           const DECIMAL_COMMA: bool,
+                          const SATURATE: bool,
                           O: FloatLike,
                           A: CharLike,
                           A2: CharLike,
                           I: SliceLike<AtomRefItem = A, RefItem = A2>,
-                          S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA>)
+                          S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE>)
                           -> impl Parser<I, O, S> {
-    attempt(bind(integer_custom(IntConfig::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, true>), |meta| {
+    attempt(bind(integer_custom(IntConfig::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, true, SATURATE>), |meta| {
         let int = O::cast_usize(meta.value);
+        let int = if SATURATE {
+            int * O::TEN.pow_i(meta.overflow_count as i32)
+        } else {
+            int
+        };
 
-        let dec = integer_custom(IntConfig::<CHECKED, SIGN_UNSIGNED, false, true, 10, true>)
+        let dec = integer_custom(IntConfig::<CHECKED, SIGN_UNSIGNED, false, true, 10, true, SATURATE>)
             .map_if(move |meta_dec| {
                 let div = O::TEN.pow_i(meta_dec.digit_count as i32);
                 Some(int + O::cast_usize(meta_dec.value) / div)
             });
 
         let comma: char = if DECIMAL_COMMA {','} else { '.' };
-        let pre_exp_parser = choose!(succeed(item_if(|c: A2| c.as_char() == comma));
+        let pre_exp_parser = map(choose!(succeed(item_if(|c: A2| c.as_char() == comma));
             Some(_) => dec,
             _ => pure!(int)
-        );
+        ), move |res| if meta.is_negative { res * O::MINUS_ONE } else { res });
 
-        let exp_parser = choose_pure!(SCI;
+        choose_pure!(SCI;
             true => bind(pre_exp_parser, |pre_exp| {
-                let exp = integer_custom(IntConfig::<CHECKED, SIGN_SIGNED, true, LEADING_ZERO_EXP>)
+                let exp = integer_custom(IntConfig::<CHECKED, SIGN_SIGNED, true, LEADING_ZERO_EXP, 10, false, SATURATE>)
                     .map(move |exp| pre_exp * O::TEN.pow_i(exp));
                 choose!(succeed(item_if(|c: A2| matches!(c.as_char(), 'e' | 'E')));
                     Some(_) => exp,
@@ -592,9 +629,7 @@ pub const fn float_custom<const CHECKED: bool,
                 )
             }),
             false => pre_exp_parser
-        );
-
-        map(exp_parser, move |res| if meta.is_negative { res * O::MINUS_ONE } else { res })
+        )
     }))
 }
 
@@ -731,9 +766,9 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_
         let p = float_custom(FloatConfig::new().scientific());
 
         let dec_overflow = "0.".to_string() + usize::MAX.to_string().as_str() + "0";
-        let int_overflow = isize::MAX.to_string() + "0.5";
+        let int_overflow = usize::MAX.to_string() + "0.5";
 
-        // Too many digits to fit in isize
+        // Too many digits to fit in usize
         let res = parse(p, int_overflow.as_str());
         assert_eq!(None as Option<f32>, res.result);
         assert_eq!(int_overflow.as_str(), res.state);
@@ -748,7 +783,7 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_
         assert_eq!(None as Option<f32>, res.result);
         assert_eq!(wrong_exp, res.state);
 
-        let exp_overflow = "1234.2134e".to_string() + isize::MAX.to_string().as_str() + "0";
+        let exp_overflow = "1234.2134e".to_string() + u32::MAX.to_string().as_str() + "0";
         let res = parse(p, exp_overflow.as_str());
         assert_eq!(None as Option<f32>, res.result);
         assert_eq!(exp_overflow.as_str(), res.state);
@@ -764,6 +799,30 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_
         let res = parse(p, empty_exponent);
         assert_eq!(None as Option<f32>, res.result);
         assert_eq!(empty_exponent, res.state);
+    }
+
+    #[test]
+    fn float_saturating_test() {
+        // Attempt too long parts, should saturate instead of overflowing
+        // Validate against std
+
+        for additional_digits in 0..30 {
+            for sign in ["", "-"] {
+                let p = float_custom(FloatConfig::new().scientific().saturate());
+                let additional_int = "1".repeat(additional_digits);
+                let additional_dec = "1".repeat(additional_digits);
+                let int_overflow = sign.to_string() + &usize::MAX.to_string() + &additional_int + ".5";
+                let dec_overflow = sign.to_string() + "0." + usize::MAX.to_string().as_str() + &additional_dec;
+
+                let res = parse(p, int_overflow.as_str());
+                assert_eq!(int_overflow.parse::<f64>().unwrap(), res.result.unwrap(), "{}", int_overflow);
+                assert_eq!("", res.state);
+
+                let res = parse(p, dec_overflow.as_str());
+                assert_eq!(dec_overflow.parse::<f64>().unwrap(), res.result.unwrap(), "{}", dec_overflow);
+                assert_eq!("", res.state);
+            }
+        }
     }
 
     #[test]
