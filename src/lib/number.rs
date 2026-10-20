@@ -1,6 +1,6 @@
 use core::ops::{Add, Div, Mul, Sub};
 
-use crate::{charlike::CharLike, combinators::{attempt, bind, succeed}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
+use crate::{charlike::CharLike, combinators::{attempt, bind, map, succeed}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 
 
 /// Trait for types that act like numbers.
@@ -242,10 +242,12 @@ where
         let mut digit_count: usize = 0;
         let mut acc = O::ZERO;
 
-        let signed: bool = if SIGNED == SIGN_INFER {
-            O::SIGNED
+        let (signed, report_neg_only) = if SIGNED == SIGN_INFER {
+            (O::SIGNED, false)
+        } else if SIGNED == SIGN_SIGNED && !O::SIGNED {
+            (true, true)
         } else {
-            SIGNED == SIGN_SIGNED
+            (SIGNED == SIGN_SIGNED, false)
         };
 
         let max_digits = if CHECKED {
@@ -273,7 +275,7 @@ where
                 *acc * O::cast_u8(BASE)
             };
 
-            *acc = if is_negative {
+            *acc = if !report_neg_only && is_negative {
                 if check {
                     acc.checked_sub(digit)?
                 } else {
@@ -360,6 +362,10 @@ impl<const CHECKED: bool,
     }
 
     pub const fn unsigned(self) -> IntConfig<CHECKED, SIGN_UNSIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA> {
+        IntConfig
+    }
+
+    pub const fn signed(self) -> IntConfig<CHECKED, SIGN_SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA> {
         IntConfig
     }
 
@@ -561,31 +567,22 @@ pub const fn float_custom<const CHECKED: bool,
                           I: SliceLike<AtomRefItem = A, RefItem = A2>,
                           S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA>)
                           -> impl Parser<I, O, S> {
-    // First parse a possibly negative signed integer
     attempt(bind(integer_custom(IntConfig::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, true>), |meta| {
-        let int = if meta.value == 0 && meta.is_negative {
-            O::MINUS_ZERO
-        } else {
-            O::cast_isize(meta.value)
-        };
+        let int = O::cast_usize(meta.value);
 
-        let comma: char = if DECIMAL_COMMA {','} else { '.' };
         let dec = integer_custom(IntConfig::<CHECKED, SIGN_UNSIGNED, false, true, 10, true>)
             .map_if(move |meta_dec| {
-                let div = if CHECKED {
-                    10_usize.checked_pow(meta_dec.digit_count as u32)?
-                } else {
-                    10_usize.pow(meta_dec.digit_count as u32)
-                };
-                Some(int + if meta.is_negative {O::MINUS_ONE} else {O::ONE} * O::cast_usize(meta_dec.value) / O::cast_usize(div))
+                let div = O::TEN.pow_i(meta_dec.digit_count as i32);
+                Some(int + O::cast_usize(meta_dec.value) / div)
             });
 
+        let comma: char = if DECIMAL_COMMA {','} else { '.' };
         let pre_exp_parser = choose!(succeed(item_if(|c: A2| c.as_char() == comma));
-                Some(_) => dec,
-                _ => pure!(int)
-            );
+            Some(_) => dec,
+            _ => pure!(int)
+        );
 
-        choose_pure!(SCI;
+        let exp_parser = choose_pure!(SCI;
             true => bind(pre_exp_parser, |pre_exp| {
                 let exp = integer_custom(IntConfig::<CHECKED, SIGN_SIGNED, true, LEADING_ZERO_EXP>)
                     .map(move |exp| pre_exp * O::TEN.pow_i(exp));
@@ -595,7 +592,9 @@ pub const fn float_custom<const CHECKED: bool,
                 )
             }),
             false => pre_exp_parser
-        )
+        );
+
+        map(exp_parser, move |res| if meta.is_negative { res * O::MINUS_ONE } else { res })
     }))
 }
 
@@ -753,6 +752,18 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_
         let res = parse(p, exp_overflow.as_str());
         assert_eq!(None as Option<f32>, res.result);
         assert_eq!(exp_overflow.as_str(), res.state);
+
+        // Empty decimal
+        let empty_decimal = "1234.";
+        let res = parse(p, empty_decimal);
+        assert_eq!(None as Option<f32>, res.result);
+        assert_eq!(empty_decimal, res.state);
+
+        // Empty exponent
+        let empty_exponent = "123.321e";
+        let res = parse(p, empty_exponent);
+        assert_eq!(None as Option<f32>, res.result);
+        assert_eq!(empty_exponent, res.state);
     }
 
     #[test]
