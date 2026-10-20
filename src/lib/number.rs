@@ -762,10 +762,12 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_
         for i in 1_u16..10 {
             let p = integer_custom(IntConfig::new().allow_overflow().with_metadata());
             let overflow = max_string.clone() + &"0".repeat(i as usize);
-            let res = parse(p, overflow.as_str()).result.unwrap();
+            let res = parse(p, overflow.as_str());
+            let value = res.result.unwrap();
 
-            assert_eq!(max, res.value);
-            assert_eq!(i, res.overflow_count);
+            assert_eq!(max, value.value);
+            assert_eq!(i, value.overflow_count);
+            assert_eq!("", res.state);
         }
 
         let min = isize::MIN;
@@ -774,10 +776,12 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, NumLike, float, float_
         for i in 1_u16..10 {
             let p = integer_custom(IntConfig::new().allow_overflow().with_metadata());
             let overflow = min_string.clone() + &"0".repeat(i as usize);
-            let res = parse(p, overflow.as_str()).result.unwrap();
+            let res = parse(p, overflow.as_str());
+            let value = res.result.unwrap();
 
-            assert_eq!(min, res.value);
-            assert_eq!(i, res.overflow_count);
+            assert_eq!(min, value.value);
+            assert_eq!(i, value.overflow_count);
+            assert_eq!("", res.state);
         }
     }
 
