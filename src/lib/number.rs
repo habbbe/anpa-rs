@@ -377,11 +377,6 @@ impl<const CHECKED: bool,
      const ALLOW_OVERFLOW: bool>
      IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
 
-    /// Disable overflow checking.
-    pub const fn unchecked(self) -> IntConfig<false, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
-        IntConfig
-    }
-
     /// Force parsing of an unsigned integer. Can be used even if the type is signed.
     pub const fn unsigned(self) -> IntConfig<CHECKED, SIGN_UNSIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
         IntConfig
@@ -414,10 +409,39 @@ impl<const CHECKED: bool,
         IntConfig
     }
 
-    /// Allow integer overflow. The count for overflow digits can be obtained by using [`IntConfig::with_metadata`].
-    pub const fn allow_overflow(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, true> {
+}
+
+impl<const SIGNED: u8,
+     const LEADING_PLUS: bool,
+     const LEADING_ZEROS: bool,
+     const BASE: u8,
+     const INCLUDE_METADATA: bool,
+     const ALLOW_OVERFLOW: bool>
+     IntConfig<true, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
+
+    /// Allow integer overflow. The count for overflow digits can be obtained
+    /// by using [`IntConfig::with_metadata`].
+    ///
+    /// This option is only available if [`IntConfig::unchecked`] hasn't been set.
+    pub const fn allow_overflow(self) -> IntConfig<true, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, true> {
         IntConfig
     }
+}
+
+impl<const CHECKED: bool,
+     const SIGNED: u8,
+     const LEADING_PLUS: bool,
+     const LEADING_ZEROS: bool,
+     const BASE: u8,
+     const INCLUDE_METADATA: bool>
+     IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, false> {
+
+     /// Disable overflow checking.
+     ///
+     /// This option is only available if [`IntConfig::allow_overflow`] hasn't been set.
+     pub const fn unchecked(self) -> IntConfig<false, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, false> {
+         IntConfig
+     }
 }
 
 /// Parse an integer. The type of the integer will be inferred from the context.
