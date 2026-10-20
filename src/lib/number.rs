@@ -25,7 +25,7 @@ Add<Output = Self>
     fn from_le_bytes(bytes: &[u8]) -> Option<(Self, &[u8])>;
     fn from_be_bytes(bytes: &[u8]) -> Option<(Self, &[u8])>;
     fn from_ne_bytes(bytes: &[u8]) -> Option<(Self, &[u8])>;
-    fn max_safe_digits<const BASE: u8>() -> u32;
+    fn max_safe_digits<const BASE: u8>() -> i32;
 }
 
 /// Trait for types that act like floating point numbers.
@@ -91,7 +91,7 @@ macro_rules! impl_NumLike {
 
                 /// Calculate the safe maximum number of digits that can fit in this integer.
                 /// That is, until we reach this number, checked arithmetic is not needed.
-                fn max_safe_digits<const BASE: u8>() -> u32 {
+                fn max_safe_digits<const BASE: u8>() -> i32 {
                     const {
                         assert!(BASE >= 2, "Base must be 2 or greater");
 
@@ -195,22 +195,22 @@ const SIGN_SIGNED: u8 = 2;
 #[non_exhaustive]
 pub struct IntWithMeta<O> {
     pub value: O,
+    pub digit_count: i32,
     pub is_negative: bool,
-    pub digit_count: u32,
-    pub overflow_count: u32,
+    pub overflow_count: i32,
 }
 
 /// Helper trait for constructing the return type of [`integer_custom`].
 pub trait IntReturn<O, const INCLUDE_METADATA: bool> {
     type Return;
-    fn construct(value: O, digit_count: u32, is_negative: bool, overflow_count: u32) -> Self::Return;
+    fn construct(value: O, digit_count: i32, is_negative: bool, overflow_count: i32) -> Self::Return;
 }
 
 impl<O> IntReturn<O, true> for () {
     type Return = IntWithMeta<O>;
 
     #[inline(always)]
-    fn construct(value: O, digit_count: u32, is_negative: bool, overflow_count: u32) -> Self::Return {
+    fn construct(value: O, digit_count: i32, is_negative: bool, overflow_count: i32) -> Self::Return {
         IntWithMeta { value, digit_count, is_negative, overflow_count }
     }
 }
@@ -219,7 +219,7 @@ impl<O> IntReturn<O, false> for () {
     type Return = O;
 
     #[inline(always)]
-    fn construct(value: O, _digit_count: u32, _is_negative: bool, _overflow_count: u32) -> Self::Return {
+    fn construct(value: O, _digit_count: i32, _is_negative: bool, _overflow_count: i32) -> Self::Return {
         value
     }
 }
@@ -263,8 +263,8 @@ where
         // constructing integers are ASCII, and thus at valid boundaries in e.g. `&str`.
         let mut iter = s.input.slice_atom_iter();
         let consume = |acc: &mut O,
-                       count: &mut u32,
-                       overflow_count: &mut u32,
+                       count: &mut i32,
+                       overflow_count: &mut i32,
                        digit: u32,
                        is_negative: bool,
                        check: bool| -> Option<()> {
