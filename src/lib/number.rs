@@ -648,14 +648,14 @@ pub const fn float_custom<const CHECKED: bool,
     attempt(bind(integer_custom(IntConfig::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, true, SATURATE>), |meta| {
         let int = O::cast_usize(meta.value);
         let int = if SATURATE {
-            int * O::TEN.pow_i(meta.overflow_count as i32)
+            int * O::TEN.pow_i(meta.overflow_count)
         } else {
             int
         };
 
         let dec = integer_custom(IntConfig::<CHECKED, SIGN_UNSIGNED, false, true, 10, true, SATURATE>)
             .map_if(move |meta_dec| {
-                let div = O::TEN.pow_i(meta_dec.digit_count as i32);
+                let div = O::TEN.pow_i(meta_dec.digit_count);
                 Some(int + O::cast_usize(meta_dec.value) / div)
             });
 
