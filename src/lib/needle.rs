@@ -18,9 +18,14 @@ impl<T: PartialEq + Copy> Needle<&[T], T> for T {
 
 impl<'a, T: PartialEq + Copy, S: Borrow<[T]> + Copy> Needle<&'a [T], &'a [T]> for S {
     fn find_in(&self, haystack: &[T]) -> Option<(usize, usize)> {
-        haystack.windows(self.borrow().len())
+        let len = self.borrow().len();
+        if len == 0 {
+            return Some((0, 0));
+        }
+
+        haystack.windows(len)
             .position(|w| w == self.borrow())
-            .map(|pos| (self.borrow().len(), pos))
+            .map(|pos| (len, pos))
     }
 }
 

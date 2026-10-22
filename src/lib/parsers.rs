@@ -281,5 +281,16 @@ mod tests {
         let res = parse(p, "xxxxy");
         assert!(res.result.is_none());
         assert_eq!(res.state, "xxxxy");
+
+        let p = until("");
+        let res = parse(p, "xxxxy");
+        assert!(res.result.is_some());
+        assert_eq!(res.state, "xxxxy");
+
+        let p = until(&[] as &[u8]);
+        let orig: &[u8] = &[1, 2, 3, 4];
+        let res = parse(p, orig);
+        assert!(res.result.is_some());
+        assert_eq!(res.state, orig);
     }
 }
