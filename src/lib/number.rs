@@ -29,7 +29,7 @@ Add<Output = Self>
 }
 
 /// Trait for types that act like floating point numbers.
-pub trait FloatLike: Add<Output = Self> + Mul<Output = Self> + Div<Output = Self> + Copy {
+pub trait FloatLike: Add<Output = Self> + Mul<Output = Self> + Div<Output = Self> + PartialEq + Copy {
     const ZERO: Self;
     const MINUS_ZERO: Self;
     const ONE: Self;
@@ -668,7 +668,7 @@ pub const fn float_custom<const CHECKED: bool,
         choose_pure!(SCI;
             true => bind(pre_exp_parser, |pre_exp| {
                 let exp = integer_custom(IntConfig::<CHECKED, SIGN_SIGNED, true, LEADING_ZERO_EXP, 10, false, SATURATE>)
-                    .map(move |exp| pre_exp * O::TEN.pow_i(exp));
+                    .map(move |exp| if pre_exp == O::ZERO { O::ZERO } else { pre_exp * O::TEN.pow_i(exp) });
                 choose!(succeed(item_if(|c: A2| matches!(c.as_char(), 'e' | 'E')));
                     Some(_) => exp,
                     _ => pure!(pre_exp)
@@ -924,6 +924,8 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, IntWithMeta, NumLike, 
         assert_eq!(0.05e15, parse(p, "0.05e15").result.unwrap());
         assert_eq!(-1.3e12, parse(p, "-1.3e12").result.unwrap());
         assert_eq!(-1.3e+12, parse(p, "-1.3e+12").result.unwrap());
+        assert_eq!(0e400, parse(p, "0e400").result.unwrap());
+        assert_eq!("1e400".parse::<f64>().unwrap(), parse(p, "1e400").result.unwrap());
     }
 
     #[test]

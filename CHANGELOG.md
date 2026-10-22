@@ -26,6 +26,7 @@
 - Disallow multi-digit all-zero components in semver
 - Don't return partial results in `float` if decimal or exponent fails to parse
 - Return negative zero for `float` if parsing e.g. "-0.0"
+- Return zero instead of NaN when parsing zero followed by large exponent in `float`
 
 ### Optimizations
 - Integer parser now pre-calculates number of digits that can be safely parsed
