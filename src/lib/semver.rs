@@ -44,9 +44,6 @@ pub const fn semver<'a, T: From<&'a str>>() -> impl StrParser<'a, AnpaVersion<T>
 #[inline]
 const fn version_core<'a>() -> impl StrParser<'a, (u64, u64, u64)> {
     let component = integer_custom(IntConfig::new().no_leading_zero());
-    // let component = map_if(and_parsed(integer()), |(i, p): (&str, _)| {
-    //     (!i.starts_with('0') || p == 0).then_some(p)
-    // });
 
     // We could go completely with re-use, but it's faster to use the internal integer parser.
     // let component = map(numeric_identifier(), |s| s.parse().unwrap());
