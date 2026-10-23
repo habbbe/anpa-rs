@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.13.0
+
+### Breaking changes
+- Signature change of NumLike
+- Signature change of FloatLike
+- `integer_internal` is no longer public. `integer_custom` with the new
+  configuration described below replaces it.
+
+### New features
+- Added possibility to request additional metadata with a parsed integer using
+  `IntConfig::with_metadata` together with `integer_custom`. The metadata
+  currently includes the number of parsed digits, the sign, and the overflow count.
+- Added support for parsing integers with overflow using `integer_custom` and
+  `IntConfig::allow_overflow`
+  - The number of overflows can be obtained in the metadata if requested.
+- Added support for saturation when parsing floats using `float_custom` and
+  `FloatConfig::saturate`. If enabled, a float on the correct format will never
+  fail to parse, but will lose accuracy when its components reach large sizes.
+- Added new combinator `hint_type`, that provides a convenient way to hint the
+  compiler about the output type of a parser.
+
+### Fixes
+- Raw integer parsers now work on slices larger than integer type.
+- Allow scientific notation and disallow leading zero for numbers in JSON parser.
+- Prevent successful incomplete parses for JSON string and object.
+- Disallow multi-digit all-zero components in semver.
+- Don't return partial results in `float` if decimal or exponent fails to parse.
+- Return negative zero for `float` if parsing e.g. "-0.0".
+- Return zero instead of NaN when parsing zero followed by large exponent in `float`.
+- `float` parser can now fit a full `usize` in its integer component.
+
+### Optimizations
+- Integer parser now pre-calculates number of digits that can be safely parsed
+  without using checked arithmetic
+
 ## 0.12.0
 
 ### Breaking changes

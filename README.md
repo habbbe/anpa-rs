@@ -40,6 +40,10 @@ These parsers can be enabled using the features "json" and "semver" respectively
 
 None
 
+### Known issues
+
+None for now
+
 ### TODO
 
 - Add support for `Read`

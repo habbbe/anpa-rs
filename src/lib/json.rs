@@ -1,6 +1,6 @@
 use alloc::{collections::BTreeMap, vec::Vec};
 
-use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::float, parsers::*, whitespace::AsciiWhitespace};
+use crate::{combinators::*, core::StrParser, findbyte::{eq, find_byte, lt}, number::{FloatConfig, float_custom}, parsers::*, whitespace::AsciiWhitespace};
 
 #[derive(Debug)]
 pub enum JsonValue<StringType> {
@@ -23,7 +23,7 @@ const fn string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, T> {
     let escaped = right(item(), or_diff(item_matches!('"' | '\\' | '/' | 'b' | 'f' | 'n' | 'r' | 't'),
                                         unicode));
     let parse_until = choose!(find_byte(eq(b'"') | eq(b'\\') | lt(0x20), false);
-                                        b'\\' => escaped);
+                                        b'\\' => attempt(escaped));
     into_type(middle(skip!('"'), many(parse_until, true, no_separator()), skip!('"')))
 }
 
@@ -32,7 +32,7 @@ const fn json_string_parser<'a, T: From<&'a str>>() -> impl StrParser<'a, JsonVa
 }
 
 const fn number_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
-    map(float(), JsonValue::Num)
+    map(float_custom(FloatConfig::new().no_leading_zero_int().scientific()), JsonValue::Num)
 }
 
 const fn bool_parser<'a, T>() -> impl StrParser<'a, JsonValue<T>> {
@@ -71,7 +71,7 @@ pub const fn object_parser<'a, T: From<&'a str> + Ord>() -> impl StrParser<'a, J
         value_parser());
     map(middle(
         skip!('{'),
-        many_to_map_ordered(pair_parser, true, separator(eat(skip!(',')), false)),
+        many_to_map_ordered(attempt(pair_parser), true, separator(eat(skip!(',')), false)),
         eat(skip!('}'))), JsonValue::Dic)
 }
 

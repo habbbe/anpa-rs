@@ -171,6 +171,34 @@ pub const fn into_type<I: SliceLike, O: Into<T>, T, S>(p: impl Parser<I, O, S>) 
     map!(O::into, p)
 }
 
+/// Give the compiler a hint about what type the output of this parser is.
+/// This is useful when combining parsers where the result isn't consumed
+/// and thus its type cannot be automatically inferred, such as with [`get_parsed`].
+///
+/// ### Arguments
+/// * `p` - the parser
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::parsers::item_while;
+/// use anpa::number::integer;
+/// use anpa::combinators::{get_parsed,hint_type};
+///
+/// // Note that without wrapping with hint_type, the type of integer to
+/// // parse would be unknown, and this would not compile.
+/// let parse_digits = get_parsed(hint_type::<u32, _, _>(integer()));
+///
+/// let input = "1234";
+///
+/// let result1 = parse(parse_digits, input).result;
+/// assert_eq!(result1, Some("1234"));
+/// ```
+#[inline(always)]
+pub const fn hint_type<O, I: SliceLike, S>(p: impl Parser<I, O, S>) -> impl Parser<I, O, S> {
+    p
+}
+
 /// Accept or reject the parse based on the predicate `f`.
 ///
 /// Also available as an extension function: [`filter`](crate::core::ParserExt::filter)
