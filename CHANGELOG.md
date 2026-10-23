@@ -18,6 +18,8 @@
 - Added support for saturation when parsing floats using `float_custom` and
   `FloatConfig::saturate`. If enabled, a float on the correct format will never
   fail to parse, but will lose accuracy when its components reach large sizes.
+- Added new combinator `hint_type`, that provides a convenient way to hint the
+  compiler about the output type of a parser.
 
 ### Fixes
 - Raw integer parsers now work on slices larger than integer type
