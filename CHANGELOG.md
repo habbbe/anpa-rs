@@ -22,13 +22,14 @@
   compiler about the output type of a parser.
 
 ### Fixes
-- Raw integer parsers now work on slices larger than integer type
-- Allow scientific notation and disallow leading zero for numbers in JSON parser
-- Prevent successful incomplete parses for JSON string and object
-- Disallow multi-digit all-zero components in semver
-- Don't return partial results in `float` if decimal or exponent fails to parse
-- Return negative zero for `float` if parsing e.g. "-0.0"
-- Return zero instead of NaN when parsing zero followed by large exponent in `float`
+- Raw integer parsers now work on slices larger than integer type.
+- Allow scientific notation and disallow leading zero for numbers in JSON parser.
+- Prevent successful incomplete parses for JSON string and object.
+- Disallow multi-digit all-zero components in semver.
+- Don't return partial results in `float` if decimal or exponent fails to parse.
+- Return negative zero for `float` if parsing e.g. "-0.0".
+- Return zero instead of NaN when parsing zero followed by large exponent in `float`.
+- `float` parser can now fit a full `usize` in its integer component.
 
 ### Optimizations
 - Integer parser now pre-calculates number of digits that can be safely parsed
