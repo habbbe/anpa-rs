@@ -42,7 +42,8 @@ None
 
 ### Known issues
 
-None for now
+- `float` and `float_custom` are not as accurate as `str::parse`, but they are
+  quite a lot faster to compensate.
 
 ### TODO
 
