@@ -654,9 +654,9 @@ pub const fn float_custom<const CHECKED: bool,
         };
 
         let dec = integer_custom(IntConfig::<CHECKED, SIGN_UNSIGNED, false, true, 10, true, SATURATE>)
-            .map_if(move |meta_dec| {
+            .map(move |meta_dec| {
                 let div = O::TEN.pow_i(meta_dec.digit_count);
-                Some(int + O::cast_usize(meta_dec.value) / div)
+                int + O::cast_usize(meta_dec.value) / div
             });
 
         let comma: char = if DECIMAL_COMMA {','} else { '.' };
