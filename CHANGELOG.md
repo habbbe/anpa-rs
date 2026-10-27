@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.0
+
+### Breaking changes
+- Signature change of FloatLike
+
+### Fixes
+- float parsers now use the proper underlying integer type, e.g.
+  `u32` for `f32`, and `u64` for `f64`
+
 ## 0.13.0
 
 ### Breaking changes

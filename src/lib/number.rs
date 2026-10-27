@@ -35,8 +35,10 @@ pub trait FloatLike: Add<Output = Self> + Mul<Output = Self> + Div<Output = Self
     const ONE: Self;
     const TEN: Self;
     const MINUS_ONE: Self;
+    type IntRep: NumLike;
     fn cast_usize(n: usize) -> Self;
     fn cast_isize(n: isize) -> Self;
+    fn cast_int_rep(n: Self::IntRep) -> Self;
     fn pow_i(self, exp: i32) -> Self;
 }
 
@@ -119,7 +121,7 @@ macro_rules! impl_NumLike {
 }
 
 macro_rules! impl_FloatLike {
-    ($($type:tt),*) => {
+    ($(($type:tt, $int:ty)),*) => {
         $(
             impl FloatLike for $type {
                 const ZERO: Self = 0.0;
@@ -127,6 +129,7 @@ macro_rules! impl_FloatLike {
                 const ONE: Self = 1.0;
                 const TEN: Self = 10.0;
                 const MINUS_ONE: Self = -1.0;
+                type IntRep = $int;
                 #[inline(always)]
                 fn cast_usize(n: usize) -> Self {
                     n as Self
@@ -147,6 +150,11 @@ macro_rules! impl_FloatLike {
                 #[inline(always)]
                 fn pow_i(self, exp: i32) -> Self {
                     powi_internal(self, exp)
+                }
+
+                #[inline(always)]
+                fn cast_int_rep(n: Self::IntRep) -> Self {
+                    n as Self
                 }
             }
         )*
@@ -184,7 +192,7 @@ fn powi_internal<F: FloatLike>(mut base: F, n: i32) -> F {
 }
 
 impl_NumLike!(u8, i8, u16, i16, u32, i32, u64, i64, u128, i128, usize, isize);
-impl_FloatLike!(f32, f64);
+impl_FloatLike!((f32, u32), (f64, u64));
 
 const SIGN_INFER: u8 = 0;
 const SIGN_UNSIGNED: u8 = 1;
@@ -646,7 +654,7 @@ pub const fn float_custom<const CHECKED: bool,
                           S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE>)
                           -> impl Parser<I, O, S> {
     attempt(bind(integer_custom(IntConfig::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, true, SATURATE>), |meta| {
-        let int = O::cast_usize(meta.value);
+        let int = O::cast_int_rep(meta.value);
         let int = if SATURATE {
             int * O::TEN.pow_i(meta.overflow_count)
         } else {
@@ -656,7 +664,7 @@ pub const fn float_custom<const CHECKED: bool,
         let dec = integer_custom(IntConfig::<CHECKED, SIGN_UNSIGNED, false, true, 10, true, SATURATE>)
             .map(move |meta_dec| {
                 let div = O::TEN.pow_i(meta_dec.digit_count);
-                int + O::cast_usize(meta_dec.value) / div
+                int + O::cast_int_rep(meta_dec.value) / div
             });
 
         let comma: char = if DECIMAL_COMMA {','} else { '.' };
