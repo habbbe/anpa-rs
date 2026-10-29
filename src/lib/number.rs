@@ -922,22 +922,22 @@ pub const fn float_raw<const CHECKED: bool,
 /// assert_eq!(Some(1.02e30_f64), parse(parse_sci, input1).result);
 /// ```
 #[inline]
-pub const fn float_exact<'a,
-                       const CHECKED: bool,
-                       const SIGNED: u8,
-                       const SCI: bool,
-                       const LEADING_PLUS: bool,
-                       const LEADING_ZERO_INT: bool,
-                       const LEADING_ZERO_EXP: bool,
-                       const DECIMAL_COMMA: bool,
-                       const SATURATE: bool,
-                       const CONSUME_ONLY: bool,
-                       A: CharLike,
-                       A2: CharLike,
-                       I: SliceLike<AtomRefItem = A, RefItem = A2> + Into<&'a str>,
-                       O: FloatLike + FromStr,
-                       S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY>)
-                       -> impl Parser<I, O, S> {
+pub fn float_exact<'a,
+                   const CHECKED: bool,
+                   const SIGNED: u8,
+                   const SCI: bool,
+                   const LEADING_PLUS: bool,
+                   const LEADING_ZERO_INT: bool,
+                   const LEADING_ZERO_EXP: bool,
+                   const DECIMAL_COMMA: bool,
+                   const SATURATE: bool,
+                   const CONSUME_ONLY: bool,
+                   A: CharLike,
+                   A2: CharLike,
+                   I: SliceLike<AtomRefItem = A, RefItem = A2> + Into<&'a str>,
+                   O: FloatLike + FromStr,
+                   S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY>)
+                   -> impl Parser<I, O, S> {
     from_str(float_raw::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY,_,_,_,_>(_config))
 }
 
