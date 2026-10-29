@@ -4,7 +4,7 @@ use std::{collections::HashMap, hash::Hash};
 #[cfg(feature = "alloc")]
 use alloc::{vec::Vec, collections::BTreeMap};
 
-use core::borrow::BorrowMut;
+use core::{borrow::BorrowMut, str::FromStr};
 use crate::{core::{AnpaState, Parser}, parsers::success, slicelike::SliceLike};
 
 /// An instrution for how to proceed with a parse.
@@ -1178,6 +1178,31 @@ pub const fn chain<I: SliceLike, S, O, F>(p: impl Parser<I, O, S>,
             return Some(res)
         }
     })
+}
+
+/// Convert the result of the parser to an inferred type by means of
+/// [`core::str::FromStr`]
+///
+/// ### Arguments
+/// * `p` - the parser
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::combinators::from_str;
+/// use anpa::parsers::item_while;
+///
+/// let parse_bool = from_str(item_while(|c: char| c.is_alphabetic()));
+///
+/// let input = "true";
+///
+/// assert_eq!(parse(parse_bool, input).result, Some(true));
+/// ```
+#[inline]
+pub const fn from_str<'a, I: SliceLike + Into<&'a str>, O: FromStr, S>(
+    p: impl Parser<I, I, S>,
+) ->  impl Parser<I, O, S> {
+    map_if(p, |r| O::from_str(r.into()).ok())
 }
 
 #[cfg(test)]

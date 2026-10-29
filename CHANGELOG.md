@@ -5,6 +5,14 @@
 ### Breaking changes
 - Signature change of FloatLike
 
+### New features
+- Added parser `float_parts` that returns `FloatParts { negative, mantissa, exp }`
+- Added parsers `integer_raw` and `float_raw`, that return the consumed slice.
+- Added parser `float_exact`, that returns the precise `str::parse` result.
+- Added combinator `from_str` that uses the `FromStr` trait to convert the
+  result of a parse.
+
+
 ### Fixes
 - float parsers now use the proper underlying integer type, e.g.
   `u32` for `f32`, and `u64` for `f64`

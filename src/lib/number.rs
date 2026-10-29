@@ -1,7 +1,38 @@
-use core::ops::{Add, Div, Mul, Sub};
+use core::{ops::{Add, Div, Mul, Sub}, str::FromStr};
 
-use crate::{charlike::CharLike, combinators::{attempt, bind, map, succeed}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
+use crate::{charlike::CharLike, combinators::{attempt, bind, from_str, get_parsed, map, succeed}, core::{Parser, ParserExt}, parsers::item_if, slicelike::SliceLike};
 
+
+/// Struct representing a float by its parts.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FloatParts<F: FloatLike> {
+    pub negative: bool,
+    pub mantissa: F::IntRep,
+    pub exp: i32,
+}
+
+impl<F: FloatLike> FloatParts<F> {
+    pub fn to_float_fast(&self) -> F {
+        let pre_sign = if self.mantissa == F::IntRep::ZERO {
+            F::ZERO
+        } else {
+            let mantissa_float = F::cast_int_rep(self.mantissa);
+            if self.exp < 0 {
+                // Using division for negative exponents seem to
+                // incur less rounding errors.
+                mantissa_float / F::TEN.pow_i(-self.exp)
+            } else {
+                mantissa_float * F::TEN.pow_i(self.exp)
+            }
+        };
+
+        if self.negative {
+            pre_sign * F::MINUS_ONE
+        } else {
+            pre_sign
+        }
+    }
+}
 
 /// Trait for types that act like numbers.
 pub trait NumLike:
@@ -232,6 +263,9 @@ impl<O> IntReturn<O, false> for () {
     }
 }
 
+/// Shared helper function for parsing integers.
+/// `MANTISSA_MODE` is only useful together with `INCLUDE_METADATA`, since
+/// it returns the exponent in the [`IntWithMeta::overflow_count`] field.
 const fn integer_internal<const CHECKED: bool,
                           const SIGNED: u8,
                           const LEADING_PLUS: bool,
@@ -239,6 +273,9 @@ const fn integer_internal<const CHECKED: bool,
                           const BASE: u8,
                           const INCLUDE_METADATA: bool,
                           const ALLOW_OVERFLOW: bool,
+                          const CONSUME_ONLY: bool,
+                          const MANTISSA_MODE: bool,
+                          const DECIMAL_COMMA: bool,
                           O: NumLike,
                           A: CharLike,
                           I: SliceLike<AtomRefItem = A>,
@@ -247,18 +284,17 @@ const fn integer_internal<const CHECKED: bool,
 where
     (): IntReturn<O, INCLUDE_METADATA>,
 {
-
     create_parser!(s, {
         let mut digit_count = 0;
         let mut overflow_count = 0;
         let mut acc = O::ZERO;
 
         let (signed, report_neg_only) = if SIGNED == SIGN_INFER {
-            (O::SIGNED, false)
-        } else if SIGNED == SIGN_SIGNED && !O::SIGNED {
+            (O::SIGNED, MANTISSA_MODE)
+        } else if (SIGNED == SIGN_SIGNED) && !O::SIGNED {
             (true, true)
         } else {
-            (SIGNED == SIGN_SIGNED, false)
+            (SIGNED == SIGN_SIGNED, MANTISSA_MODE)
         };
 
         let max_digits = if CHECKED {
@@ -276,6 +312,11 @@ where
                        digit: u32,
                        is_negative: bool,
                        check: bool| -> Option<()> {
+            if CONSUME_ONLY {
+                *count += 1;
+                return Some(())
+            }
+
             // Digits are between 0 and 9, so they always fit in all types
             let digit = O::cast_u8(digit as u8);
             let mut tmp = *acc;
@@ -338,16 +379,53 @@ where
         // The first digit fits in all types for all allowed bases.
         consume(&mut acc, &mut digit_count, &mut overflow_count, first_digit, is_negative, false);
 
-        for digit in iter.map_while(|d| d.as_char().to_digit(BASE as u32)) {
+        let last_char = loop {
+            let Some(c) = iter.next().map(|c| c.as_char()) else {
+                break None;
+            };
+
+            let Some(digit) = c.to_digit(BASE as u32) else {
+                break Some(c);
+            };
+
             let check = CHECKED && (digit_count >= max_digits);
             consume(&mut acc, &mut digit_count, &mut overflow_count, digit, is_negative, check)?;
-        }
+        };
 
         if !LEADING_ZEROS && (digit_count > 1) && (first_digit == 0) {
             return None;
         }
 
-        let consumed = digit_count + overflow_count + if leading {1} else {0};
+        let mut consumed = digit_count + overflow_count + if leading {1} else {0};
+
+        if MANTISSA_MODE {
+            // Continue with separator and decimal part
+            if last_char == Some(if DECIMAL_COMMA {','} else {'.'}) {
+
+                let mut exp = 0;
+                let int_overflow = overflow_count;
+
+                for digit in iter.map_while(|d| d.as_char().to_digit(BASE as u32)) {
+                    let check = CHECKED && (digit_count >= max_digits);
+                    consume(&mut acc, &mut digit_count, &mut overflow_count, digit, is_negative, check)?;
+                    exp += 1;
+                }
+
+                if exp == 0 {
+                    return None;
+                }
+
+                consumed += 1 + exp;
+
+                if !CONSUME_ONLY {
+                    if int_overflow != 0 {
+                        overflow_count = int_overflow;
+                    } else {
+                        overflow_count -= exp;
+                    }
+                }
+            }
+        }
 
         (digit_count != Default::default()).then(|| {
             s.input = s.input.slice_from(s.input.slice_idx_from_offset(consumed as usize));
@@ -365,7 +443,8 @@ pub struct IntConfig<const CHECKED: bool = true,
                      const LEADING_ZEROS: bool = true,
                      const BASE: u8 = 10,
                      const INCLUDE_METADATA: bool = false,
-                     const ALLOW_OVERFLOW: bool = false>;
+                     const ALLOW_OVERFLOW: bool = false,
+                     const CONSUME_ONLY: bool = false>;
 
 impl IntConfig {
     pub const fn new() -> Self {
@@ -385,41 +464,47 @@ impl<const CHECKED: bool,
      const LEADING_ZEROS: bool,
      const BASE: u8,
      const INCLUDE_METADATA: bool,
-     const ALLOW_OVERFLOW: bool>
-     IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
+     const ALLOW_OVERFLOW: bool,
+     const CONSUME_ONLY: bool>
+     IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW, CONSUME_ONLY> {
 
     /// Force parsing of an unsigned integer. Can be used even if the type is signed.
-    pub const fn unsigned(self) -> IntConfig<CHECKED, SIGN_UNSIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
+    pub const fn unsigned(self) -> IntConfig<CHECKED, SIGN_UNSIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW, CONSUME_ONLY> {
         IntConfig
     }
 
     /// Force parsing of a signed integer. Can be used even if the type is unsigned.
     /// The sign can be obtained by using [`IntConfig::with_metadata`].
-    pub const fn signed(self) -> IntConfig<CHECKED, SIGN_SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
+    pub const fn signed(self) -> IntConfig<CHECKED, SIGN_SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW, CONSUME_ONLY> {
         IntConfig
     }
 
     /// Disallow leading zeros.
-    pub const fn no_leading_zero(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, false, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
+    pub const fn no_leading_zero(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, false, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW, CONSUME_ONLY> {
         IntConfig
     }
 
     /// Allow a leading plus sign.
-    pub const fn leading_plus(self) -> IntConfig<CHECKED, SIGNED, true, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
+    pub const fn leading_plus(self) -> IntConfig<CHECKED, SIGNED, true, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW, CONSUME_ONLY> {
         IntConfig
     }
 
     /// Set the numeric base for parsing. Must be between 2 and 36.
-    pub const fn base<const NEW_BASE: u8>(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, NEW_BASE, INCLUDE_METADATA, ALLOW_OVERFLOW> {
+    pub const fn base<const NEW_BASE: u8>(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, NEW_BASE, INCLUDE_METADATA, ALLOW_OVERFLOW, CONSUME_ONLY> {
         assert!(NEW_BASE >= 2 && NEW_BASE <= 36, "Base must be between 2 and 36");
         IntConfig
     }
 
     /// Include metadata about the parsed integer. The result of the parse will be a [`IntWithMeta`].
-    pub const fn with_metadata(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, true, ALLOW_OVERFLOW> {
+    pub const fn with_metadata(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, true, ALLOW_OVERFLOW, CONSUME_ONLY> {
         IntConfig
     }
 
+    /// Only consume the integer. This is more performant if the actual return value isn't being
+    /// consumed as an integer type (e.g. with [`crate::combinators::get_parsed`])
+    pub const fn consume_only(self) -> IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW, true> {
+        IntConfig
+    }
 }
 
 impl<const SIGNED: u8,
@@ -485,16 +570,57 @@ pub const fn integer_custom<const CHECKED: bool,
                             const BASE: u8,
                             const INCLUDE_METADATA: bool,
                             const ALLOW_OVERFLOW: bool,
+                            const CONSUME_ONLY: bool,
                             O: NumLike,
                             A: CharLike,
                             I: SliceLike<AtomRefItem = A>,
                             S
->(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW>
+>(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW, CONSUME_ONLY>
 ) -> impl Parser<I, <() as IntReturn<O, INCLUDE_METADATA>>::Return, S>
 where
     (): IntReturn<O, INCLUDE_METADATA>
 {
-    integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW,_,_,_,_>()
+    integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW, CONSUME_ONLY, false, false,_,_,_,_>()
+}
+
+/// Parse an integer string.
+/// General verison taking a config object. See [`IntConfig`] for more information.
+///
+/// ### Arguments
+/// * `_config` - the configuration object
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::number::{integer_raw, IntConfig};
+///
+/// let parse_plus = integer_raw(IntConfig::new().leading_plus());
+/// let parse_no_plus = integer_raw(IntConfig::new());
+/// let input1 = "+10";
+/// let input2 = "10";
+///
+/// assert_eq!(Some(input1), parse(parse_plus, input1).result);
+/// assert_eq!(Some(input2), parse(parse_plus, input2).result);
+///
+/// assert_eq!(None, parse(parse_no_plus, input1).result);
+/// assert_eq!(Some(input2), parse(parse_no_plus, input2).result);
+/// ```
+#[inline]
+pub const fn integer_raw<const CHECKED: bool,
+                         const SIGNED: u8,
+                         const LEADING_PLUS: bool,
+                         const LEADING_ZEROS: bool,
+                         const BASE: u8,
+                         const INCLUDE_METADATA: bool,
+                         const ALLOW_OVERFLOW: bool,
+                         const CONSUME_ONLY: bool,
+                         A: CharLike,
+                         I: SliceLike<AtomRefItem = A>,
+                         S
+>(_config: IntConfig<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, INCLUDE_METADATA, ALLOW_OVERFLOW, CONSUME_ONLY>
+) -> impl Parser<I, I, S>
+{
+    get_parsed(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZEROS, BASE, false, true, true, false, false, i32,_,_,_>())
 }
 
 /// Parse an integer. The type of the integer will be inferred from the context.
@@ -549,7 +675,8 @@ pub struct FloatConfig<const CHECKED: bool = true,
                        const LEADING_ZEROS_INT: bool = true,
                        const LEADING_ZEROS_EXP: bool = true,
                        const DECIMAL_COMMA: bool = false,
-                       const SATURATE: bool = false>;
+                       const SATURATE: bool = false,
+                       const CONSUME_ONLY: bool = false>;
 
 impl FloatConfig {
     pub const fn new() -> Self {
@@ -570,54 +697,120 @@ impl<const CHECKED: bool,
      const LEADING_ZERO_INT: bool,
      const LEADING_ZERO_EXP: bool,
      const DECIMAL_COMMA: bool,
-     const SATURATE: bool>
-     FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
+     const SATURATE: bool,
+     const CONSUME_ONLY: bool>
+     FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY> {
 
     /// Do not check for overflow when parsing the float components. This is the fastest option if the input is known
     /// to be within bounds.
-    pub const fn unchecked(self) -> FloatConfig::<false, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
+    pub const fn unchecked(self) -> FloatConfig::<false, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY> {
         FloatConfig
     }
 
     /// Do not allow negative numbers.
-    pub const fn unsigned(self) -> FloatConfig::<CHECKED, SIGN_UNSIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
+    pub const fn unsigned(self) -> FloatConfig::<CHECKED, SIGN_UNSIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY> {
         FloatConfig
     }
 
     /// Enable scientific notation e.g. 1.23e10 or 1.23E10.
-    pub const fn scientific(self) -> FloatConfig::<CHECKED, SIGNED, true, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
+    pub const fn scientific(self) -> FloatConfig::<CHECKED, SIGNED, true, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY> {
         FloatConfig
     }
 
     /// Allow a leading plus sign e.g. +1.23.
-    pub const fn leading_plus(self) -> FloatConfig::<CHECKED, SIGNED, SCI, true, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
+    pub const fn leading_plus(self) -> FloatConfig::<CHECKED, SIGNED, SCI, true, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY> {
         FloatConfig
     }
 
     /// Disallow leading zeros in the integer part e.g. 001.23.
-    pub const fn no_leading_zero_int(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, false, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE> {
+    pub const fn no_leading_zero_int(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, false, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY> {
         FloatConfig
     }
 
     /// Disallow leading zeros in the exponent part e.g. 1.23e0010.
-    pub const fn no_leading_zero_exp(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, false, DECIMAL_COMMA, SATURATE> {
+    pub const fn no_leading_zero_exp(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, false, DECIMAL_COMMA, SATURATE, CONSUME_ONLY> {
         FloatConfig
     }
 
     /// Use a decimal comma instead of a decimal point e.g. 1,23.
-    pub const fn decimal_comma(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, true, SATURATE> {
+    pub const fn decimal_comma(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, true, SATURATE, CONSUME_ONLY> {
         FloatConfig
     }
 
     /// Enable saturation arithmetic. When using this option, a parse can never fail as long as the input
     /// has a valid float structure.
-    pub const fn saturate(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, true> {
+    pub const fn saturate(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, true, CONSUME_ONLY> {
+        FloatConfig
+    }
+
+    /// Do not calculate a result, but only consume the number. If you don't need the result as a float
+    /// this is faster.
+    pub const fn consume_only(self) -> FloatConfig::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, true> {
         FloatConfig
     }
 }
 
+/// Parse float parts (sign, mantissa and exponent).
+/// The type of the float will be inferred from the context.
+///
+/// See [`FloatConfig`] for more information on how to configure.
+///
+/// ### Arguments
+/// * `_config` - the configuration object
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::number::{float_parts, FloatParts, FloatConfig};
+///
+/// let parse_sci = float_parts(FloatConfig::new().scientific());
+/// let parse_no_sci = float_parts(FloatConfig::new());
+/// let input1 = "1.02e30";
+///
+/// assert_eq!(Some(FloatParts::<f64> { negative: false, mantissa: 102, exp: 28 }),
+///            parse(parse_sci, input1).result);
+///
+/// assert_eq!(Some(FloatParts::<f64> { negative: false, mantissa: 102, exp: -2 }),
+///            parse(parse_no_sci, input1).result);
+/// ```
+#[inline]
+pub const fn float_parts<const CHECKED: bool,
+                         const SIGNED: u8,
+                         const SCI: bool,
+                         const LEADING_PLUS: bool,
+                         const LEADING_ZERO_INT: bool,
+                         const LEADING_ZERO_EXP: bool,
+                         const DECIMAL_COMMA: bool,
+                         const SATURATE: bool,
+                         const CONSUME_ONLY: bool,
+                         O: FloatLike,
+                         A: CharLike,
+                         A2: CharLike,
+                         I: SliceLike<AtomRefItem = A, RefItem = A2>,
+                         S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY>)
+                       -> impl Parser<I, FloatParts<O>, S> {
+    attempt(bind(integer_internal::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, true, SATURATE, CONSUME_ONLY, true, DECIMAL_COMMA, _,_,_,_>(), |meta| {
+        let exp = choose_pure!(SCI;
+            true => ({
+                let exp = integer_internal::<CHECKED, SIGN_SIGNED, true, LEADING_ZERO_EXP, 10, false, SATURATE, CONSUME_ONLY, false, false,_,_,_,_>()
+                    .map(|exp: i32| exp + meta.overflow_count);
+                choose!(succeed(item_if(|c: A2| matches!(c.as_char(), 'e' | 'E')));
+                    Some(_) => exp,
+                    _ => pure!(meta.overflow_count)
+                )
+            }),
+            false => pure!(meta.overflow_count)
+        );
+
+        map(exp, move |exp| FloatParts { negative: meta.is_negative, mantissa: meta.value, exp })
+    }))
+}
+
 /// Parse a float. The type of the float will be inferred from the context.
 /// General verison taking a config object. See [`FloatConfig`] for more information.
+///
+/// This parser is fast but may incur (very) small rounding errors.
+/// For exact but slower float parsing, use [`float_exact`].
 ///
 /// ### Arguments
 /// * `_config` - the configuration object
@@ -647,49 +840,29 @@ pub const fn float_custom<const CHECKED: bool,
                           const LEADING_ZERO_EXP: bool,
                           const DECIMAL_COMMA: bool,
                           const SATURATE: bool,
+                          const CONSUME_ONLY: bool,
                           O: FloatLike,
                           A: CharLike,
                           A2: CharLike,
                           I: SliceLike<AtomRefItem = A, RefItem = A2>,
-                          S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE>)
+                          S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY>)
                           -> impl Parser<I, O, S> {
-    attempt(bind(integer_custom(IntConfig::<CHECKED, SIGNED, LEADING_PLUS, LEADING_ZERO_INT, 10, true, SATURATE>), |meta| {
-        let int = O::cast_int_rep(meta.value);
-        let int = if SATURATE {
-            int * O::TEN.pow_i(meta.overflow_count)
-        } else {
-            int
-        };
-
-        let dec = integer_custom(IntConfig::<CHECKED, SIGN_UNSIGNED, false, true, 10, true, SATURATE>)
-            .map(move |meta_dec| {
-                let div = O::TEN.pow_i(meta_dec.digit_count);
-                int + O::cast_int_rep(meta_dec.value) / div
-            });
-
-        let comma: char = if DECIMAL_COMMA {','} else { '.' };
-        let pre_exp_parser = map(choose!(succeed(item_if(|c: A2| c.as_char() == comma));
-            Some(_) => dec,
-            _ => pure!(int)
-        ), move |res| if meta.is_negative { res * O::MINUS_ONE } else { res });
-
-        choose_pure!(SCI;
-            true => bind(pre_exp_parser, |pre_exp| {
-                let exp = integer_custom(IntConfig::<CHECKED, SIGN_SIGNED, true, LEADING_ZERO_EXP, 10, false, SATURATE>)
-                    .map(move |exp| if pre_exp == O::ZERO { pre_exp } else { pre_exp * O::TEN.pow_i(exp) });
-                choose!(succeed(item_if(|c: A2| matches!(c.as_char(), 'e' | 'E')));
-                    Some(_) => exp,
-                    _ => pure!(pre_exp)
-                )
-            }),
-            false => pre_exp_parser
-        )
-    }))
+    map(float_parts::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY,O,_,_,_,_>(_config), |f| {
+        f.to_float_fast()
+    })
 }
 
-/// Parse a floating point number. The type of the number will be inferred from the context.
-/// This parser will attempt to parse the float as `isize.usize`, and if the parsed number
-/// does not fit within those types, it will fail.
+/// Parse a floating point number on the form `int.dec`.
+/// The type of the number will be inferred from the context.
+///
+/// This parser will fail if the concatenated integer and decimal part doesn't fit within
+/// the integer representation of the float (e.g. `u64` for `f64`).
+///
+/// This parser is fast but may incur (very) small rounding errors.
+/// For exact but slower float parsing, use [`float_exact`].
+///
+/// For parsing arbirarily long floats, use [`float_custom`] with [`FloatConfig::saturate`]
+/// or [`float_exact`].
 #[inline]
 pub const fn float<O: FloatLike,
                    A: CharLike,
@@ -699,6 +872,75 @@ pub const fn float<O: FloatLike,
     float_custom(FloatConfig::new())
 }
 
+/// Parse a float string.
+///
+/// ### Arguments
+/// * `_config` - the configuration object
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::number::{float_raw, FloatConfig};
+///
+/// let parse_sci = float_raw(FloatConfig::new().scientific());
+/// let input1 = "1.02e30";
+///
+/// assert_eq!(Some("1.02e30"), parse(parse_sci, input1).result);
+/// ```
+#[inline]
+pub const fn float_raw<const CHECKED: bool,
+                       const SIGNED: u8,
+                       const SCI: bool,
+                       const LEADING_PLUS: bool,
+                       const LEADING_ZERO_INT: bool,
+                       const LEADING_ZERO_EXP: bool,
+                       const DECIMAL_COMMA: bool,
+                       const SATURATE: bool,
+                       const CONSUME_ONLY: bool,
+                       A: CharLike,
+                       A2: CharLike,
+                       I: SliceLike<AtomRefItem = A, RefItem = A2>,
+                       S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY>)
+                       -> impl Parser<I, I, S> {
+    get_parsed(float_parts::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, true, f32,_,_,_,_>(_config.consume_only()))
+}
+
+/// Parse a float using using the stdlib [`FromStr`]. This is slower than [`float`] and
+/// [`float_custom`], but does not suffer from rounding errors.
+///
+/// ### Arguments
+/// * `_config` - the configuration object
+///
+/// ### Example
+/// ```
+/// use anpa::core::*;
+/// use anpa::number::{float_exact, FloatConfig};
+///
+/// let parse_sci = float_exact(FloatConfig::new().scientific());
+/// let input1 = "1.02e30";
+///
+/// assert_eq!(Some(1.02e30_f64), parse(parse_sci, input1).result);
+/// ```
+#[inline]
+pub const fn float_exact<'a,
+                       const CHECKED: bool,
+                       const SIGNED: u8,
+                       const SCI: bool,
+                       const LEADING_PLUS: bool,
+                       const LEADING_ZERO_INT: bool,
+                       const LEADING_ZERO_EXP: bool,
+                       const DECIMAL_COMMA: bool,
+                       const SATURATE: bool,
+                       const CONSUME_ONLY: bool,
+                       A: CharLike,
+                       A2: CharLike,
+                       I: SliceLike<AtomRefItem = A, RefItem = A2> + Into<&'a str>,
+                       O: FloatLike + FromStr,
+                       S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY>)
+                       -> impl Parser<I, O, S> {
+    from_str(float_raw::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY,_,_,_,_>(_config))
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -706,7 +948,7 @@ use core::fmt::{Display, Debug};
 
 use alloc::string::{ToString};
 
-use crate::{core::parse, number::{FloatConfig, IntConfig, IntWithMeta, NumLike, float, float_custom, integer, integer_custom, powi_internal, raw_be_integer, raw_le_integer, raw_ne_integer}};
+use crate::{combinators::hint_type, core::parse, number::{FloatConfig, IntConfig, IntWithMeta, NumLike, float, float_custom, integer, integer_custom, integer_raw, powi_internal, raw_be_integer, raw_le_integer, raw_ne_integer}};
 
     #[test]
     fn infer_integer() {
@@ -826,6 +1068,27 @@ use crate::{core::parse, number::{FloatConfig, IntConfig, IntWithMeta, NumLike, 
             assert_eq!(i, value.overflow_count);
             assert_eq!("", res.state);
         }
+    }
+
+    #[test]
+    fn integer_raw_test() {
+        let p = integer_raw(IntConfig::new());
+        let input = "1234567";
+        let res = parse(p, input);
+        let int = res.result.unwrap();
+        assert_eq!(int, input);
+        assert_eq!(res.state, "");
+    }
+
+    #[test]
+    fn integer_consume_only_test() {
+        let p = hint_type::<IntWithMeta<u64>,_,_>(integer_custom(IntConfig::new().consume_only().with_metadata()));
+        let input = "1234567";
+        let res = parse(p, input);
+        let int = res.result.unwrap();
+        assert_eq!(int.value, 0);
+        assert_eq!(int.digit_count, input.len() as i32);
+        assert_eq!(res.state, "");
     }
 
     #[test]
