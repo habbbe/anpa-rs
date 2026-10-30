@@ -18,11 +18,22 @@ impl<F: FloatLike> FloatParts<F> {
         } else {
             let mantissa_float = F::cast_int_rep(self.mantissa);
             if self.exp < 0 {
-                // Using division for negative exponents seem to
+                // Using division for negative exponents seems to
                 // incur less rounding errors.
-                mantissa_float / F::TEN.pow_i(-self.exp)
+                if self.exp < -F::MAX_TEN_POWER {
+                    // Split calculation to avoid inf in divisor
+                    let half_exp = self.exp / 2;
+                    (mantissa_float / F::TEN.pow_i(-half_exp)) / F::TEN.pow_i(-(self.exp - half_exp))
+                } else {
+                    mantissa_float / F::TEN.pow_i(-self.exp)
+                }
             } else {
-                mantissa_float * F::TEN.pow_i(self.exp)
+                if self.exp > F::MAX_TEN_POWER {
+                    let half_exp = self.exp / 2;
+                    (mantissa_float * F::TEN.pow_i(half_exp)) * F::TEN.pow_i(self.exp - half_exp)
+                } else {
+                    mantissa_float * F::TEN.pow_i(self.exp)
+                }
             }
         };
 
