@@ -77,6 +77,8 @@ pub trait FloatLike: Add<Output = Self> + Mul<Output = Self> + Div<Output = Self
     const ONE: Self;
     const TEN: Self;
     const MINUS_ONE: Self;
+    const MIN_TEN_POWER: i32;
+    const MAX_TEN_POWER: i32;
     type IntRep: NumLike;
     fn cast_usize(n: usize) -> Self;
     fn cast_isize(n: isize) -> Self;
@@ -171,6 +173,8 @@ macro_rules! impl_FloatLike {
                 const ONE: Self = 1.0;
                 const TEN: Self = 10.0;
                 const MINUS_ONE: Self = -1.0;
+                const MIN_TEN_POWER: i32 = $type::MIN_10_EXP;
+                const MAX_TEN_POWER: i32 = $type::MAX_10_EXP;
                 type IntRep = $int;
                 #[inline(always)]
                 fn cast_usize(n: usize) -> Self {
