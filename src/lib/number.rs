@@ -607,10 +607,10 @@ where
 /// ### Example
 /// ```
 /// use anpa::core::*;
-/// use anpa::number::{integer_raw, IntConfig};
+/// use anpa::number::{integer_str, IntConfig};
 ///
-/// let parse_plus = integer_raw(IntConfig::new().leading_plus());
-/// let parse_no_plus = integer_raw(IntConfig::new());
+/// let parse_plus = integer_str(IntConfig::new().leading_plus());
+/// let parse_no_plus = integer_str(IntConfig::new());
 /// let input1 = "+10";
 /// let input2 = "10";
 ///
@@ -621,7 +621,7 @@ where
 /// assert_eq!(Some(input2), parse(parse_no_plus, input2).result);
 /// ```
 #[inline]
-pub const fn integer_raw<const CHECKED: bool,
+pub const fn integer_str<const CHECKED: bool,
                          const SIGNED: u8,
                          const LEADING_PLUS: bool,
                          const LEADING_ZEROS: bool,
@@ -895,15 +895,15 @@ pub const fn float<O: FloatLike,
 /// ### Example
 /// ```
 /// use anpa::core::*;
-/// use anpa::number::{float_raw, FloatConfig};
+/// use anpa::number::{float_str, FloatConfig};
 ///
-/// let parse_sci = float_raw(FloatConfig::new().scientific());
+/// let parse_sci = float_str(FloatConfig::new().scientific());
 /// let input1 = "1.02e30";
 ///
 /// assert_eq!(Some("1.02e30"), parse(parse_sci, input1).result);
 /// ```
 #[inline]
-pub const fn float_raw<const CHECKED: bool,
+pub const fn float_str<const CHECKED: bool,
                        const SIGNED: u8,
                        const SCI: bool,
                        const LEADING_PLUS: bool,
@@ -953,7 +953,7 @@ pub fn float_exact<'a,
                    O: FloatLike + FromStr,
                    S>(_config: FloatConfig<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY>)
                    -> impl Parser<I, O, S> {
-    from_str(float_raw::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY,_,_,_,_>(_config))
+    from_str(float_str::<CHECKED, SIGNED, SCI, LEADING_PLUS, LEADING_ZERO_INT, LEADING_ZERO_EXP, DECIMAL_COMMA, SATURATE, CONSUME_ONLY,_,_,_,_>(_config))
 }
 
 #[cfg(test)]
@@ -963,7 +963,7 @@ use core::fmt::{Display, Debug};
 
 use alloc::string::{ToString};
 
-use crate::{combinators::hint_type, core::parse, number::{FloatConfig, IntConfig, IntWithMeta, NumLike, float, float_custom, integer, integer_custom, integer_raw, powi_internal, raw_be_integer, raw_le_integer, raw_ne_integer}};
+use crate::{combinators::hint_type, core::parse, number::{FloatConfig, IntConfig, IntWithMeta, NumLike, float, float_custom, integer, integer_custom, integer_str, powi_internal, raw_be_integer, raw_le_integer, raw_ne_integer}};
 
     #[test]
     fn infer_integer() {
@@ -1086,8 +1086,8 @@ use crate::{combinators::hint_type, core::parse, number::{FloatConfig, IntConfig
     }
 
     #[test]
-    fn integer_raw_test() {
-        let p = integer_raw(IntConfig::new());
+    fn integer_str_test() {
+        let p = integer_str(IntConfig::new());
         let input = "1234567";
         let res = parse(p, input);
         let int = res.result.unwrap();
