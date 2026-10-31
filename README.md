@@ -42,8 +42,7 @@ None
 
 ### Known issues
 
-- `float` and `float_custom` are not as accurate as `str::parse`, but they are
-  quite a lot faster to compensate.
+- `lt` and `gt` in findbyte do not work properly on bytes >= 128
 
 ### TODO
 
